@@ -10,3 +10,8 @@ Desktop.ini
 # temporary QA output
 _qa*/
 *.log
+
+# 原始素材（本地保留，不随仓库发布）
+/1/
+/2/
+/3/

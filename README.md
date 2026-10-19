@@ -65,7 +65,7 @@ python -m http.server 4173
 
 **极简模式**：云层帧率/分辨率/FBM octave、雨粒子数量都读取同一套 `quality` 预算；LITE 下云更少、更糊、雨滴更少，但光影和交互仍在。
 
-**可调项**：默认坐标在 `weather.js` 顶部（`state.latitude`，以及请求里的经度）；想换城市改这两处即可。天气请求只读取天气，不发送任何用户数据。
+**可调项**：默认坐标在 `js/weather.js` 顶部（`state.latitude`，以及请求里的经度）；想换城市改这两处即可。天气请求只读取天气，不发送任何用户数据。
 
 ## 沉浸模式（IMMERSIVE）
 
@@ -81,22 +81,22 @@ python -m http.server 4173
 
 海面用的是 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin) 的**原版渲染器**，不是仿写：
 
-- `sea.bundle.js`（771 KB，esbuild 把它的 `ocean.js` + `three.webgpu.js` / `three.tsl.js` / `three.core.js` / `BloomNode.js` 打成一个 **classic script**，所以 `file://` 双击可用、无运行时 CDN、无构建步骤）。里面的 Gerstner 五波、解析法线、FBM 细节、Fresnel、太阳高光、浪尖泡沫、地平线雾、ACES + bloom 后处理、5.5 m 相机 / 55° 镜头 / 26% 地平线，全部是它的原样。
+- `js/sea.bundle.js`（771 KB，esbuild 把它的 `ocean.js` + `three.webgpu.js` / `three.tsl.js` / `three.core.js` / `BloomNode.js` 打成一个 **classic script**，所以 `file://` 双击可用、无运行时 CDN、无构建步骤）。里面的 Gerstner 五波、解析法线、FBM 细节、Fresnel、太阳高光、浪尖泡沫、地平线雾、ACES + bloom 后处理、5.5 m 相机 / 55° 镜头 / 26% 地平线，全部是它的原样。
 - 天空也由它画（球顶 + 同一个解析天空函数），所以海天之间没有接缝；CSS 里原来那层渐变天空（`.sky-wash` / `.light-glow`）在它启用时自动让位，地平线亮线、日/月盘、云、雨、雷电、颗粒、暗角仍然是我们自己的图层。
-- **调色板用的也是它的表**（DAY / DUSK，加一组夜/风暴变体），由 `weather.js` 的日照高度、云量、风暴强度插值——它的海之所以有立体感，靠的就是"深蓝天空反射亮地平线"这个梯度，换成我们原来的奶油色天空，浪会立刻摊平成一张纸。
+- **调色板用的也是它的表**（DAY / DUSK，加一组夜/风暴变体），由 `js/weather.js` 的日照高度、云量、风暴强度插值——它的海之所以有立体感，靠的就是"深蓝天空反射亮地平线"这个梯度，换成我们原来的奶油色天空，浪会立刻摊平成一张纸。
 - **风雨对海面的作用**：`seaState` 直接驱动浪高（`0.25 + sea*1.5`，和它的滑杆同一条映射）；云量与风暴暗化天空并压低阳光；雷电让整片水面一起亮；太阳/月亮的方向跟着你拖动的那颗日/月盘走（方位取自盘子的屏幕 x，高度做了抬升，免得永远是一道夕阳长光）。
-- **云**：引擎的天空里加了一层真正的云盖（`sea-entry.js` 的 `skyColor`），原版只有贴着地平线的一条低云带。现在云盖覆盖地平线以上的整片天空：两层不同速度的 FBM 做视差，云顶受光、云底压暗、迎光侧发亮，风暴时整体压黑、闪电从内部点亮；底部淡出到地平线雾色，所以和海的交界没有硬边。海面反射读的是同一个函数，阴云会一起映在水上。LITE 只保留单层。
-- 三级回落：**原版渲染器 → 自写 WebGL2（`ocean.js`，`?nogl=1` 可强制）→ Canvas-2D 画法**；引擎初始化期间先用便宜的 2D 海面顶着，就绪后自动换上，失败则保留。引擎接管天空时，2D 云画布（`weather.js`，已按新地平线 26% 重排并做底部渐隐）自动让位，它继续负责 LITE 与回落路径的云。
+- **云**：引擎的天空里加了一层真正的云盖（`js/sea-entry.js` 的 `skyColor`），原版只有贴着地平线的一条低云带。现在云盖覆盖地平线以上的整片天空：两层不同速度的 FBM 做视差，云顶受光、云底压暗、迎光侧发亮，风暴时整体压黑、闪电从内部点亮；底部淡出到地平线雾色，所以和海的交界没有硬边。海面反射读的是同一个函数，阴云会一起映在水上。LITE 只保留单层。
+- 三级回落：**原版渲染器 → 自写 WebGL2（`js/ocean.js`，`?nogl=1` 可强制）→ Canvas-2D 画法**；引擎初始化期间先用便宜的 2D 海面顶着，就绪后自动换上，失败则保留。引擎接管天空时，2D 云画布（`js/weather.js`，已按新地平线 26% 重排并做底部渐隐）自动让位，它继续负责 LITE 与回落路径的云。
 
-## 海面（自写 WebGL2 回落 · `ocean.js`）
+## 海面（自写 WebGL2 回落 · `js/ocean.js`）
 
-海面不是画出来的，是**逐帧算出来的 3D 曲面**（WebGL2，`ocean.js`，不依赖任何第三方库，`file://` 直接可用）。波形模型移植自 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT）：
+海面不是画出来的，是**逐帧算出来的 3D 曲面**（WebGL2，`js/ocean.js`，不依赖任何第三方库，`file://` 直接可用）。波形模型移植自 [open-sea-skin](https://github.com/d-dev0101/open-sea-skin)（MIT）：
 
 - **五个 Gerstner 涌浪**（波长 60 / 31 / 18 / 9.5 / 5 m，陡度 0.12 / 0.12 / 0.09 / 0.07 / 0.05，深水色散 c = √(gk)），在顶点着色器里逐帧位移，浪尖是几何而不是贴图。
 - **解析法线**：由波形偏导数取切向量与副切向量叉乘得到，逐像素计算。
 - **毛细浪（chop）**：一张烘焙好的无缝 FBM 法线贴图，按三个尺度滚动叠加 —— 两次纹理读取就替代了十几次噪声计算，所以它能铺满整个可见海面。
 - **着色**：Fresnel 天空反射、太阳／月亮高光（宽散射 + 近处细闪）、浪尖白冠泡沫、背光浪尖透光、涌浪坡面明暗。
-- **调色板与光照全部来自 `weather.js`**：`--sky-*` / `--sea-*` / `--sun-*` 以及 `Weather.state`（时间、云量、风、雨、风暴、闪电、日月位置）逐帧同步。拖动太阳，海面的反光带跟着走；入夜自动变成月光海面；打雷时整片水面一起亮。
+- **调色板与光照全部来自 `js/weather.js`**：`--sky-*` / `--sea-*` / `--sun-*` 以及 `Weather.state`（时间、云量、风、雨、风暴、闪电、日月位置）逐帧同步。拖动太阳，海面的反光带跟着走；入夜自动变成月光海面；打雷时整片水面一起亮。
 - **接天**：远处按距离淡出到与 CSS 地平线**同一个颜色**，所以 3D 海面和 CSS 天空无缝相接，看不出接缝。
 - **性能**：极坐标网格（近处约 0.3 m 一格，远处一路拉伸到 5 km），细节强度按距离衰减，DPR 上限 1.5，并按实测帧率在 0.62–1.0 之间自动调整渲染分辨率；两个方向都会绕环的长廊与它无关，各走各的。
 - **回落**：浏览器没有 WebGL2（或着色器起不来）时，自动回到原来的 2D 绘制海面，功能不受影响；想手动对比可以加 `?nogl=1`。
@@ -133,7 +133,7 @@ python -m http.server 4173
 1. 把正反面图片放进 `assets/postcards/`。
    - 竖版卡保持 `2:3` 画幅（例如 `03-front.png`、`03-back.png`）。
    - 横版卡保持 `3:2` 画幅（例如 `04-front.png`、`04-back.png`）。
-2. 打开 `app.js`，在文件顶部的 `POSTCARDS` 数组中追加一项：
+2. 打开 `js/app.js`，在文件顶部的 `POSTCARDS` 数组中追加一项：
 
 ```js
 {
@@ -161,14 +161,15 @@ python -m http.server 4173
 ## 设计结构
 
 - `index.html`：封面、3D 长廊、聚焦视窗与无障碍结构。
-- `styles.css`：封面双门、海上光线、卡片实体边缘、聚焦界面与响应式样式。
-- `app.js`：随机漂浮算法、环形滚动镜头、Canvas 海面、卡片交互和翻转逻辑。
-- `weather.js`：天气与时间仿真（太阳/月亮位置、云/雨/风暴/雷电、顶部面板、系统时间与 Open-Meteo 读取、离线气候学降级）。
+- `css/styles.css`：封面双门、海上光线、卡片实体边缘、聚焦界面与响应式样式。
+- `js/app.js`：随机漂浮算法、环形滚动镜头、Canvas 海面、卡片交互和翻转逻辑。
+- `js/weather.js`：天气与时间仿真（太阳/月亮位置、云/雨/风暴/雷电、顶部面板、系统时间与 Open-Meteo 读取、离线气候学降级）。
 - `assets/fonts/fonts.css`：内嵌字体，保证 `file://` 直接打开时排版完整。
 - `assets/postcards/`：明信片素材（`01`、`02` 为原图，`03`—`07` 为占位 SVG）。
-- `1/`, `2/`, `3/`：保留的原始素材目录，不影响页面运行。
+- `js/clouds.js`、`js/ocean.js`、`js/sea.bundle.js`、`js/sea-entry.js`：体积云层、自写回落海面、原版海面 bundle 与它的构建源（分别见上文各节）。
+- `1/`, `2/`, `3/`：保留在本地的原始素材目录，不影响页面运行；已加入 `.gitignore`，不随仓库发布。
 
-主色板集中在 `styles.css` 顶部的 CSS 变量中：深海绿、海水蓝、纸白、沙色和一点珊瑚色。
+主色板集中在 `css/styles.css` 顶部的 CSS 变量中：深海绿、海水蓝、纸白、沙色和一点珊瑚色。
 
 ---
 
@@ -183,14 +184,14 @@ python -m http.server 4173
 - **项目**：[`d-dev0101/open-sea-skin`](https://github.com/d-dev0101/open-sea-skin) —— 一个 DSH（DeepSeek Harness）的海洋皮肤插件：实时海面主题，可调浪高、日落与玻璃质感，同时提供 Chrome / Edge 扩展版本。
 - **许可证**：MIT · Copyright (c) 2026 Open Sea Skin contributors，全文见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
 - **用在哪**：
-  - `sea.bundle.js` —— 它的 `ocean.js` 与 three.js 模块（`three.webgpu.js` / `three.tsl.js` / `three.core.js` / `BloomNode.js`）用 esbuild 打成的 IIFE。**渲染本体没有重写**：Gerstner 五波、解析法线、FBM 细节、Fresnel、太阳高光、浪尖泡沫、地平线雾、ACES + bloom、5.5 m 相机 / 55° 镜头 / 26% 地平线，全部原样。
-  - `ocean.js` —— 自写的 WebGL2 回落海面，其波形模型、五组涌浪参数与深水色散关系移植自它。
+  - `js/sea.bundle.js` —— 它的 `ocean.js` 与 three.js 模块（`three.webgpu.js` / `three.tsl.js` / `three.core.js` / `BloomNode.js`）用 esbuild 打成的 IIFE。**渲染本体没有重写**：Gerstner 五波、解析法线、FBM 细节、Fresnel、太阳高光、浪尖泡沫、地平线雾、ACES + bloom、5.5 m 相机 / 55° 镜头 / 26% 地平线，全部原样。
+  - `js/ocean.js` —— 自写的 WebGL2 回落海面，其波形模型、五组涌浪参数与深水色散关系移植自它。
   - **调色板** —— DAY / DUSK 两张颜色表取自它，再叠加本项目的夜与风暴变体。
 - **集成与适配**：打包、天空云盖、天气/时间接线、调色板插值、三级回落（原版 → WebGL2 → Canvas-2D）与 LITE 预算，由 **dsh** 完成。
 
 ### three.js
 
-`sea.bundle.js` 内含 three.js 的 WebGPU / TSL 构建（MIT · Copyright © 2010-2025 three.js authors），许可见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+`js/sea.bundle.js` 内含 three.js 的 WebGPU / TSL 构建（MIT · Copyright © 2010-2025 three.js authors），许可见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
 
 ### 字体
 

@@ -8,9 +8,9 @@
 
 - **上游**：<https://github.com/d-dev0101/open-sea-skin>
 - **使用位置**：
-  - `sea.bundle.js` —— 本项目用 esbuild 把它原版的 `ocean.js` 与 three.js 模块打成的 IIFE（构建源见 `sea-entry.js`）。
-  - `ocean.js` —— 自写 WebGL2 回落海面中移植的波形模型、涌浪参数与深水色散关系。
-  - `sea-entry.js` / `app.js` —— 取自它的 DAY / DUSK 调色板。
+  - `js/sea.bundle.js` —— 本项目用 esbuild 把它原版的 `ocean.js` 与 three.js 模块打成的 IIFE（构建源见 `js/sea-entry.js`）。
+  - `js/ocean.js` —— 自写 WebGL2 回落海面中移植的波形模型、涌浪参数与深水色散关系。
+  - `js/sea-entry.js` / `js/app.js` —— 取自它的 DAY / DUSK 调色板。
 - **改动说明**：海面渲染本体未改写；本项目的改动集中在调色板插值、天气/时间接线与天空云盖。
 - **许可证**：MIT
 
@@ -43,7 +43,7 @@ SOFTWARE.
 ## 2. three.js
 
 - **上游**：<https://github.com/mrdoob/three.js>
-- **使用位置**：`sea.bundle.js` 内的 WebGPU / TSL 构建（`three.webgpu.js`、`three.tsl.js`、`three.core.js`、`addons/tsl/display/BloomNode.js`）。
+- **使用位置**：`js/sea.bundle.js` 内的 WebGPU / TSL 构建（`three.webgpu.js`、`three.tsl.js`、`three.core.js`、`addons/tsl/display/BloomNode.js`）。
 - **许可证**：MIT
 
 ```text

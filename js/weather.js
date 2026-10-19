@@ -510,14 +510,14 @@
     ctx.restore();
   }
 
-  /* ── 体素云层（GIFT/clouds.js）────────────────────────────────────────
+  /* ── 体素云层（GIFT/js/clouds.js）────────────────────────────────────────
      只有 FULL 档、且没有 reduced-motion 时才尝试接管天空。create 返回 null
      或抛错就什么都不做，现有 2D 云画布路径原样保留（LITE / 无 WebGL2 回落）。 */
   function cloudEligible() {
     if (env.reducedMotion && env.reducedMotion.matches) return false;
     if (!env.quality) return false;
     /* 3D 噪声是在头几百毫秒里分帧生成的；那段时间的画面抖动不能算进
-       app.js 的 45fps 画质探测，否则整个站会被云层自己拖成 LITE
+       js/app.js 的 45fps 画质探测，否则整个站会被云层自己拖成 LITE
        ——而 LITE 又恰好会把云层关掉，形成「永远看不到体积云」的死结。 */
     if (performance.now() < 2600) return false;
     return true;
@@ -566,7 +566,7 @@
     document.body.classList.remove("has-cloud-volume");
   }
 
-  /* 与 app.js 的 SEA_PALETTE 同一套「参考风」线性色。云的环境光 / 霾色必须
+  /* 与 js/app.js 的 SEA_PALETTE 同一套「参考风」线性色。云的环境光 / 霾色必须
      和 bundle 海面看到的是同一片天空，否则云和天空会脱色、出现色差硬边。 */
   const SEA_REFERENCE = {
     day: { zenith: [0.07, 0.20, 0.42], horizon: [0.52, 0.68, 0.82], sun: [1.0, 0.93, 0.80] },

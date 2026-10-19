@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
 //  BUILD SOURCE for sea.bundle.js — not loaded by the page.
 //
+//  Run from this folder (GIFT/js):
 //  npx esbuild sea-entry.js --bundle --format=iife --global-name=OpenSea \
 //      --minify --outfile=sea.bundle.js
 //
-//  Needs the reference package's vendor folder next to this file:
+//  Needs the reference package's vendor folder next to this file (GIFT/js/vendor):
 //    three.webgpu.js / three.tsl.js / three.core.js
 //    addons/tsl/display/BloomNode.js
 //    (from open-sea-skin's native-dist/vendor)
