@@ -150,7 +150,10 @@ const skyColor = Fn(([dir, cloudMask]) => {
 
   const s = max(dot(d, uSunDir), 0);
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18));
-  col.addAssign(uSunColor.mul(smoothstep(0.9994, 0.9998, s)).mul(30));
+  /* 这里原本还有一行硬日盘：uSunColor * smoothstep(0.9994, 0.9998, s) * 30。
+     但页面上另有一个 DOM 的日/月盘（#celestial，可拖动改时刻），两套渲染器
+     各画一个、位置还不一致 → 天空里能看到两个太阳（夜间是一个太阳 + 一个月亮）。
+     日/月的可见本体交给 #celestial；bundle 的天空只保留上面那层柔和的光晕。 */
 
   // ── cloud deck ──────────────────────────────────────────────────────────
   // The reference only painted a thin low band, which read as grey haze on the

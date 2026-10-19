@@ -280,7 +280,12 @@
       state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / 3600), 24);
     }
     state.timeOfDay = state.manualTime ? damp(state.timeOfDay, state.timeTarget, 1.7, dt) : state.timeTarget;
-    state.cloudCover = damp(state.cloudCover, state.cloudTarget, 0.22, dt);
+    /* 云量的阻尼过渡：0.22 的时间常数是 4.5 s，慢机上更久 —— 用户把滑杆拉到 0
+       之后十几秒天上还有云，看着像"关不掉"（实测 target=0 时 cover 仍 0.211）。
+       0.9 的过渡仍然平滑（≈1.1 s 时间常数），但能在 ~4 s 内真正到位；
+       再加一条吸附：差值小于 0.004 直接贴到目标值，保证 0 就是 0。 */
+    state.cloudCover = damp(state.cloudCover, state.cloudTarget, 0.9, dt);
+    if (Math.abs(state.cloudCover - state.cloudTarget) < 0.004) state.cloudCover = state.cloudTarget;
     state.wind = damp(state.wind, state.windTarget, 0.5, dt);
     state.windDirection = damp(state.windDirection, state.windDirectionTarget, 0.35, dt);
     state.rain = damp(state.rain, state.rainTarget, 0.8, dt);

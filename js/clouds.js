@@ -146,6 +146,9 @@ const float EXT_PER_DENSITY = 0.0012;   // 归一化密度 1.0 对应的消光�
 const float SUN_GAIN    = 4.0;
 const float SKY_AMB     = 0.30;
 const float POWDER_LEN  = 1000.0;
+/* 密度底噪门限：低于它的密度一律当空气。腐蚀算子的连续尾巴会在平视时
+   累积成满屏白絮（用户报的"云朵间隙模糊散落"）。0.10 = 吃掉最稀的 10%。 */
+const float DENSITY_FLOOR = 0.10;
 
 /* 调试输出（lab 用，ship 忽略） */
 float gDbgShape, gDbgCover, gDbgBody, gDbgSteps, gDbgSkips;
@@ -254,6 +257,13 @@ float cloudDensity(vec3 p, out float h01){
   /* ── 4. 高度剖面 + 上密下疏 ── */
   d *= prof;
   d *= 0.25 + 0.75 * hf;
+
+  /* ── 5. 密度底噪门限（DENSITY_FLOOR）──────────────────────────────────────
+     腐蚀算子是连续的，所以凡是「刚过阈值」的地方都会留下 1%~8% 的密度尾巴。
+     平视时这些尾巴沿视线累积成一整片发白的薄雾 —— 用户报的
+     「云朵间隙有模糊散落、很丑」就是它（实测：覆盖率 0.21 时整片天空都是白絮）。
+     低于门限一律当空气：云有干净的轮廓，云间隙是真的天空。               */
+  d = remap01(d, DENSITY_FLOOR, 1.0);
 
   gDbgShape = shape; gDbgCover = occ; gDbgBody = d;
   return d * uDensityMul;
