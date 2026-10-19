@@ -172,4 +172,30 @@ python -m http.server 4173
 
 ---
 
-字体：Cormorant Garamond、Manrope，均采用 SIL Open Font License。页面中的字体已转换为内嵌 woff2，离线打开也能保持完整排版。
+---
+
+## 引用与致谢（Credits）
+
+这个项目最核心的海面不是仿写，而是把开源项目的**原版渲染器**搬过来用。这里把出处、许可证和改动范围写清楚。
+
+### open-sea-skin · 海面渲染器（核心依赖）
+
+- **项目**：[`d-dev0101/open-sea-skin`](https://github.com/d-dev0101/open-sea-skin) —— 一个 DSH（DeepSeek Harness）的海洋皮肤插件：实时海面主题，可调浪高、日落与玻璃质感，同时提供 Chrome / Edge 扩展版本。
+- **许可证**：MIT · Copyright (c) 2026 Open Sea Skin contributors，全文见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+- **用在哪**：
+  - `sea.bundle.js` —— 它的 `ocean.js` 与 three.js 模块（`three.webgpu.js` / `three.tsl.js` / `three.core.js` / `BloomNode.js`）用 esbuild 打成的 IIFE。**渲染本体没有重写**：Gerstner 五波、解析法线、FBM 细节、Fresnel、太阳高光、浪尖泡沫、地平线雾、ACES + bloom、5.5 m 相机 / 55° 镜头 / 26% 地平线，全部原样。
+  - `ocean.js` —— 自写的 WebGL2 回落海面，其波形模型、五组涌浪参数与深水色散关系移植自它。
+  - **调色板** —— DAY / DUSK 两张颜色表取自它，再叠加本项目的夜与风暴变体。
+- **集成与适配**：打包、天空云盖、天气/时间接线、调色板插值、三级回落（原版 → WebGL2 → Canvas-2D）与 LITE 预算，由 **dsh** 完成。
+
+### three.js
+
+`sea.bundle.js` 内含 three.js 的 WebGPU / TSL 构建（MIT · Copyright © 2010-2025 three.js authors），许可见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+
+### 字体
+
+Cormorant Garamond、Manrope，均采用 SIL Open Font License 1.1；页面中的字体已转换为内嵌 woff2，离线打开也能保持完整排版。
+
+### 贡献者
+
+- **dsh** —— 海面渲染器的搬运、打包与接入；天气/时间场与海面调色的联动；云、雨、雷电图层；三级回落与 LITE 模式；项目文档。
