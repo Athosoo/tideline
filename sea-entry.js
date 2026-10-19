@@ -39,6 +39,7 @@ const uShallowColor = uniform(new THREE.Vector3(1, 1, 1));
 const uCloudCover = uniform(0.25);
 const uStormy = uniform(0.0);
 const uFlash = uniform(0.0);
+const uCloudDetail = uniform(1.0);
 
 // ── Gerstner swell (verbatim) ───────────────────────────────────────────────
 const GERSTNER_DEFS = [
@@ -150,15 +151,39 @@ const skyColor = Fn(([dir, cloudMask]) => {
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18));
   col.addAssign(uSunColor.mul(smoothstep(0.9994, 0.9998, s)).mul(30));
 
-  const band = smoothstep(0.03, 0.16, d.y).mul(smoothstep(0.6, 0.22, d.y));
-  If(band.mul(cloudMask).greaterThan(0.001), () => {
-    const proj = d.xz.div(d.y.add(0.18)).mul(0.55);
-    const cloudNoise = clamp(fbm(proj.add(vec2(uTime.mul(0.006), uTime.mul(0.003)))).mul(0.5).add(0.5), 0, 1);
-    const lo = mix(0.80, 0.30, uCloudCover);
-    const cover = band.mul(smoothstep(lo, lo.add(0.28), cloudNoise));
-    const cloudColor = mix(vec3(0.92, 0.90, 0.87), uSunColor.mul(0.5), 0.45)
-      .mul(mix(float(1), float(0.34), uStormy));
-    col.assign(mix(col, cloudColor, cover.mul(0.6)));
+  // ── cloud deck ──────────────────────────────────────────────────────────
+  // The reference only painted a thin low band, which read as grey haze on the
+  // horizon. Weather you can feel needs a deck: it covers the whole sky above
+  // the haze, has two layers drifting at different speeds for parallax, is lit
+  // along its top and dark underneath, turns its sunlit side towards the
+  // light, darkens in a storm and lights up when lightning fires.
+  const deck = smoothstep(0.012, 0.10, d.y);
+  If(deck.mul(cloudMask).greaterThan(0.002), () => {
+    const proj = d.xz.div(d.y.add(0.16));
+    const p1 = proj.mul(2.4).add(vec2(uTime.mul(0.0050), uTime.mul(0.0026)));
+    const p2 = proj.mul(6.0).add(vec2(uTime.mul(-0.0090), uTime.mul(0.0044)));
+    const n1 = fbm(p1);
+    const n2 = fbm(p2).mul(uCloudDetail.mul(0.68));
+    const field = n1.add(n2);
+
+    // Coverage keeps its structure at every setting: the threshold never drops
+    // far enough to swallow the whole field, so a solid overcast is still made
+    // of shapes with edges rather than one flat wash.
+    const lo = mix(0.78, 0.02, uCloudCover);
+    const cover = smoothstep(lo, lo.add(0.34), field).mul(deck);
+
+    // Lit along the top, heavy underneath: the dark base sitting on the horizon
+    // is what gives a storm its weight.
+    const facing = clamp(dot(d, uSunDir).mul(0.5).add(0.5), 0, 1);
+    const high = clamp(d.y.mul(2.4), 0, 1);
+    const baseCol = vec3(0.22, 0.25, 0.30).mul(mix(float(0.5), float(1.0), high));
+    const litCol = uSunColor.mul(mix(0.45, 1.05, facing));
+    const cloudColor = mix(baseCol, litCol, high.mul(0.85).add(0.06))
+      .mul(mix(float(1), float(0.35), uStormy));
+    col.assign(mix(col, cloudColor, cover.mul(0.95)));
+
+    // lightning lights the deck from the inside
+    col.addAssign(uSunColor.mul(uFlash).mul(cover.mul(0.9).add(0.12)));
   });
 
   return col;
@@ -291,6 +316,7 @@ export async function createSea(options) {
       if (weather.cloud != null) uCloudCover.value = weather.cloud;
       if (weather.stormy != null) uStormy.value = weather.stormy;
       if (weather.flash != null) uFlash.value = weather.flash;
+      if (weather.cloudDetail != null) uCloudDetail.value = weather.cloudDetail;
     },
     resize(width, height) {
       camera.aspect = width / Math.max(1, height);

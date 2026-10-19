@@ -1080,6 +1080,8 @@ function applySeaFrame() {
     cloud: clamp(weather.cloudCover || 0, 0, 1),
     stormy: clamp(weather.storminess || 0, 0, 1),
     flash: clamp(weather.flash || 0, 0, 1),
+    // The second cloud layer is the expensive one; LITE keeps a single layer.
+    cloudDetail: quality.level === "lite" ? 0 : 1,
   });
 }
 

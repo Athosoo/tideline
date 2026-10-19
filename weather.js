@@ -426,12 +426,21 @@
     const threshold = 0.80 - cover * 0.72;
     for (let y = 0; y < h; y += 1) {
       const ny = y / h;
-      const band = smooth(clamp((0.72 - ny) / 0.72));
+      const band = smooth(clamp((0.95 - ny) / 0.95));
+      const flash = clamp(state.flash || 0, 0, 1);
+      const sun = clamp(state.sunX == null ? 0.7 : state.sunX, 0, 1);
       for (let x = 0; x < w; x += 1) {
         const n = fbm(x / w * scale + drift, y / h * scale * 0.55 + drift * 0.35, oct);
         const density = clamp((n + band * 0.32 - threshold) * 3.4);
         const idx = (y * w + x) * 4;
-        const shade = 0.74 - dark * 0.3 + (1 - band) * 0.08;
+        // Volume: the deck is lit along its top, dark underneath, and the side
+        // facing the sun catches the light — a flat wash has no weight.
+        const lift = clamp((0.62 - ny) / 0.62);
+        const sunSide = clamp(1 - Math.abs(x / w - sun) * 1.7);
+        const shade = clamp(
+          0.68 - dark * 0.34 + lift * 0.30 + sunSide * 0.12 * density + flash * 0.55,
+          0.18, 1.0,
+        );
         data[idx] = Math.round(246 * shade);
         data[idx + 1] = Math.round(248 * shade);
         data[idx + 2] = Math.round(242 * shade);
