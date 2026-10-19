@@ -92,6 +92,7 @@
     cloudVolume: null,
     clouds: null,
     cloudFailed: false,
+    cloudSlow: 0,
     rainCanvas: null,
     flashEl: null,
     lastSky: 0,
@@ -513,13 +514,27 @@
      只有 FULL 档、且没有 reduced-motion 时才尝试接管天空。create 返回 null
      或抛错就什么都不做，现有 2D 云画布路径原样保留（LITE / 无 WebGL2 回落）。 */
   function cloudEligible() {
-    return !!env.quality && env.quality.level === "full" &&
-      !(env.reducedMotion && env.reducedMotion.matches);
+    if (env.reducedMotion && env.reducedMotion.matches) return false;
+    if (!env.quality) return false;
+    /* 3D 噪声是在头几百毫秒里分帧生成的；那段时间的画面抖动不能算进
+       app.js 的 45fps 画质探测，否则整个站会被云层自己拖成 LITE
+       ——而 LITE 又恰好会把云层关掉，形成「永远看不到体积云」的死结。 */
+    if (performance.now() < 2600) return false;
+    return true;
   }
 
   function syncCloudVolume() {
     if (env.clouds) {
-      if (!cloudEligible()) disposeCloudVolume();
+      if (!cloudEligible()) { disposeCloudVolume(); return; }
+      /* 兜底：如果压到最低画质还是追不上预算，就交还天空，
+         让 bundle 自绘云板 / 2D 画布接管，而不是留一块卡死的画布。 */
+      const s = env.clouds.stats && env.clouds.stats();
+      if (s && s.avgMs > 42) env.cloudSlow = (env.cloudSlow || 0) + 1;
+      else env.cloudSlow = 0;
+      if (env.cloudSlow > 180) {
+        disposeCloudVolume();
+        env.cloudFailed = true;
+      }
       return;
     }
     if (env.cloudFailed || !cloudEligible()) return;
@@ -527,14 +542,14 @@
       env.cloudFailed = true;
       return;
     }
+    const lite = env.quality.level === "lite";
     let api = null;
     try {
-      api = window.TideClouds.create(env.cloudVolume, {
-        renderScale: 0.75,
-        steps: 48,
-        lightSteps: 5,
-        budgetMs: 6,
-      });
+      /* LITE 也要有体积云：这块只有 26% 高的天空带，像素极少，
+         降分辨率 + 降步数就够便宜了，比整块关掉值得多。 */
+      api = window.TideClouds.create(env.cloudVolume, lite
+        ? { renderScale: 0.50, steps: 26, lightSteps: 3, budgetMs: 12 }
+        : { renderScale: 0.75, steps: 48, lightSteps: 5, budgetMs: 6 });
     } catch (error) {
       console.warn("[TIDELINE] volumetric clouds unavailable:", error && error.message ? error.message : error);
       api = null;
