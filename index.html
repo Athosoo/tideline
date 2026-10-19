@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#e8e2d2" />
+  <meta name="description" content="TIDELINE — 一座漂浮在海浪之间的明信片长廊。Between the tides, a quiet postcard archive." />
+  <title>TIDELINE — Between the Tides</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23123f3e'/%3E%3Ccircle cx='32' cy='27' r='13' fill='none' stroke='%23f7f2e6' stroke-width='1.2'/%3E%3Cpath d='M16 39c6-5 10-5 16 0s10 5 16 0M16 47c6-5 10-5 16 0s10 5 16 0' fill='none' stroke='%23f7f2e6' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E" />
+
+  <link rel="preload" href="assets/postcards/01-front.png" as="image" />
+  <link rel="preload" href="assets/postcards/02-front.png" as="image" />
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="weather.js"></script>
+  <script defer src="sea.bundle.js"></script>
+  <script defer src="ocean.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#gallery" data-open-archive>Skip to the archive</a>
+
+  <div class="scroll-track" id="scrollTrack" aria-hidden="true"></div>
+
+  <main class="gallery" id="gallery" aria-label="漂流的明信片长廊">
+    <div class="atmosphere" aria-hidden="true">
+      <div class="sky-wash"></div>
+      <div class="light-glow" aria-hidden="true"></div>
+      <div class="celestial" id="celestial" role="button" tabindex="0" aria-label="太阳/月亮：拖动改变时间，单击切换昼夜，长按召云">
+        <span class="celestial-glow" aria-hidden="true"></span>
+        <span class="celestial-disc" aria-hidden="true"></span>
+        <span class="celestial-hint" aria-hidden="true">DRAG · TAP · HOLD</span>
+      </div>
+      <canvas class="cloud-canvas" id="cloudCanvas" aria-hidden="true"></canvas>
+      <div class="horizon-glow"></div>
+      <canvas class="ocean-canvas" id="oceanCanvas" aria-hidden="true"></canvas>
+      <canvas class="water-canvas" id="waterCanvas"></canvas>
+      <div class="shore-glow"></div>
+      <div class="atmo-grid"></div>
+      <div class="weather-shade" id="weatherShade" aria-hidden="true"></div>
+      <canvas class="rain-canvas" id="rainCanvas" aria-hidden="true"></canvas>
+      <div class="lightning-flash" id="lightningFlash" aria-hidden="true"></div>
+
+      <svg class="contour contour--left" viewBox="0 0 760 900" fill="none" preserveAspectRatio="xMinYMid slice">
+        <g stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+          <path d="M-80 550C70 522 170 574 294 551s194-65 312-30 160 60 266 23" opacity=".26"/>
+          <path d="M-80 582C58 562 188 600 302 575s210-52 328-18 148 42 234 16" opacity=".19"/>
+          <path d="M-100 620C64 598 185 644 306 613s223-45 340-10 158 40 246 4" opacity=".13"/>
+          <path d="M109 409c-44-61-28-142 37-176 60-31 131-6 148 51 17 56-21 117-82 132" opacity=".22"/>
+          <path d="M151 386c-28-42-20-101 23-128 48-30 103-3 108 44 5 44-28 88-73 96" opacity=".12"/>
+          <path d="M0 731h640" opacity=".11"/>
+        </g>
+      </svg>
+
+      <svg class="contour contour--right" viewBox="0 0 760 900" fill="none" preserveAspectRatio="xMaxYMid slice">
+        <g stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+          <path d="M840 538c-124 13-221-37-348-14s-211 65-333 31-113-37-241-2" opacity=".22"/>
+          <path d="M840 580c-125 24-230-23-360 0s-202 51-312 24-120-20-240 10" opacity=".16"/>
+          <path d="M820 637c-97 1-175-38-293-23s-208 46-315 19-125-19-257 5" opacity=".1"/>
+          <circle cx="516" cy="252" r="128" opacity=".16"/>
+          <circle cx="516" cy="252" r="103" opacity=".08"/>
+          <path d="M469 750c31-4 49-19 53-42" opacity=".16"/>
+        </g>
+      </svg>
+
+      <div class="grain"></div>
+      <div class="vignette"></div>
+    </div>
+
+    <div class="weather-bar" id="weatherBar">
+      <button class="weather-bar__toggle" id="weatherToggle" type="button" aria-expanded="false" aria-controls="weatherPanel">
+        <span class="weather-bar__dot" aria-hidden="true"></span>
+        <span class="weather-bar__title">WEATHER</span>
+        <span class="weather-bar__label" id="weatherLabel">CLIMATE · 12:00 · CLEAR</span>
+      </button>
+      <div class="weather-bar__panel" id="weatherPanel">
+        <label class="weather-row">
+          <span class="weather-row__head"><span>CLOUD</span><span class="weather-row__value" id="cloudValue">25%</span></span>
+          <input id="cloudSlider" type="range" min="0" max="100" value="25" aria-label="云量" />
+        </label>
+        <label class="weather-row">
+          <span class="weather-row__head"><span>WIND · RAIN</span><span class="weather-row__value" id="weatherValue">20%</span></span>
+          <input id="weatherSlider" type="range" min="0" max="100" value="20" aria-label="风雨" />
+        </label>
+        <label class="weather-row">
+          <span class="weather-row__head"><span>TIME</span><span class="weather-row__value" id="timeValue">12:00</span></span>
+          <input id="timeSlider" type="range" min="0" max="100" value="50" aria-label="时间" />
+        </label>
+        <label class="weather-row">
+          <span class="weather-row__head"><span>LIGHTNING</span><span class="weather-row__value" id="lightningValue">0%</span></span>
+          <input id="lightningSlider" type="range" min="0" max="100" value="0" aria-label="雷电" />
+        </label>
+        <div class="weather-bar__actions">
+          <button id="weatherAuto" type="button">AUTO</button>
+          <button id="weatherReset" type="button">RESET</button>
+        </div>
+      </div>
+    </div>
+    <div class="ambient-particles" id="ambientParticles" aria-hidden="true"></div>
+    <p class="touch-hint" aria-hidden="true"><i></i>TAP TO PICK UP <span>· 点击拾起</span></p>
+
+    <header class="gallery-header">
+      <button class="brand" id="brandHome" type="button" aria-label="Return to the cover">
+        <span class="brand-sigil" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="12.5" stroke="currentColor" stroke-width=".8"/>
+            <path d="M9.5 18.3c2.2-2.3 4.2-2.3 6.4 0s4.3 2.3 6.5 0" stroke="currentColor" stroke-width=".8" stroke-linecap="round"/>
+            <path d="M9.5 14.6c2.2-2.3 4.2-2.3 6.4 0s4.3 2.3 6.5 0" stroke="currentColor" stroke-width=".8" stroke-linecap="round" opacity=".5"/>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">TIDELINE</span>
+          <span class="brand-sub">POSTCARD ARCHIVE</span>
+        </span>
+      </button>
+
+      <p class="header-center"><span>BETWEEN THE TIDES</span><i></i><span>VOL. 01</span></p>
+
+      <div class="header-actions">
+        <button class="shuffle-button" id="shuffleButton" type="button" aria-label="Shuffle postcard positions / 重新排列明信片" title="Shuffle / 重新排列">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4.5h2.4c3.5 0 3.6 7 7.2 7H14M11.8 2.3 14 4.5l-2.2 2.2M2 11.5h2.4c1.5 0 2.4-1.2 3.3-2.5M11.8 14.2 14 12l-2.2-2.2" stroke="currentColor" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>SHUFFLE</span>
+        </button>
+        <button class="quality-toggle" id="qualityToggle" type="button" aria-pressed="false" aria-label="极简模式：降低渲染精度与刷新频率 / Lite mode" title="极简模式 / LITE MODE（长按恢复自动）">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 11.2a6 6 0 1 1 12 0" stroke="currentColor" stroke-width=".8" stroke-linecap="round"/><path d="M8 11.2 11.2 6" stroke="currentColor" stroke-width=".8" stroke-linecap="round"/><circle cx="8" cy="11.2" r="1" fill="currentColor"/></svg>
+          <span id="qualityLabel">FULL</span>
+        </button>
+        <button class="immersive-toggle" id="immersiveToggle" type="button" aria-pressed="false" aria-label="沉浸模式：隐去周围的界面与提示，只留下文字与画面 / Immersive mode" title="沉浸模式 / IMMERSIVE（快捷键 F）">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 1.6H2.6A1 1 0 0 0 1.6 2.6V6M10 1.6h3.4a1 1 0 0 1 1 1V6M10 14.4h3.4a1 1 0 0 0 1-1V10M6 14.4H2.6a1 1 0 0 1-1-1V10" stroke="currentColor" stroke-width=".9" stroke-linecap="round"/></svg>
+          <span id="immersiveLabel">IMMERSIVE</span>
+        </button>
+        <span class="card-count" id="cardCount">07 CARDS</span>
+      </div>
+    </header>
+
+    <div class="world" id="world" aria-live="polite"></div>
+
+    <div class="drift-note" id="driftNote" aria-hidden="true">
+      <span class="drift-note__rule"></span>
+      <span class="drift-note__text">LET THE WATER<br />LEAD THE WAY</span>
+      <span class="drift-note__coordinate">26° 05′ N</span>
+    </div>
+
+    <footer class="gallery-footer">
+      <div class="current-card" id="currentCard">
+        <p class="current-kicker"><span id="currentNumber">01</span><span class="hairline"></span>NOW DRIFTING</p>
+        <h2 class="current-title" id="currentTitle">Morning Reading</h2>
+        <p class="current-meta" id="currentMeta">A check-in at first light</p>
+      </div>
+
+      <nav class="tide-rail" aria-label="Postcard progress">
+        <span class="rail-index" id="railFrom">01</span>
+        <div class="rail-line"><span class="rail-fill" id="railFill"></span><span class="rail-dot" id="railDot"></span></div>
+        <span class="rail-index" id="railTo">02</span>
+      </nav>
+
+      <div class="scroll-hint" id="scrollHint">
+        <span>SCROLL TO WANDER</span>
+        <svg viewBox="0 0 30 10" fill="none" aria-hidden="true"><path d="M0 5h27M23 1l4 4-4 4" stroke="currentColor" stroke-width=".8"/></svg>
+      </div>
+    </footer>
+
+    <div class="scene-notes" aria-hidden="true">
+      <span class="scene-notes__vertical">SHORELINE STUDIES / MMXXVI</span>
+      <span class="scene-notes__corner" id="sceneRange">001°—007°</span>
+    </div>
+  </main>
+
+  <section class="intro" id="intro" aria-label="封面：推门进入明信片长廊">
+    <div class="door door--left" aria-hidden="true">
+      <div class="door-surface">
+        <span class="door-tone door-tone--one"></span>
+        <span class="door-tone door-tone--two"></span>
+        <svg class="door-lines" viewBox="0 0 1440 900" fill="none" preserveAspectRatio="xMidYMid slice">
+          <g stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+            <g class="line-cluster line-cluster--orbit">
+              <circle cx="720" cy="384" r="286" opacity=".5"/>
+              <circle cx="720" cy="384" r="248" opacity=".13" stroke-dasharray="1 11"/>
+              <circle cx="720" cy="384" r="318" opacity=".1"/>
+            </g>
+            <g class="line-cluster line-cluster--horizon">
+              <path d="M120 701C304 676 436 724 601 694s294-54 449-26 221 34 338 7" opacity=".28"/>
+              <path d="M100 736C286 716 461 749 618 724s291-44 442-18 185 20 316 1" opacity=".15"/>
+              <path d="M103 505C257 477 351 514 493 497s283-40 425-12 238 32 421 12" opacity=".2"/>
+              <path d="M91 544C241 527 368 553 515 534s291-33 429-7 213 23 392 14" opacity=".13"/>
+              <path d="M129 586C282 567 390 590 528 574s286-28 413-5 237 22 382 17" opacity=".1"/>
+              <path d="M134 628C284 616 405 633 549 618s277-21 404-3 224 18 357 17" opacity=".08"/>
+            </g>
+            <g class="line-cluster line-cluster--ticks" opacity=".35">
+              <path d="M179 286v171M179 286h21M179 457h12M1261 286v171M1261 286h-21M1261 457h-12"/>
+              <path d="M657 786v38M783 786v38M657 817h38M745 817h38" opacity=".5"/>
+            </g>
+            <g class="line-cluster line-cluster--stars">
+              <circle cx="1134" cy="226" r="3.5" fill="currentColor" stroke="none" opacity=".55"/>
+              <circle cx="1203" cy="305" r="1.3" fill="currentColor" stroke="none" opacity=".35"/>
+              <circle cx="295" cy="246" r="1.5" fill="currentColor" stroke="none" opacity=".3"/>
+              <path d="M1111 355h45M1133.5 332.5v45" opacity=".35"/>
+            </g>
+  
+              <path d="M218 150v102M218 150h18M1222 764v-112M1222 764h-18" opacity=".45"/>
+              <path d="M720 0v118M720 782v118" opacity=".12"/>
+            </g>
+          </g>
+        </svg>
+        <span class="door-side-label door-side-label--left">LAT. 26° 05′ N</span>
+      </div>
+    </div>
+
+    <div class="door door--right" aria-hidden="true">
+      <div class="door-surface">
+        <span class="door-tone door-tone--one"></span>
+        <span class="door-tone door-tone--two"></span>
+        <svg class="door-lines" viewBox="0 0 1440 900" fill="none" preserveAspectRatio="xMidYMid slice">
+          <g stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
+            <g class="line-cluster line-cluster--orbit">
+              <circle cx="720" cy="384" r="286" opacity=".5"/>
+              <circle cx="720" cy="384" r="248" opacity=".13" stroke-dasharray="1 11"/>
+              <circle cx="720" cy="384" r="318" opacity=".1"/>
+            </g>
+            <g class="line-cluster line-cluster--horizon">
+              <path d="M120 701C304 676 436 724 601 694s294-54 449-26 221 34 338 7" opacity=".28"/>
+              <path d="M100 736C286 716 461 749 618 724s291-44 442-18 185 20 316 1" opacity=".15"/>
+              <path d="M103 505C257 477 351 514 493 497s283-40 425-12 238 32 421 12" opacity=".2"/>
+              <path d="M91 544C241 527 368 553 515 534s291-33 429-7 213 23 392 14" opacity=".13"/>
+              <path d="M129 586C282 567 390 590 528 574s286-28 413-5 237 22 382 17" opacity=".1"/>
+              <path d="M134 628C284 616 405 633 549 618s277-21 404-3 224 18 357 17" opacity=".08"/>
+            </g>
+            <g class="line-cluster line-cluster--ticks" opacity=".35">
+              <path d="M179 286v171M179 286h21M179 457h12M1261 286v171M1261 286h-21M1261 457h-12"/>
+              <path d="M657 786v38M783 786v38M657 817h38M745 817h38" opacity=".5"/>
+            </g>
+            <g class="line-cluster line-cluster--stars">
+              <circle cx="1134" cy="226" r="3.5" fill="currentColor" stroke="none" opacity=".55"/>
+              <circle cx="1203" cy="305" r="1.3" fill="currentColor" stroke="none" opacity=".35"/>
+              <circle cx="295" cy="246" r="1.5" fill="currentColor" stroke="none" opacity=".3"/>
+              <path d="M1111 355h45M1133.5 332.5v45" opacity=".35"/>
+            </g>
+  
+              <path d="M218 150v102M218 150h18M1222 764v-112M1222 764h-18" opacity=".45"/>
+              <path d="M720 0v118M720 782v118" opacity=".12"/>
+            </g>
+          </g>
+        </svg>
+        <span class="door-side-label door-side-label--right">LONG. 119° 18′ E</span>
+      </div>
+    </div>
+
+    <div class="door-seam" aria-hidden="true"><span></span></div>
+    <div class="intro-frame" aria-hidden="true">
+      <span class="frame-corner frame-corner--tl"></span>
+      <span class="frame-corner frame-corner--tr"></span>
+      <span class="frame-corner frame-corner--bl"></span>
+      <span class="frame-corner frame-corner--br"></span>
+    </div>
+
+    <div class="cover-content">
+      <header class="cover-header">
+        <span class="cover-brand">TIDELINE</span>
+        <span class="cover-header__center">A DRIFTING POSTCARD ARCHIVE</span>
+        <span class="cover-header__right">VOL. 01 <i></i> 2026</span>
+      </header>
+
+      <div class="cover-hero">
+        <p class="cover-eyebrow"><span></span> BETWEEN THE TIDES <span></span></p>
+        <h1 class="cover-title" aria-label="Between the tides">
+          <span class="cover-title__first">Between</span>
+          <span class="cover-title__second"><em>the tides</em><b>.</b></span>
+        </h1>
+        <div class="cover-rule" aria-hidden="true"><span></span><i></i><span></span></div>
+        <div class="cover-lede">
+          <p><span id="coverCardWord">Seven</span> postcards, held between water and light.<br />Push the tide aside and step in.</p>
+          <p class="cn"><span id="coverCardWordCn">七张</span>小小的海上来信，<br />推门，随潮汐漂进长廊。</p>
+        </div>
+      </div>
+
+      <footer class="cover-footer">
+        <div class="cover-coord">
+          <span>26° 05′ N</span>
+          <span>119° 18′ E</span>
+        </div>
+        <button class="scroll-cue" id="scrollCue" type="button" aria-label="滚动或点击开启明信片长廊">
+          <span class="cue-orbit" aria-hidden="true">
+            <svg viewBox="0 0 54 54" fill="none">
+              <circle cx="27" cy="27" r="26" stroke="currentColor" stroke-width=".7" opacity=".35"/>
+              <path d="M27 11v31M20 35l7 7 7-7" stroke="currentColor" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="cue-copy"><b>SCROLL TO OPEN</b><small>滚动开启 · 点击推门</small></span>
+        </button>
+        <div class="cover-edition">
+          <span>SHORELINE STUDIES</span>
+          <span id="coverEditionRange">ED. 001—007</span>
+        </div>
+      </footer>
+    </div>
+
+    <div class="intro-vignette" aria-hidden="true"></div>
+  </section>
+
+  <div class="focus" id="focus" role="dialog" aria-modal="true" aria-labelledby="focusTitle" aria-describedby="focusQuote" aria-hidden="true" tabindex="-1">
+    <div class="focus-backdrop" data-focus-close></div>
+    <div class="focus-wash" aria-hidden="true"></div>
+    <div class="focus-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="focus-grain" aria-hidden="true"></div>
+
+    <button class="focus-close" id="focusClose" type="button" aria-label="关闭明信片">
+      <span></span><span></span>
+    </button>
+
+    <div class="focus-layout">
+      <aside class="focus-aside" aria-live="polite">
+        <p class="focus-kicker"><span id="focusNumber">01</span><i></i>POSTCARD STUDY</p>
+        <h2 class="focus-title" id="focusTitle">Morning Reading</h2>
+        <p class="focus-meta" id="focusMeta">26.11.2022 · 06:55</p>
+        <div class="focus-note">
+          <p id="focusQuote">“A quiet check-in at first light.”</p>
+          <p class="cn" id="focusQuoteCn">「把清晨的第一页，留给彼此。」</p>
+        </div>
+        <div class="focus-side-indicator">
+          <span>FRONT</span>
+          <div class="side-track"><i id="sideMarker"></i></div>
+          <span>BACK</span>
+        </div>
+        <p class="focus-tip">点击卡面翻面 <span>/</span> CLICK CARD TO TURN</p>
+      </aside>
+
+      <div class="focus-stage">
+        <div class="focus-card" id="focusCard" role="button" tabindex="0" aria-label="明信片正面，点击翻面">
+          <div class="focus-tilt" id="focusTilt">
+            <div class="focus-rotor" id="focusRotor">
+              <div class="focus-spin" id="focusSpin">
+              <div class="focus-face focus-face--front">
+                <img id="focusFront" src="assets/postcards/01-front.png" alt="" draggable="false" />
+                <span class="face-sheen" aria-hidden="true"></span>
+                <span class="face-haze" aria-hidden="true"></span>
+              </div>
+              <div class="focus-face focus-face--back">
+                <img id="focusBack" src="assets/postcards/01-back.png" alt="" draggable="false" />
+                <span class="face-sheen" aria-hidden="true"></span>
+                <span class="face-haze" aria-hidden="true"></span>
+              </div>
+              <span class="focus-edge focus-edge--left" aria-hidden="true"></span>
+              <span class="focus-edge focus-edge--right" aria-hidden="true"></span>
+              <span class="focus-edge focus-edge--top" aria-hidden="true"></span>
+              <span class="focus-edge focus-edge--bottom" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="focus-undertitle"><span id="focusDate">2022</span><span>POSTCARD Nº <b id="focusNumberSmall">01</b></span></p>
+      </div>
+    </div>
+
+    <p class="focus-release">CLICK OUTSIDE TO RELEASE <span>·</span> 点击卡外返回</p>
+  </div>
+
+  <div class="immersive-ui" id="immersiveUI">
+    <button class="immersive-exit" id="immersiveExit" type="button" aria-label="退出沉浸模式 / Exit immersive mode">
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 1.6H2.6A1 1 0 0 0 1.6 2.6V6M10 1.6h3.4a1 1 0 0 1 1 1V6M10 14.4h3.4a1 1 0 0 0 1-1V10M6 14.4H2.6a1 1 0 0 1-1-1V10" stroke="currentColor" stroke-width=".9" stroke-linecap="round"/></svg>
+      <span>EXIT IMMERSIVE</span>
+      <b>ESC</b>
+    </button>
+  </div>
+
+  <div class="cursor" id="cursor" aria-hidden="true">
+    <span class="cursor-dot"></span>
+    <span class="cursor-ring"><span class="cursor-label" id="cursorLabel"></span></span>
+  </div>
+
+  <noscript>
+    <div class="noscript">This postcard archive needs JavaScript to drift.</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 120" width="180" height="120">
+  <rect width="180" height="120" fill="#f7f2e6"/>
+  <rect x="8" y="8" width="164" height="104" fill="none" stroke="#0d2f33" stroke-width="1" opacity="0.35"/>
+  <rect x="146" y="14" width="26" height="20" rx="1" fill="#c96e53" opacity="0.16"/>
+  <rect x="146" y="14" width="26" height="20" fill="none" stroke="#c96e53" stroke-width="1" opacity="0.55"/>
+  <line x1="8" y1="38" x2="138" y2="38" stroke="#0d2f33" stroke-width="1" opacity="0.28"/>
+    <line x1="8" y1="52" x2="138" y2="52" stroke="#0d2f33" stroke-width="1" opacity="0.28"/>
+    <line x1="8" y1="66" x2="138" y2="66" stroke="#0d2f33" stroke-width="1" opacity="0.28"/>
+    <line x1="8" y1="80" x2="138" y2="80" stroke="#0d2f33" stroke-width="1" opacity="0.28"/>
+  <text x="8" y="98" font-family="Georgia, 'Times New Roman', serif" font-size="20" font-weight="700" fill="#0d2f33" opacity="0.9">04</text>
+  <text x="8" y="26" font-family="Helvetica, Arial, sans-serif" font-size="5" letter-spacing="1.8" fill="#0d2f33" opacity="0.6">TIDELINE / POSTCARD</text>
+  <text x="8" y="86" font-family="Helvetica, Arial, sans-serif" font-size="5" letter-spacing="1.4" fill="#0d2f33" opacity="0.5">SHORELINE DRIVE</text>
+  <path d="M8 72 q8 -5 16 0 t16 0 t16 0" fill="none" stroke="#c96e53" stroke-width="1" opacity="0.4"/>
+</svg>
