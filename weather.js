@@ -89,6 +89,9 @@
     panel: null,
     celestial: null,
     cloudCanvas: null,
+    cloudVolume: null,
+    clouds: null,
+    cloudFailed: false,
     rainCanvas: null,
     flashEl: null,
     lastSky: 0,
@@ -263,6 +266,7 @@
       initDOM();
       initPanel();
       initCelestial();
+      syncCloudVolume();
       fetchLiveWeather();
     },
     update: function (dt, now) { update(dt, now); },
@@ -298,6 +302,7 @@
     if (now - env.lastSky > 90) { env.lastSky = now; applySky(); }
     updateClouds(dt, now, reduced);
     updateRain(dt, now, reduced);
+    feedCloudFrame(now);
   }
 
   function updateLightning(dt, now, reduced) {
@@ -374,6 +379,7 @@
     env.panel = document.getElementById("weatherPanel");
     env.celestial = document.getElementById("celestial");
     env.cloudCanvas = document.getElementById("cloudCanvas");
+    env.cloudVolume = document.getElementById("cloudVolume");
     env.rainCanvas = document.getElementById("rainCanvas");
     env.flashEl = document.getElementById("lightningFlash");
     env.cloudCtx = env.cloudCanvas ? env.cloudCanvas.getContext("2d", { alpha: true }) : null;
@@ -503,6 +509,113 @@
     ctx.restore();
   }
 
+  /* ── 体素云层（GIFT/clouds.js）────────────────────────────────────────
+     只有 FULL 档、且没有 reduced-motion 时才尝试接管天空。create 返回 null
+     或抛错就什么都不做，现有 2D 云画布路径原样保留（LITE / 无 WebGL2 回落）。 */
+  function cloudEligible() {
+    return !!env.quality && env.quality.level === "full" &&
+      !(env.reducedMotion && env.reducedMotion.matches);
+  }
+
+  function syncCloudVolume() {
+    if (env.clouds) {
+      if (!cloudEligible()) disposeCloudVolume();
+      return;
+    }
+    if (env.cloudFailed || !cloudEligible()) return;
+    if (!env.cloudVolume || !window.TideClouds || typeof window.TideClouds.create !== "function") {
+      env.cloudFailed = true;
+      return;
+    }
+    let api = null;
+    try {
+      api = window.TideClouds.create(env.cloudVolume, {
+        renderScale: 0.75,
+        steps: 48,
+        lightSteps: 5,
+        budgetMs: 6,
+      });
+    } catch (error) {
+      console.warn("[TIDELINE] volumetric clouds unavailable:", error && error.message ? error.message : error);
+      api = null;
+    }
+    if (!api) { env.cloudFailed = true; return; }
+    env.clouds = api;
+    document.body.classList.add("has-cloud-volume");
+  }
+
+  function disposeCloudVolume() {
+    if (!env.clouds) return;
+    try { env.clouds.dispose(); } catch (error) { /* no-op */ }
+    env.clouds = null;
+    document.body.classList.remove("has-cloud-volume");
+  }
+
+  /* 与 app.js 的 SEA_PALETTE 同一套「参考风」线性色。云的环境光 / 霾色必须
+     和 bundle 海面看到的是同一片天空，否则云和天空会脱色、出现色差硬边。 */
+  const SEA_REFERENCE = {
+    day: { zenith: [0.07, 0.20, 0.42], horizon: [0.52, 0.68, 0.82], sun: [1.0, 0.93, 0.80] },
+    dusk: { zenith: [0.03, 0.05, 0.16], horizon: [0.85, 0.36, 0.16], sun: [1.0, 0.42, 0.14] },
+    night: { zenith: [0.012, 0.02, 0.05], horizon: [0.06, 0.09, 0.15], sun: [0.75, 0.80, 0.90] },
+    storm: { zenith: [0.08, 0.10, 0.12], horizon: [0.28, 0.32, 0.34], sun: [0.58, 0.62, 0.64] },
+  };
+
+  function mix3(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  }
+
+  function cloudPalette() {
+    const s = state;
+    const elevation = clamp((s.sunElevation == null ? 20 : s.sunElevation) / 60, 0, 1);
+    let p = {
+      zenith: mix3(SEA_REFERENCE.dusk.zenith, SEA_REFERENCE.day.zenith, elevation),
+      horizon: mix3(SEA_REFERENCE.dusk.horizon, SEA_REFERENCE.day.horizon, elevation),
+      sun: mix3(SEA_REFERENCE.dusk.sun, SEA_REFERENCE.day.sun, elevation),
+    };
+    if (s.isNight) {
+      p = { zenith: SEA_REFERENCE.night.zenith, horizon: SEA_REFERENCE.night.horizon, sun: SEA_REFERENCE.night.sun };
+    }
+    const gloom = clamp(Math.max((s.overcast || 0) * 0.8, s.storminess || 0), 0, 1);
+    if (gloom > 0.01) {
+      p = {
+        zenith: mix3(p.zenith, SEA_REFERENCE.storm.zenith, gloom),
+        horizon: mix3(p.horizon, SEA_REFERENCE.storm.horizon, gloom),
+        sun: mix3(p.sun, SEA_REFERENCE.storm.sun, gloom),
+      };
+    }
+    return p;
+  }
+
+  /* 每帧把 kernel v2 的参数喂给云层，并驱动它渲染。 */
+  function feedCloudFrame(now) {
+    syncCloudVolume();
+    if (!env.clouds) return;
+    const s = state;
+    const night = s.isNight ? 1 : 0;
+    const palette = cloudPalette();
+    const hazeColor = mix3(palette.horizon, palette.sun, 0.10);
+    env.clouds.setParams({
+      coverage: s.cloudCover,
+      storm: s.storminess,
+      wind: 8 + s.wind * 52,              /* 8~60 m/s */
+      sunX: s.sunX,
+      sunY: s.sunY,
+      night: night,
+      haze: clamp(0.5 + s.storminess * 0.8 + s.overcast * 0.35 + night * 0.35, 0, 2),
+      sunColor: palette.sun,
+      skyTop: palette.zenith,
+      skyHorizon: palette.horizon,
+      hazeColor: hazeColor,
+      sunElevation: s.sunElevation,
+      flash: s.flash,
+      seedX: 0,
+      seedZ: 0,
+      horizonY: 0.252,
+      paused: !!(env.reducedMotion && env.reducedMotion.matches),
+    });
+    env.clouds.render(now);
+  }
+
   function resizeCanvases() {
     const cap = env.quality && env.quality.dprCap ? env.quality.dprCap : 2;
     const dpr = Math.min(window.devicePixelRatio || 1, cap);
@@ -511,6 +624,11 @@
       const cdpr = Math.min(window.devicePixelRatio || 1, env.quality && env.quality.level === "lite" ? 1 : 1.5);
       env.cloudCanvas.width = Math.max(1, Math.round(rect.width * cdpr));
       env.cloudCanvas.height = Math.max(1, Math.round(rect.height * cdpr));
+    }
+    if (env.cloudVolume && env.clouds) {
+      const crect = env.cloudVolume.getBoundingClientRect();
+      const cdpr = Math.min(window.devicePixelRatio || 1, cap);
+      env.clouds.resize(crect.width || window.innerWidth, crect.height || window.innerHeight * 0.26, cdpr);
     }
     if (env.rainCanvas && env.rainCtx) {
       const rect = env.rainCanvas.getBoundingClientRect();
