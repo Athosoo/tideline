@@ -321,15 +321,18 @@
     const day = !state.isNight;
     const raw = day ? state.timeOfDay : mod(state.timeOfDay - 12, 24);
     const theta = clamp((mod(raw, 24) - 6) / 12, 0, 1) * Math.PI;
-    const x = 50 - 42 * Math.cos(theta);
+    // Polar-light framing: the disc travels a short, low arc and never leaves
+    // the frame, so it stays draggable and the sea always keeps a grazing sun.
+    const x = 50 - 38 * Math.cos(theta);
     // Keep the sun and the moon above the shoreline. The CSS horizon sits at
     // about 47.8% of the viewport, so elevation 0 maps just above it.
     const horizonY = 25.2;
+    const topY = 13.4;
     const visualElev = day ? clamp(state.sunElevation, 0, 90) : clamp(-(state.sunElevationRaw == null ? state.sunElevation : state.sunElevationRaw), 0, 74);
     // Perspective, not a linear ramp: the 3D sea reads this screen position as
     // a light direction, and a linear ramp squashes every daylight hour into
     // the last few degrees above the horizon (one permanent sunset glitter).
-    const y = clamp(horizonY - Math.pow(visualElev / 90, 0.6) * (horizonY - 5), 4, horizonY);
+    const y = clamp(horizonY - Math.pow(visualElev / 90, 0.62) * (horizonY - topY), topY, horizonY);
     const size = day
       ? clamp(120 + (1 - clamp(state.sunElevation / 60, 0, 1)) * 140, 120, 280)
       : clamp(88 + (1 - visualElev / 60) * 60, 88, 158);
