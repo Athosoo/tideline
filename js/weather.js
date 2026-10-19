@@ -546,10 +546,13 @@
     let api = null;
     try {
       /* LITE 也要有体积云：这块只有 26% 高的天空带，像素极少，
-         降分辨率 + 降步数就够便宜了，比整块关掉值得多。 */
+         降分辨率 + 降步数就够便宜了，比整块关掉值得多。
+         FULL：v3 密度（腐蚀算子）需要足够的样本才出轮廓 —— 48 步时云在站点上
+         会退化成一层薄雾；96 步是「能看出独立积云」的实测下限。预算控制器
+         仍然会在弱机上自动降回。 */
       api = window.TideClouds.create(env.cloudVolume, lite
         ? { renderScale: 0.50, steps: 26, lightSteps: 3, budgetMs: 12 }
-        : { renderScale: 0.75, steps: 48, lightSteps: 5, budgetMs: 6 });
+        : { renderScale: 0.75, steps: 96, lightSteps: 5, budgetMs: 6 });
     } catch (error) {
       console.warn("[TIDELINE] volumetric clouds unavailable:", error && error.message ? error.message : error);
       api = null;
