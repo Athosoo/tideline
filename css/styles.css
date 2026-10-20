@@ -2942,3 +2942,15 @@ html.is-lean .grain,
 html.is-lean .focus-grain {
   display: none !important;
 }
+
+/* ============================================================================
+   ?ghosts=1 —— 真机二分开关（index.html / js/app.js 的 DIAG 加 html.diag-ghosts）
+   ----------------------------------------------------------------------------
+   默认全关，不带参数时没有任何影响。
+   用来看「聚焦时那团影子」到底是什么：打开之后其它明信片恢复成旧行为
+   （进聚焦时留在画面上、并继续随指针漂），如果影子又出现了，就说明它是
+   **没被藏起来的卡**，不是合成器残影。修复本身是上面那条
+   `body.is-holding .postcard-slot { opacity: 0 }`。                            */
+html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
+  opacity: 1 !important;
+}

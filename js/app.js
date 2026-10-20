@@ -168,7 +168,11 @@ const DIAG = Object.assign(window.__tidelineDiag, {
   no2dcloud: /[?&]no2dcloud=1/.test(window.location.search),
   nocardfx: /[?&]nocardfx=1/.test(window.location.search),
   nocardmove: /[?&]nocardmove=1/.test(window.location.search),
+  /* ?ghosts=1 把「聚焦时其它明信片仍留在画面上」的旧行为放回来，用来在真机上
+     确认那团影子到底是卡还是合成器残影。默认关，不带参数时没有任何影响。 */
+  ghosts: /[?&]ghosts=1/.test(window.location.search),
 });
+if (DIAG.ghosts) document.documentElement.classList.add("diag-ghosts");
 
 /* 主线程计量：只在 ?bench=1 时记录（默认连一次 performance.now() 都不多打）。
    面板里 JS cb 只包住 animate()；gap = 帧间隔 − JS cb，是 animate 之外的主线程
@@ -1497,6 +1501,11 @@ function applyCardTransforms(now, dt) {
   const scrollImpulse = clamp((state.camX - state.camPrevious) * 0.024, -3.6, 3.6);
   const period = Math.max(1, state.period);
   const heldIndex = state.focusOpen ? state.focusIndex : -1;
+  /* Nothing on the promenade may move while a card is in hand: the leftover
+     cards are hidden by `body.is-holding .postcard-slot`, and writing seven
+     transforms per frame for pixels nobody can see is exactly the main-thread
+     cost this pass is trying to remove. */
+  if (state.focusOpen) { state.camPrevious = state.camX; return; }
   state.cards.forEach((card, index) => {
     if (index === heldIndex) return;
 
