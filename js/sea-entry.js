@@ -45,6 +45,12 @@ const uCloudDetail = uniform(1.0);
    （那是关掉 bundle 自绘云板的开关），所以遮光必须走独立通道 ——
    否则"天上有云、海面照样亮蓝、太阳照样刺眼"，就是用户说的光影响不自然。 */
 const uCloudShade = uniform(1.0);
+/* 天空球自己那套 2D 云板要不要算。
+   体素云层活着时 app.js 会把 weather.cloud 设成 0 —— 但现在 skyColor 的
+   cloudMask 参数在材质里被写死成 1，于是「cloud=0」只是把阈值推到 0.78，
+   两层 FBM 仍然**每像素都算**（天空 + 水面反射各一遍），算出来的东西却几乎不可见。
+   这块改成 0 就直接跳掉整个分支，零视觉损失。 */
+const uSkyDeck = uniform(1.0);
 
 // ── Gerstner swell (verbatim) ───────────────────────────────────────────────
 const GERSTNER_DEFS = [
@@ -253,7 +259,7 @@ const oceanColor = Fn(() => {
   const R = reflect(V.negate(), N).toVar();
   R.y.assign(max(R.y, 0.04));
   const fresnel = float(0.02).add(float(0.98).mul(pow(float(1).sub(max(dot(N, V), 0)), 5)));
-  col.assign(mix(col, skyColor(R.normalize(), fresnel.greaterThan(0.25)), fresnel));
+  col.assign(mix(col, skyColor(R.normalize(), uSkyDeck), fresnel));
 
   col.addAssign(spec);
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), foam));
@@ -333,7 +339,7 @@ export async function createSea(options) {
 
   // their sky dome, so the far plane edge dissolves into the horizon
   const skyMaterial = new THREE.MeshBasicNodeMaterial();
-  skyMaterial.colorNode = skyColor(normalize(positionWorld), float(1));
+  skyMaterial.colorNode = skyColor(normalize(positionWorld), uSkyDeck);
   skyMaterial.side = THREE.BackSide;
   skyMaterial.depthWrite = false;
   const sky = new THREE.Mesh(new THREE.SphereGeometry(4000, 48, 24), skyMaterial);
@@ -344,7 +350,10 @@ export async function createSea(options) {
   const post = new THREE.PostProcessing(renderer);
   const scenePass = pass(scene, camera);
   const sceneColor = scenePass.getTextureNode('output');
-  post.outputNode = sceneColor.add(bloom(sceneColor, 0.32, 0.3, 0.9));
+  /* ?nobloom=1 关掉全屏 bloom —— 给真机做 A/B 用（bloom 是若干次全屏 down/up sample，
+     在弱 GPU 上很可能是海面这一侧的大头）。默认不变。 */
+  const NO_BLOOM = /[?&]nobloom=1/.test(typeof location !== "undefined" ? location.search : "");
+  post.outputNode = NO_BLOOM ? sceneColor : sceneColor.add(bloom(sceneColor, 0.32, 0.3, 0.9));
 
   await renderer.init();
 
@@ -360,7 +369,10 @@ export async function createSea(options) {
     setWater(deep, shallow) { setVec(uDeepColor.value, deep); setVec(uShallowColor.value, shallow); },
     setLight(dir, color) { setVec(uSunDir.value, dir); setVec(uSunColor.value, color); },
     setWeather(weather) {
-      if (weather.cloud != null) uCloudCover.value = weather.cloud;
+      if (weather.cloud != null) {
+        uCloudCover.value = weather.cloud;
+        uSkyDeck.value = weather.cloud > 0.001 ? 1.0 : 0.0;
+      }
       if (weather.stormy != null) uStormy.value = weather.stormy;
       if (weather.flash != null) uFlash.value = weather.flash;
       if (weather.cloudDetail != null) uCloudDetail.value = weather.cloudDetail;
