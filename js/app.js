@@ -1085,6 +1085,11 @@ function applySeaFrame() {
     flash: clamp(weather.flash || 0, 0, 1),
     // The second cloud layer is the expensive one; LITE keeps a single layer.
     cloudDetail: quality.level === "lite" ? 0 : 1,
+    /* 云的遮光率：天上有云就要压暗海面的直射（高光/次表面），否则"云在天上、
+       水面照样刺眼"，光影响不自然。注意它必须独立于上面那个 cloud 开关 ——
+       那个开关在体素云活着时恒为 0。 */
+    shade: clamp(1 - clamp(weather.cloudCover || 0, 0, 1) * 0.72
+                   - clamp(weather.storminess || 0, 0, 1) * 0.28, 0.15, 1),
   });
 }
 

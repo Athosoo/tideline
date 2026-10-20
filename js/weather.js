@@ -598,7 +598,10 @@
     if (s.isNight) {
       p = { zenith: SEA_REFERENCE.night.zenith, horizon: SEA_REFERENCE.night.horizon, sun: SEA_REFERENCE.night.sun };
     }
-    const gloom = clamp(Math.max((s.overcast || 0) * 0.8, s.storminess || 0), 0, 1);
+    /* 阴天压暗天空的起算点：原来 overcast*0.8 从 0 就开始压，35%~45% 云量
+       （"多云"）已经把整片天压成灰绿，连带把云的环境光一起拉暗 —— 用户报的
+       "发灰、不自然"里有一半是这里。真实的多云天，天空只在接近满云时才明显变灰。 */
+    const gloom = clamp(Math.max((Math.max(s.overcast || 0, 0.0) - 0.55) * 2.0, s.storminess || 0), 0, 1);
     if (gloom > 0.01) {
       p = {
         zenith: mix3(p.zenith, SEA_REFERENCE.storm.zenith, gloom),

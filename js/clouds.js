@@ -456,7 +456,9 @@ void main() {
 }
 `;
 
-  /* COMPOSITE pass：只输出云（天空由 CSS 提供），预乘 alpha = 1 - T。 */
+  /* COMPOSITE pass：只输出云（天空由 CSS 提供），预乘 alpha = 1 - T。
+     底部 18% 做渐隐：这块画布的下边缘正好落在水平线（--horizon: 26%）上，
+     云/霾在那里是满的，直接切一刀就是用户看到的「水天相接分割线」。        */
   var COMPOSITE_MAIN_SRC = String.raw`
 uniform sampler2D uCloudTex;
 uniform vec2 uOutRes;
@@ -467,7 +469,9 @@ void main() {
   vec3 col = max(c.rgb, vec3(0.0));
   col = col / (col + vec3(0.88)) * 1.10;
   col = pow(max(col, vec3(0.0)), vec3(1.0 / 2.2));
-  fragColor = vec4(col, clamp(1.0 - c.a, 0.0, 1.0));
+  /* 画布坐标系：y=0 是底部（= 水平线）。越靠下越透明，让云沉进海面的雾里。 */
+  float edge = smoothstep(0.0, 0.18, gl_FragCoord.y / max(uOutRes.y, 1.0));
+  fragColor = vec4(col * edge, clamp(1.0 - c.a, 0.0, 1.0) * edge);
 }
 `;
 

@@ -41,6 +41,10 @@ const uCloudCover = uniform(0.25);
 const uStormy = uniform(0.0);
 const uFlash = uniform(0.0);
 const uCloudDetail = uniform(1.0);
+/* 云的遮光率 0..1（1 = 无云直射）。体素云层活着时 uCloudCover 会被压到 0
+   （那是关掉 bundle 自绘云板的开关），所以遮光必须走独立通道 ——
+   否则"天上有云、海面照样亮蓝、太阳照样刺眼"，就是用户说的光影响不自然。 */
+const uCloudShade = uniform(1.0);
 
 // ── Gerstner swell (verbatim) ───────────────────────────────────────────────
 const GERSTNER_DEFS = [
@@ -148,8 +152,18 @@ const skyColor = Fn(([dir, cloudMask]) => {
 
   col.assign(mix(col, uDeepColor.mul(1.4).add(uHorizonColor.mul(0.25)), smoothstep(0, -0.15, d.y)));
 
+  /* ── 地平线霾带 ──────────────────────────────────────────────────────────
+     真实的海天交界是一条发白的光带，不是两个色块的拼接。原来天空在地平线
+     直接就是 uHorizonColor 的平色，和海面渐隐的末段硬碰硬 → 一条明显的分割线，
+     云多的时候（海面被压暗、天空还是亮的）最刺眼（用户报的问题）。
+     这里在 d.y ∈ [0, 0.11] 加一层霾：云越厚越亮，把海与天缝在一起。         */
+  const hz = float(1).sub(smoothstep(0.0, 0.11, d.y)).toVar();
+  const hazeAmt = hz.mul(hz).mul(float(1).sub(uCloudShade).mul(0.55).add(0.20));
+  const hazeCol = uHorizonColor.mul(1.05).add(uSunColor.mul(uCloudShade).mul(0.05));
+  col.assign(mix(col, hazeCol, clamp(hazeAmt, 0, 0.82)));
+
   const s = max(dot(d, uSunDir), 0);
-  col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18));
+  col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18).mul(uCloudShade));
   /* 这里原本还有一行硬日盘：uSunColor * smoothstep(0.9994, 0.9998, s) * 30。
      但页面上另有一个 DOM 的日/月盘（#celestial，可拖动改时刻），两套渲染器
      各画一个、位置还不一致 → 天空里能看到两个太阳（夜间是一个太阳 + 一个月亮）。
@@ -222,7 +236,7 @@ const oceanColor = Fn(() => {
     const H = normalize(uSunDir.add(V));
     const ndh = max(dot(N, H), 0);
     const sparkleNoise = clamp(fbm(xz.mul(0.3).add(vec2(time.mul(-0.07), time.mul(0.05)))).mul(0.5).add(0.5), 0, 1);
-    spec.assign(uSunColor.mul(pow(ndh, 500).mul(mix(0.4, 3.4, sparkleNoise)).add(pow(ndh, 48).mul(0.12))));
+    spec.assign(uSunColor.mul(uCloudShade).mul(pow(ndh, 500).mul(mix(0.4, 3.4, sparkleNoise)).add(pow(ndh, 48).mul(0.12))));
 
     const foamNoise = clamp(fbm(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
     foam.assign(smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest)).mul(0.85));
@@ -230,7 +244,7 @@ const oceanColor = Fn(() => {
 
   const col = mix(uDeepColor, uShallowColor, clamp(crest.mul(0.35).add(0.45), 0, 1)).toVar();
   const sss = pow(max(dot(V, uSunDir), 0), 3).mul(max(crest, 0)).mul(0.18);
-  col.addAssign(uShallowColor.mul(uSunColor).mul(sss));
+  col.addAssign(uShallowColor.mul(uSunColor).mul(sss).mul(uCloudShade));
 
   const R = reflect(V.negate(), N).toVar();
   R.y.assign(max(R.y, 0.04));
@@ -321,6 +335,7 @@ export async function createSea(options) {
       if (weather.stormy != null) uStormy.value = weather.stormy;
       if (weather.flash != null) uFlash.value = weather.flash;
       if (weather.cloudDetail != null) uCloudDetail.value = weather.cloudDetail;
+      if (weather.shade != null) uCloudShade.value = weather.shade;
     },
     resize(width, height) {
       camera.aspect = width / Math.max(1, height);
