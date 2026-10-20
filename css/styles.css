@@ -2014,6 +2014,14 @@ body.is-holding .drift-note {
   pointer-events: none !important;
 }
 
+/* Focus is a room for one card. The sea stays behind the glass, but the other
+   postcards do not: they were still painted at full strength and kept tilting
+   and drifting with the pointer, so any card that happened to sit next to the
+   held one read as an afterimage of a card nobody had picked up. */
+body.is-holding .postcard-slot {
+  opacity: 0;
+}
+
 body.is-holding .ambient-particles { opacity: 0.62; }
 body.is-holding .card-ripple span,
 body.is-holding .mote { animation-play-state: paused; }
