@@ -1270,7 +1270,7 @@ void main() {
     resize(rect0.width, rect0.height, window.devicePixelRatio || 1);
     scheduleGeneration();
 
-    return {
+    const api = {
       setParams: setParams,
       setQuality: setQuality,
       resize: resize,
@@ -1278,6 +1278,11 @@ void main() {
       stats: stats,
       dispose: dispose
     };
+    /* 只读性能钩子：真机上的 ms/scale/steps 是决定「继续优化还是降成 2.5D」的唯一依据，
+       而实验室跑的是 SwiftShader（CPU 渲的），数字不可信。
+       用法：打开站点 → 控制台 `__tideStats()`。见 _wip/NOTES-wasm-vs-2d.md §5。 */
+    window.__tideStats = stats;
+    return api;
   }
 
   window.TideClouds = {
