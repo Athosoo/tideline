@@ -157,10 +157,10 @@ const skyColor = Fn(([dir, cloudMask]) => {
      直接就是 uHorizonColor 的平色，和海面渐隐的末段硬碰硬 → 一条明显的分割线，
      云多的时候（海面被压暗、天空还是亮的）最刺眼（用户报的问题）。
      这里在 d.y ∈ [0, 0.11] 加一层霾：云越厚越亮，把海与天缝在一起。         */
-  const hz = float(1).sub(smoothstep(0.0, 0.11, d.y)).toVar();
-  const hazeAmt = hz.mul(hz).mul(float(1).sub(uCloudShade).mul(0.55).add(0.20));
+  const hz = float(1).sub(smoothstep(0.0, 0.045, d.y)).toVar();
+  const hazeAmt = hz.mul(hz).mul(float(1).sub(uCloudShade).mul(0.35).add(0.12));
   const hazeCol = uHorizonColor.mul(1.05).add(uSunColor.mul(uCloudShade).mul(0.05));
-  col.assign(mix(col, hazeCol, clamp(hazeAmt, 0, 0.82)));
+  col.assign(mix(col, hazeCol, clamp(hazeAmt, 0, 0.55)));
 
   const s = max(dot(d, uSunDir), 0);
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18).mul(uCloudShade));

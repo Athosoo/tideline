@@ -2601,9 +2601,13 @@ body.has-sea-bundle .cloud-canvas { display: none; }
   pointer-events: none;
   display: none;
   background: transparent;
-  /* 贴着地平线淡出，避免画布底边切出一条硬线 */
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 52%, rgba(0, 0, 0, 0) 100%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 52%, rgba(0, 0, 0, 0) 100%);
+  /* 贴着地平线淡出，避免画布底边切出一条硬线。
+     注意起点：原来是 52%，而这个画布只有视口上方 26% 高 —— 52% 处大约相当于
+     7.6° 仰角，于是 8 km 以外的云（都落在地平线附近那几个像素里）被整片擦光，
+     画面里就出现「地平线上一段虚无：既没有云也没有海」。
+     88% 只留最后 ~1.5° 的过渡，远云重新出现，云层也有纵深。 */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 88%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 88%, rgba(0, 0, 0, 0) 100%);
 }
 body.has-cloud-volume .cloud-volume { display: block; }
 body.has-cloud-volume .cloud-canvas { display: none; transition: none; opacity: 1; }
