@@ -241,6 +241,10 @@ const oceanColor = Fn(() => {
     const foamNoise = clamp(fbm(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
     foam.assign(smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest)).mul(0.85));
   });
+  /* 远水压平法线：涌浪波长 60 m，在 5~7 km 处远小于一个像素，不压平就是一片噪点。
+     近处（<700 m）保持原样，2.5 km 之后完全水平 —— 远处只剩 Fresnel 反射与雾。 */
+  const flatFar = smoothstep(700, 5000, dist);
+  N.assign(normalize(mix(N, vec3(0, 1, 0), flatFar)));
 
   const col = mix(uDeepColor, uShallowColor, clamp(crest.mul(0.35).add(0.45), 0, 1)).toVar();
   const sss = pow(max(dot(V, uSunDir), 0), 3).mul(max(crest, 0)).mul(0.18);
@@ -255,8 +259,12 @@ const oceanColor = Fn(() => {
   col.assign(mix(col, vec3(0.82, 0.88, 0.90), foam));
   col.addAssign(uSunColor.mul(uFlash).mul(1.6));
 
-  const horizonFade = smoothstep(150, 290, dist);
-  col.assign(mix(col, uHorizonColor, horizonFade));
+  /* 地平线渐隐推到 2.5~7 km（原来是 150~290 m！那是 420 m 小水面的边界）。
+     现在海面真的画到地平线，只让它最后一段溶进霾里；终点色与天空的霾带同源，
+     否则水面的平色和天空的亮霾会拼出一条线。 */
+  const horizonFade = smoothstep(2500, 7000, dist);
+  const horizonTint = uHorizonColor.mul(1.05).add(uSunColor.mul(uCloudShade).mul(0.05));
+  col.assign(mix(col, horizonTint, horizonFade));
 
   return vec4(col, 1);
 });
@@ -288,11 +296,26 @@ export async function createSea(options) {
 
   const camera = new THREE.PerspectiveCamera(55, options.width / Math.max(1, options.height), 0.5, 8000);
   camera.position.set(0, 5.5, 17);
-  camera.lookAt(0, 1.5, 0);
+  /* 俯仰角必须让**海的地平线落在视口的 26%**（= CSS 的 --horizon，也是云带的底边）。
+     原来 lookAt(0,1.5,0) 的俯仰是 13.24°，海平线实际在 27.4% —— 比云画布底边低
+     1.4%，中间那条带既没有云也没有海，就是用户看到的「地平线一段虚无」。
+     25% 目标：y = 0.26  ⇒  tan(pitch) = (0.5-0.26)*2*tan(27.5°) ⇒ pitch ≈ 14.04°，
+     目标点 y = 5.5 - 17*tan(14.04°) ≈ 1.24。                                */
+  camera.lookAt(0, 1.24, 0);
 
   // their geometry, verbatim
   const oceanGeometry = new THREE.PlaneGeometry(420, 420, options.segments || 256, options.segments || 256);
   oceanGeometry.rotateX(-Math.PI / 2);
+
+  /* ── 远景裙边 ─────────────────────────────────────────────────────────────
+     参考实现的水面只有 420 m（210 m 就是它的边），而 5.5 m 眼高的地平线在 ~8 km：
+     原来画面里 95% 的"远海"其实是天空球下半球假装出来的，所以会有
+     「地平线一段虚无：既没有海也没有云」。
+     这里套一圈 205 m → 7 km 的环，用**同一个材质**（细节项在 dist>140 m 自动关掉），
+     海面从此真的画到地平线；云仍然只在地平线以上，两者靠霾接缝。
+     环的几何要 rotateX 烘焙进顶点（positionLocal.xz 才是世界水平面坐标）。 */
+  const farRingGeo = new THREE.RingGeometry(205, 7000, Math.max(64, (options.segments || 256) >> 1), 24);
+  farRingGeo.rotateX(-Math.PI / 2);
 
   const oceanMaterial = new THREE.MeshBasicNodeMaterial();
   oceanMaterial.positionNode = wavePosition(positionLocal.xz, uTime, uSea);
@@ -301,6 +324,12 @@ export async function createSea(options) {
   const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
   ocean.frustumCulled = false;
   scene.add(ocean);
+
+  /* 远景裙边（见上面 oceanGeometry 处的长注释）：同一材质，略微下沉避免接缝闪烁。 */
+  const farRing = new THREE.Mesh(farRingGeo, oceanMaterial);
+  farRing.position.y = -0.06;
+  farRing.frustumCulled = false;
+  scene.add(farRing);
 
   // their sky dome, so the far plane edge dissolves into the horizon
   const skyMaterial = new THREE.MeshBasicNodeMaterial();
