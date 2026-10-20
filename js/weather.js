@@ -14,6 +14,70 @@
   const mod = (v, m) => ((v % m) + m) % m;
   const DEG = Math.PI / 180;
 
+  /* 诊断开关（默认全关，行为与之前完全一致）：
+     ?norain=1     不画雨（含每帧全屏 clearRect）
+     ?noattr=1     不写 applySun/applySky/--flash 的任何 :root 自定义属性
+     ?no2dcloud=1  不跑 2D 兜底云的 FBM */
+  window.__tidelineDiag = window.__tidelineDiag || {};
+  const DIAG = Object.assign(window.__tidelineDiag, {
+    norain: /[?&]norain=1/.test(window.location.search),
+    noattr: /[?&]noattr=1/.test(window.location.search),
+    no2dcloud: /[?&]no2dcloud=1/.test(window.location.search),
+    /* 只给基准测试用：无头 SwiftShader 跑体素云会把主线程堵死（单帧 130~200 ms），
+       量不到 CSS/JS 的真实成本。真实机器上没有这个开关，别在交付 URL 里用它。 */
+    nocloudvolume: /[?&]nocloudvolume=1/.test(window.location.search),
+    /* 测量用：强制回到「每帧无条件写 :root」的旧行为，用来在同一次运行里
+       对比缓存前后的样式重算成本。 */
+    nocache: /[?&]nocache=1/.test(window.location.search),
+    /* 测量用：把变量写回 :root（旧行为），对比「缩小失效范围」的收益。 */
+    rootscope: /[?&]rootscope=1/.test(window.location.search),
+  });
+
+  /* 调用计数器：A/B 归一化用。整数自增，成本可忽略，默认也在跑，
+     方便把「重算时间」除到「到底发生了多少次 :root 写入 / 2D 云生成」上。 */
+  const counters = {
+    updates: 0,
+    applySun: 0,
+    applySky: 0,
+    updateClouds: 0,
+    cloudGenerated: 0,
+    updateRain: 0,
+    rainCleared: 0,
+    rootWrites: 0,
+    rootApplied: 0,
+  };
+  window.__weatherCounters = counters;
+
+  /* 自定义属性写入统一入口。
+     ★ 修复 A（缓存）：值没变就完全不碰 DOM。阻尼过渡不受影响 —— 值真的在变时
+       照样逐帧写，只是不再把同样的字符串重复 setProperty。
+     ★ 修复 B（缩小失效范围，关键）：自定义属性会继承，写在 :root 上等于让整棵
+       文档树样式失效（2936 行 CSS 全量重算）。而绝大多数天气变量只在
+       .atmosphere 里被消费（太阳/天空/海色/云量/雨/闪电），所以写到 .atmosphere
+       元素上，只让那 ~30 个节点失效；只有跨卡片与聚焦层的 --ambient /
+       --light-angle / --light-strength 才写到 .gallery 与 #focus 两处。
+     两个修复叠加后，每帧的样式重算从「全文档」降到「一个小子树」。 */
+  const varCache = new WeakMap();
+  function setVar(target, name, value) {
+    counters.rootWrites += 1;
+    const el = DIAG.rootscope ? document.documentElement : target;
+    if (!el) return;
+    let cache = varCache.get(el);
+    if (!cache) { cache = Object.create(null); varCache.set(el, cache); }
+    if (!DIAG.nocache && cache[name] === value) return;
+    cache[name] = value;
+    counters.rootApplied += 1;
+    el.style.setProperty(name, value);
+  }
+  /* 只在 .atmosphere 子树里被消费的变量（太阳/天空/海色/云/雨/闪电）。 */
+  function setAtmo(name, value) { setVar(env.atmo, name, value); }
+  /* 跨卡片 / 聚焦层 / 地平线光晕的变量：只写三个真正消费它们的子树。 */
+  function setLight(name, value) {
+    setVar(env.worldScope, name, value);
+    setVar(env.focusScope, name, value);
+    setVar(env.atmo, name, value);
+  }
+
   const rgb = (c) => "rgb(" + Math.round(c[0] * 255) + ", " + Math.round(c[1] * 255) + ", " + Math.round(c[2] * 255) + ")";
   const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
   const clone = (c) => [c[0], c[1], c[2]];
@@ -94,6 +158,7 @@
     cloudFailed: false,
     cloudSlow: 0,
     rainCanvas: null,
+    rainDirty: false,
     flashEl: null,
     lastSky: 0,
   };
@@ -275,6 +340,7 @@
   };
 
   function update(dt, now) {
+    counters.updates += 1;
     const reduced = env.reducedMotion && env.reducedMotion.matches;
     if (state.autoTime && !state.manualTime) {
       state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / 3600), 24);
@@ -313,8 +379,7 @@
 
   function updateLightning(dt, now, reduced) {
     state.flash = Math.max(0, state.flash - dt * 2.8);
-    const root = document.documentElement;
-    root.style.setProperty("--flash", state.flash.toFixed(3));
+    if (!DIAG.noattr) setAtmo("--flash", state.flash.toFixed(3));
     if (reduced) return;
     if (state.lightning < 0.02 || state.storminess < 0.25) return;
     const chance = state.lightning * state.storminess * 0.055 * dt;
@@ -326,7 +391,7 @@
   }
 
   function applySun() {
-    const root = document.documentElement;
+    counters.applySun += 1;
     const celestial = env.celestial;
     if (!celestial) return;
     const day = !state.isNight;
@@ -349,36 +414,45 @@
       : clamp(88 + (1 - visualElev / 60) * 60, 88, 158);
     state.sunX = x / 100;
     state.sunY = y / 100;
-    root.style.setProperty("--sun-x", x.toFixed(2) + "%");
-    root.style.setProperty("--shadow-shift", ((0.5 - x / 100) * 110).toFixed(1) + "px");
-    root.style.setProperty("--sun-y", y.toFixed(2) + "%");
-    root.style.setProperty("--sun-size", size.toFixed(0) + "px");
-    root.style.setProperty("--sun-color", rgb(state.sky.sun));
-    root.style.setProperty("--sun-glow", rgb(state.sky.glow));
-    root.style.setProperty("--sun-alpha", (state.ambient * (1 - state.overcast * 0.6) * (day ? 1 : 0.85)).toFixed(3));
-    root.style.setProperty("--sun-glow-alpha", ((1 - state.overcast * 0.5) * (day ? 0.9 : 0.7)).toFixed(3));
+    if (!DIAG.noattr) {
+      const sunColor = rgb(state.sky.sun);
+      const sunGlow = rgb(state.sky.glow);
+      setAtmo("--sun-x", x.toFixed(2) + "%");
+      setAtmo("--sun-y", y.toFixed(2) + "%");
+      setAtmo("--sun-size", size.toFixed(0) + "px");
+      setAtmo("--sun-color", sunColor);
+      setAtmo("--sun-glow", sunGlow);
+      setAtmo("--sun-alpha", (state.ambient * (1 - state.overcast * 0.6) * (day ? 1 : 0.85)).toFixed(3));
+      setAtmo("--sun-glow-alpha", ((1 - state.overcast * 0.5) * (day ? 0.9 : 0.7)).toFixed(3));
+      /* 顶部天气条的圆点也用 --sun-color/--sun-glow，单独写它自己那一小块。 */
+      setVar(env.weatherBar, "--sun-color", sunColor);
+      setVar(env.weatherBar, "--sun-glow", sunGlow);
+      /* 卡片水影只在自己卡片里用 --shadow-shift。 */
+      setVar(env.worldScope, "--shadow-shift", ((0.5 - x / 100) * 110).toFixed(1) + "px");
+    }
     celestial.classList.toggle("is-moon", !day);
     celestial.classList.toggle("is-overcast", state.overcast > 0.55);
   }
 
   function applySky() {
-    const root = document.documentElement;
-    root.style.setProperty("--sky-top", rgb(state.sky.top));
-    root.style.setProperty("--sky-mid", rgb(state.sky.mid));
-    root.style.setProperty("--sky-horizon", rgb(state.sky.horizon));
-    root.style.setProperty("--sea-far", rgb(state.sky.seaFar));
-    root.style.setProperty("--sea-near", rgb(state.sky.seaNear));
-    root.style.setProperty("--sea-deep", rgb(state.sky.seaDeep));
-    root.style.setProperty("--ambient", state.ambient.toFixed(3));
-    root.style.setProperty("--shade", ((1 - state.ambient) * 0.42 + state.overcast * 0.06).toFixed(3));
-    root.style.setProperty("--cloud-cover", state.cloudCover.toFixed(3));
-    root.style.setProperty("--cloud-dark", state.storminess.toFixed(3));
-    root.style.setProperty("--rain", state.rain.toFixed(3));
-    root.style.setProperty("--wind", state.wind.toFixed(3));
-    root.style.setProperty("--storm", state.storm.toFixed(3));
-    root.style.setProperty("--light-angle", (90 + (state.sunAzimuth - 180) * 0.5).toFixed(1) + "deg");
-    root.style.setProperty("--light-strength", (0.4 + state.ambient * 0.6).toFixed(3));
-    root.style.setProperty("--moon-phase", mod(state.timeOfDay / 12, 1).toFixed(3));
+    counters.applySky += 1;
+    if (DIAG.noattr) return;
+    /* 只在 .atmosphere 子树里被消费：天空、海色、云量、雨、霾、月相。 */
+    setAtmo("--sky-top", rgb(state.sky.top));
+    setAtmo("--sky-mid", rgb(state.sky.mid));
+    setAtmo("--sky-horizon", rgb(state.sky.horizon));
+    setAtmo("--sea-far", rgb(state.sky.seaFar));
+    setAtmo("--sea-near", rgb(state.sky.seaNear));
+    setAtmo("--sea-deep", rgb(state.sky.seaDeep));
+    setAtmo("--shade", ((1 - state.ambient) * 0.42 + state.overcast * 0.06).toFixed(3));
+    setAtmo("--cloud-cover", state.cloudCover.toFixed(3));
+    setAtmo("--rain", state.rain.toFixed(3));
+    setAtmo("--moon-phase", mod(state.timeOfDay / 12, 1).toFixed(3));
+    /* 卡片面与聚焦层都要用的光照参数：只写 .gallery 与 #focus 两处。 */
+    setLight("--ambient", state.ambient.toFixed(3));
+    setLight("--light-angle", (90 + (state.sunAzimuth - 180) * 0.5).toFixed(1) + "deg");
+    setLight("--light-strength", (0.4 + state.ambient * 0.6).toFixed(3));
+    /* --cloud-dark / --wind / --storm 没有任何 CSS 消费，停止写入。 */
   }
 
   function initDOM() {
@@ -388,6 +462,12 @@
     env.cloudVolume = document.getElementById("cloudVolume");
     env.rainCanvas = document.getElementById("rainCanvas");
     env.flashEl = document.getElementById("lightningFlash");
+    /* 自定义属性的写入目标（见 setVar）：只让真正消费它们的子树失效。 */
+    env.atmo = document.querySelector(".atmosphere");
+    env.galleryScope = document.getElementById("gallery");
+    env.worldScope = document.getElementById("world");
+    env.focusScope = document.getElementById("focus");
+    env.weatherBar = document.getElementById("weatherBar");
     env.cloudCtx = env.cloudCanvas ? env.cloudCanvas.getContext("2d", { alpha: true }) : null;
     env.rainCtx = env.rainCanvas ? env.rainCanvas.getContext("2d", { alpha: true }) : null;
     env.offCloud = document.createElement("canvas");
@@ -425,11 +505,18 @@
   }
 
   function updateClouds(dt, now, reduced) {
+    counters.updateClouds += 1;
     if (state.cloudRamp) state.cloudTarget = clamp(state.cloudTarget + dt * 0.22);
+    if (DIAG.no2dcloud) return;
     if (!env.cloudCtx || !env.offCtx) return;
     const q = env.quality || {};
     const interval = 1000 / (q.cloudFps || 15);
     if (now - env.lastCloud < interval) return;
+    /* 体素云接管天空（has-cloud-volume）或海面引擎接管天空（has-sea-bundle）时，
+       这块 2D 画布是 display:none —— 生成结果没人看得见，整段 FBM + putImageData
+       + drawImage 都是纯浪费。只在真正可见时才跑。 */
+    if (document.body.classList.contains("has-cloud-volume")
+      || document.body.classList.contains("has-sea-bundle")) return;
     env.lastCloud = now;
     const w = env.offCloud.width, h = env.offCloud.height;
     const data = env.cloudImage.data;
@@ -468,17 +555,37 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
     ctx.drawImage(env.offCloud, 0, 0, cw, ch);
+    counters.cloudGenerated += 1;
   }
 
   function updateRain(dt, now, reduced) {
+    counters.updateRain += 1;
+    if (DIAG.norain) return;
     if (!env.rainCtx) return;
+    const intensity = state.rain;
+    /* 没雨的时候原来也会先全屏 clearRect 再 return —— 等于每帧把一个
+       1280×800 / 1920×1065 的透明 canvas 层重新脏化、重新上传合成。
+       现在：只清一次，然后把整块 canvas 从合成树里摘掉（display:none），
+       之后整帧跳过；雨回来时再挂回去。 */
+    if (intensity < 0.02) {
+      if (env.rainDirty) {
+        const idleCtx = env.rainCtx;
+        idleCtx.setTransform(1, 0, 0, 1, 0, 0);
+        idleCtx.clearRect(0, 0, env.rainCanvas.width, env.rainCanvas.height);
+        env.rainDirty = false;
+        counters.rainCleared += 1;
+      }
+      if (env.rainCanvas.style.display !== "none") env.rainCanvas.style.display = "none";
+      return;
+    }
+    if (env.rainCanvas.style.display === "none") env.rainCanvas.style.display = "";
+    env.rainDirty = true;
     const q = env.quality || {};
     const ctx = env.rainCtx;
     const w = env.rainCanvas.width, h = env.rainCanvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const intensity = state.rain;
-    if (intensity < 0.02) return;
+    counters.rainCleared += 1;
     const scale = w / Math.max(1, env.rainCanvas.clientWidth || w);
     const count = Math.round(((window.innerWidth < 680 ? q.rainParticlesMobile : q.rainParticles) || 140) * intensity);
     const wind = state.wind;
@@ -519,6 +626,7 @@
      只有 FULL 档、且没有 reduced-motion 时才尝试接管天空。create 返回 null
      或抛错就什么都不做，现有 2D 云画布路径原样保留（LITE / 无 WebGL2 回落）。 */
   function cloudEligible() {
+    if (DIAG.nocloudvolume) return false;
     if (env.reducedMotion && env.reducedMotion.matches) return false;
     if (!env.quality) return false;
     /* 3D 噪声是在头几百毫秒里分帧生成的；那段时间的画面抖动不能算进
@@ -659,8 +767,13 @@
     if (env.rainCanvas && env.rainCtx) {
       const rect = env.rainCanvas.getBoundingClientRect();
       const rdpr = Math.min(dpr, 1.5);
-      env.rainCanvas.width = Math.max(1, Math.round(rect.width * rdpr));
-      env.rainCanvas.height = Math.max(1, Math.round(rect.height * rdpr));
+      const rw = Math.max(1, Math.round(rect.width * rdpr));
+      const rh = Math.max(1, Math.round(rect.height * rdpr));
+      /* 只在尺寸真的变了时才改 width/height：改这两个属性会重新分配并清空
+         整块 canvas 后备存储，是纯浪费。 */
+      if (env.rainCanvas.width !== rw) env.rainCanvas.width = rw;
+      if (env.rainCanvas.height !== rh) env.rainCanvas.height = rh;
+      env.rainDirty = false;
     }
   }
 

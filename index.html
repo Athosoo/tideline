@@ -12,11 +12,15 @@
   <!-- 诊断/省电模式：?lean=1 关掉合成器杀手（backdrop-filter / mix-blend-mode / 颗粒层）。
        用来在真机上二分「卡在渲染管线还是合成层」。必须内联同步、早于首帧。 -->
   <script>if (/[?&]lean=1/.test(location.search)) document.documentElement.classList.add("is-lean");</script>
-  <!-- ?bench=1 自测：预热 3s 后采样 4s，把 FPS / 帧时间 / 云层 ms 直接画在屏幕上。
-       不需要开控制台，截图给我就行。 -->
+  <!-- ?bench=1 自测：预热 3s 后采样 4s，把 FPS / 帧间隔 / 主线程回调 / LoAF / 写入计数画在屏幕上。
+       不需要开控制台，截图给我就行。
+       读法：JS cb 只包住 animate()；gap = 帧间隔 − JS cb，是 animate 之外的主线程
+       样式/布局 + 光栅/合成时间。LoAF 只有 ≥50 ms 的帧才有条目。
+       per/s 是真实调用计数：attrCall 是尝试写 :root 的次数，attrReal 是缓存后
+       真正落到 DOM 的次数；cloud2d 是隐藏的 2D 云生成次数，rainClear 是雨层清屏次数。 -->
   <script>
   (function () {
-    if (!/[?&]bench=1/.test(location.search)) return;
+    if (!/[?&]bench=1/.test(location.search)) return; window.__loaf = []; try { new PerformanceObserver(function (list) { var items = list.getEntries(); for (var i = 0; i < items.length; i += 1) { var e = items[i]; window.__loaf.push({ t: e.startTime, dur: e.duration, style: e.styleAndLayoutStart || 0, render: e.renderStart || 0 }); } }).observe({ type: "long-animation-frame", buffered: true }); } catch (err) { /* no LoAF */ }
     window.addEventListener("load", function () {
       var el = document.createElement("div");
       el.setAttribute("data-bench", "1");
@@ -26,15 +30,28 @@
       el.textContent = "BENCH: warming up (3s)…";
       document.body.appendChild(el);
       setTimeout(function () {
-        var n = 0, t0 = performance.now();
+        var n = 0, t0 = performance.now(), wc0 = Object.assign({}, window.__weatherCounters || {});
         function tick(t) {
           n++;
           if (t - t0 < 4000) { requestAnimationFrame(tick); return; }
           var fps = n / ((t - t0) / 1000);
+          var m = window.__perfMain ? window.__perfMain.report(t0, t) : null;
+          var wc1 = window.__weatherCounters || {};
+          var secs = Math.max(0.001, (t - t0) / 1000);
+          function rate(k) { return (((wc1[k] || 0) - ((wc0 && wc0[k]) || 0)) / secs).toFixed(1); }
+          function num(v, d) { return v === null || v === undefined || !isFinite(v) ? "n/a" : Number(v).toFixed(d === undefined ? 1 : d); }
           var s = window.__tideStats ? window.__tideStats() : null;
           el.textContent =
-            "FPS " + fps.toFixed(1) + "   frame " + (1000 / fps).toFixed(1) + " ms\n" +
+            "BENCH " + (m && m.fps != null ? num(m.fps) : fps.toFixed(1)) + " fps   frame " + (m && m.intervalP50 != null ? num(m.intervalP50) : (1000 / fps).toFixed(1)) + " ms\n" +
+            "rAF int  p50 " + (m && m.intervalP50 != null ? num(m.intervalP50) : (1000 / fps).toFixed(1)) + "  p95 " + (m && m.intervalP95 != null ? num(m.intervalP95) : "n/a") + "\n" +
+            (m ? "JS cb    p50 " + num(m.cbP50, 2) + "  p95 " + num(m.cbP95, 2) + "  max " + num(m.cbMax, 2) + "\n" : "") +
+            (m ? "gap      p50 " + num(m.gapP50, 2) + "  p95 " + num(m.gapP95, 2) + "  (outside animate)\n" : "") +
+            (m ? "LoAF n " + m.loaf.count + "  mean " + num(m.loaf.mean) + "  p95 " + num(m.loaf.p95) + "  max " + num(m.loaf.max) + " ms\n" : "") +
+            (m ? "  style+layout mean " + num(m.loaf.styleMean) + "  p95 " + num(m.loaf.styleP95) + "  max " + num(m.loaf.styleMax) + " ms\n" : "") +
             "cloud " + (s ? (s.avgMs || 0).toFixed(2) + " ms  scale " + s.scale + "  steps " + s.steps : "n/a") + "\n" +
+            "per/s  sun " + rate("applySun") + "  sky " + rate("applySky") + "  attrCall " + rate("rootWrites") + "  attrReal " + rate("rootApplied") + "\n" +
+            "attr/frame " + (((wc1.rootApplied || 0) - ((wc0 && wc0.rootApplied) || 0)) / Math.max(1, n)).toFixed(2) + "   frames " + n + "\n" +
+            "per/s  cloud2d " + rate("cloudGenerated") + "  rainClear " + rate("rainCleared") + "\n" +
             "flags: " + (location.search || "(none)") + "\n" +
             "dpr " + (window.devicePixelRatio || 1) + "   viewport " + innerWidth + "x" + innerHeight;
         }

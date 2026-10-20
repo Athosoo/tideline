@@ -154,6 +154,132 @@ function makeSeed() {
   return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
 }
 
+/* ── 诊断开关（全部默认关闭，关闭时行为与之前完全一致）──────────────────
+   ?norain=1     跳过雨滴/涟漪绘制（含每帧全屏 clearRect 与冰晶）
+   ?noattr=1     跳过 applySun/applySky/--flash 对 :root 自定义属性的写入
+   ?no2dcloud=1  跳过 2D 兜底云的 FBM 生成
+   ?nocardfx=1   卡片冻结 + 关掉光晕 blur（量「写 transform + blur」的总成本）
+   ?nocardmove=1 卡片冻结但保留光晕 blur（和 nocardfx 相减即 blur 的成本） */
+window.__tidelineDiag = window.__tidelineDiag || {};
+const DIAG = Object.assign(window.__tidelineDiag, {
+  bench: /[?&]bench=1/.test(window.location.search),
+  norain: /[?&]norain=1/.test(window.location.search),
+  noattr: /[?&]noattr=1/.test(window.location.search),
+  no2dcloud: /[?&]no2dcloud=1/.test(window.location.search),
+  nocardfx: /[?&]nocardfx=1/.test(window.location.search),
+  nocardmove: /[?&]nocardmove=1/.test(window.location.search),
+});
+
+/* 主线程计量：只在 ?bench=1 时记录（默认连一次 performance.now() 都不多打）。
+   面板里 JS cb 只包住 animate()；gap = 帧间隔 − JS cb，是 animate 之外的主线程
+   样式/布局 + 光栅/合成时间。LoAF 只有 ≥50 ms 的帧才有条目。 */
+function percentileOf(list, p) {
+  if (!list.length) return null;
+  const xs = list.slice().sort((a, b) => a - b);
+  const pos = (xs.length - 1) * clamp(p, 0, 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return lo === hi ? xs[lo] : xs[lo] + (xs[hi] - xs[lo]) * (pos - lo);
+}
+
+const PERF_MAIN = {
+  frames: [],
+  limit: 4096,
+  lastFrameTime: 0,
+  record(frameTime, callbackMs) {
+    const dt = this.lastFrameTime ? frameTime - this.lastFrameTime : 0;
+    this.lastFrameTime = frameTime;
+    this.frames.push({ t: frameTime, dt, cb: callbackMs });
+    if (this.frames.length > this.limit) this.frames.splice(0, this.frames.length - this.limit);
+  },
+  report(from, to) {
+    const rows = this.frames.filter((f) => f.t >= from && f.t <= to);
+    const timed = rows.filter((f) => f.dt > 0);
+    const dts = timed.map((f) => f.dt);
+    const cbs = rows.map((f) => f.cb);
+    const gaps = timed.map((f) => Math.max(0, f.dt - f.cb));
+    const spanMs = dts.reduce((a, b) => a + b, 0);
+    const loaf = (window.__loaf || []).filter((e) => e.t >= from && e.t <= to);
+    const styleDurs = loaf
+      .filter((e) => e.style > 0)
+      .map((e) => Math.max(0, e.t + e.dur - e.style));
+    const renderDurs = loaf
+      .filter((e) => e.render > 0)
+      .map((e) => Math.max(0, e.t + e.dur - e.render));
+    const loafDurs = loaf.map((e) => e.dur);
+    return {
+      frames: rows.length,
+      spanMs,
+      fps: spanMs > 0 ? (dts.length * 1000) / spanMs : null,
+      intervalP50: percentileOf(dts, 0.5),
+      intervalP95: percentileOf(dts, 0.95),
+      cbP50: percentileOf(cbs, 0.5),
+      cbP95: percentileOf(cbs, 0.95),
+      cbMax: cbs.length ? Math.max(...cbs) : null,
+      gapP50: percentileOf(gaps, 0.5),
+      gapP95: percentileOf(gaps, 0.95),
+      loaf: {
+        count: loaf.length,
+        mean: loafDurs.length ? loafDurs.reduce((a, b) => a + b, 0) / loafDurs.length : null,
+        p95: percentileOf(loafDurs, 0.95),
+        max: loafDurs.length ? Math.max(...loafDurs) : null,
+        styleMean: styleDurs.length ? styleDurs.reduce((a, b) => a + b, 0) / styleDurs.length : null,
+        styleP95: percentileOf(styleDurs, 0.95),
+        styleMax: styleDurs.length ? Math.max(...styleDurs) : null,
+        renderMean: renderDurs.length ? renderDurs.reduce((a, b) => a + b, 0) / renderDurs.length : null,
+      },
+    };
+  },
+};
+window.__perfMain = PERF_MAIN;
+
+/* 受控微基准（只在 ?bench=1 时挂到 window）：不依赖 rAF/GPU，用固定帧数驱动
+   「一次 animate 的 DOM 变更 + 一次样式/布局刷新」，专门量 :root 写入的代价。
+   base/toggle 在同一页面里交替跑，避开无头环境帧率漂移。 */
+if (DIAG.bench) {
+  window.__benchMicro = function (frames, opts) {
+    const options = opts || {};
+    const n = Math.max(1, Math.floor(frames));
+    let t = performance.now();
+    const start = t;
+    for (let i = 0; i < n; i += 1) {
+      t += 16.7;
+      /* jitter：模拟用户拖太阳 / 拉云量滑杆时的阻尼过渡 —— 每一帧真实值都在变，
+         用来量「不得不写」时的样式重算成本（缓存帮不上，只能靠缩小失效范围）。 */
+      if (i === 0 && options.dampReset && window.Weather && Weather.state) {
+        /* 复位成一个真实的阻尼过渡起点（相当于刚加载完 / 用户刚拉动滑杆）：
+           这一整段 90~120 帧里天气值都在变，缓存帮不上忙，
+           能对比的只有「写到 :root」和「写到消费它的子树」。 */
+        const w = Weather.state;
+        w.manualTime = true;
+        w.timeOfDay = 12;
+        w.timeTarget = 17.5;
+        w.cloudCover = 0.05;
+        w.cloudTarget = 0.9;
+        w.wind = 0.05;
+        w.windTarget = 0.75;
+        w.rain = 0;
+        w.rainTarget = 0.35;
+        w.storm = 0;
+        w.stormTarget = 0.35;
+        w.lightningTarget = 0;
+      }
+      if (options.jitter && window.Weather && Weather.state) {
+        const w = Weather.state;
+        w.manualTime = false;
+        w.timeTarget = (w.timeTarget + 0.002) % 24;
+        w.cloudTarget = 0.5 + 0.3 * Math.sin(i * 0.12);
+      }
+      if (options.sky !== false && window.Weather) Weather.update(0.0167, t);
+      if (options.cards !== false) applyCardTransforms(t, 0.0167);
+      /* 浏览器每帧收尾时本来就会做一次样式重算 + 布局；这里同步刷新，
+         把这次代价算进同一个测量窗口。 */
+      void document.body.offsetHeight;
+    }
+    return { ms: performance.now() - start, frames: n };
+  };
+}
+
 const dom = {
   gallery: $("#gallery"),
   intro: $("#intro"),
@@ -207,9 +333,15 @@ const dom = {
   sideMarker: $("#sideMarker"),
 };
 
+/* 截图/回归对比用：?seed=123 固定卡片随机布局。默认仍然每次随机。 */
+const SEED_OVERRIDE = (function () {
+  const m = /[?&]seed=(\d+)/.exec(window.location.search);
+  return m ? (Number(m[1]) >>> 0) : null;
+})();
+
 const state = {
   cards: [],
-  seed: makeSeed(),
+  seed: SEED_OVERRIDE == null ? makeSeed() : SEED_OVERRIDE,
   metrics: null,
   gate: 0,
   camX: 0,
@@ -1336,19 +1468,33 @@ function updateScrollState(dt) {
   dom.scrollHint.classList.toggle("is-idle", window.scrollY > state.introPx * 1.1);
 }
 
+/* --scene/--mx/--my 只有 .gallery 子树在用。它们原来是每帧无条件 setProperty，
+   即使数值没变也会让整个 gallery 子树样式失效（卡片、背景、太阳全在里面）。
+   缓存上一次的字符串，值没变就不碰 DOM。 */
+const galleryVarCache = Object.create(null);
+function setGalleryVar(name, value) {
+  if (galleryVarCache[name] === value) return;
+  galleryVarCache[name] = value;
+  dom.gallery.style.setProperty(name, value);
+}
+
 function applyCardTransforms(now, dt) {
   // The card in hand keeps its gallery pose frozen; the rest of the promenade stays live.
 
 
   const nx = clamp((state.pointer.smoothX / window.innerWidth) * 2 - 1, -1, 1);
   const ny = clamp((state.pointer.smoothY / window.innerHeight) * 2 - 1, -1, 1);
-  const scrollImpulse = clamp((state.camX - state.camPrevious) * 0.024, -3.6, 3.6);
   const still = REDUCED_MOTION.matches;
 
-  dom.gallery.style.setProperty("--scene", state.bgScene.toFixed(4));
-  dom.gallery.style.setProperty("--mx", still ? "0" : nx.toFixed(3));
-  dom.gallery.style.setProperty("--my", still ? "0" : ny.toFixed(3));
+  setGalleryVar("--scene", state.bgScene.toFixed(4));
+  setGalleryVar("--mx", still ? "0" : nx.toFixed(3));
+  setGalleryVar("--my", still ? "0" : ny.toFixed(3));
 
+  /* 诊断：nocardmove（保留 blur）与 nocardfx（关 blur）都冻结卡片；gallery 的
+     三个变量照写，两者的差值就只剩光晕 filter 一项。 */
+  if (DIAG.nocardfx || DIAG.nocardmove) { state.camPrevious = state.camX; return; }
+
+  const scrollImpulse = clamp((state.camX - state.camPrevious) * 0.024, -3.6, 3.6);
   const period = Math.max(1, state.period);
   const heldIndex = state.focusOpen ? state.focusIndex : -1;
   state.cards.forEach((card, index) => {
@@ -1403,8 +1549,18 @@ function applyCardTransforms(now, dt) {
     card.currentRy = ry;
     card.currentRz = rz;
 
-    card.slot.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px)`;
-    card.card3d.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotateZ(${rz.toFixed(2)}deg) scale(${scale.toFixed(4)})`;
+    /* 量化到 3 位小数后，慢速漂移时字符串经常和上一帧完全相同；一样就别写，
+       省掉一次该卡片的样式失效。 */
+    const slotTransform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px)`;
+    if (card.lastSlotTransform !== slotTransform) {
+      card.lastSlotTransform = slotTransform;
+      card.slot.style.transform = slotTransform;
+    }
+    const cardTransform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) rotateZ(${rz.toFixed(2)}deg) scale(${scale.toFixed(4)})`;
+    if (card.lastCardTransform !== cardTransform) {
+      card.lastCardTransform = cardTransform;
+      card.card3d.style.transform = cardTransform;
+    }
   });
 
   state.camPrevious = state.camX;
@@ -2129,6 +2285,7 @@ function initEvents() {
 }
 
 function animate(now) {
+  const cbStart = DIAG.bench ? performance.now() : 0;
   if (!state.lastFrame) state.lastFrame = now;
   const dt = clamp((now - state.lastFrame) / 1000, 0.001, 0.05);
   state.lastFrame = now;
@@ -2163,6 +2320,7 @@ function animate(now) {
 
   updateQualityProbe(now);
 
+  if (DIAG.bench) PERF_MAIN.record(now, performance.now() - cbStart);
   window.requestAnimationFrame(animate);
 }
 
@@ -2293,6 +2451,13 @@ function initImmersive() {
 }
 
 function init() {
+  if (DIAG.nocardfx) {
+    document.body.classList.add("is-nocardfx");
+    /* 诊断样式随开关注入，不常驻 styles.css，避免诊断代码污染正式样式。 */
+    const diagStyle = document.createElement("style");
+    diagStyle.textContent = "body.is-nocardfx .card-halo, body.is-nocardfx .card-water-shadow { filter: none !important; }";
+    document.head.appendChild(diagStyle);
+  }
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   window.scrollTo(0, 0);
 
