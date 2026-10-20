@@ -150,6 +150,42 @@ const float POWDER_LEN  = 1000.0;
    累积成满屏白絮（用户报的"云朵间隙模糊散落"）。0.10 = 吃掉最稀的 10%。 */
 const float DENSITY_FLOOR = 0.10;
 
+/* ── 去规整化：频段分离 + 两层域扭曲（2026-10-20）────────────────────────
+   旧做法天气场和形状场都用 0.00030 采样同一张 64³ 平铺纹理：单一 3.3 km 周期，
+   20 km 视距内精确复读约 6 次，俯视就是一张规则网格（证据：
+   _lab/shots/look-base/top-dbg2.png 与 look-after/top-dbg2.png）。
+
+   两条一起改：
+   1) **频段分离**：天气 / 形状 / 两层扭曲分别用 30 / 37 / 19 / 23 ×1e-5。
+      纹理本身是无缝平铺的（Perlin 生成时按整数周期 wrap，见宿主 buildNoise），
+      所以任何频率都不会出新接缝；而四个互质整数频率的**联合周期 = 1e5 m = 100 km**
+      （T 必须同时是 1e5/30、1e5/37、1e5/19、1e5/23 的整数倍，最小解 T=1e5）。
+      20 km 视距只走到 1/5 个周期，不再整块复读。**不要**把某个频段改成
+      非整数 ×1e-5（例如 30.5），那会让联合周期塌回几十公里以内，重复感回来。
+   2) **两层域扭曲**：每层一个低频噪声标量，各自不同 offset、不同频率，
+      合计把采样位置最多推开 ±0.9 km/轴（约 0.5 个天气特征尺寸），Perlin 的
+      轴向格子被揉成有机分布。扭曲场自己的频率（19/23）与天气（30）不同，
+      于是「天气 ∘ 扭曲」的联合周期也是 100 km —— 只改频段不加扭曲，
+      天气覆盖的空洞仍会按 3.3 km 的节奏排队；只加扭曲不改频段，
+      扭曲场和天气同周期时复读也还在。两件事必须一起做。            */
+const vec2  W_OFF   = vec2(0.137, 0.571);   // 天气场 offset
+const vec2  S_OFF   = vec2(0.619, 0.233);   // 形状场 offset（与天气错开，避免同相）
+const vec2  W1_OFF  = vec2(0.317, 0.811);   // 域扭曲第 1 层 offset
+const vec2  W2_OFF  = vec2(0.743, 0.129);   // 域扭曲第 2 层 offset
+const float W_SCALE  = 0.00030;             // 30e-5  天气场
+const float S_SCALE  = 0.00037;             // 37e-5  形状场
+const float W1_SCALE = 0.00019;             // 19e-5  扭曲层 1
+const float W2_SCALE = 0.00023;             // 23e-5  扭曲层 2
+const float WARP_AMP = 1800.0;              // 米：每轴 ±0.9 km（两层各 (n-0.5)*1800）
+
+/* 两层域扭曲：返回世界空间 XZ 位移（米）+ 第 2 层的原始值（z 分量，
+   给覆盖度当大尺度晴/云分区用）。两个标量各推一个轴。 */
+vec3 domainWarp(vec3 q){
+  float a = texture(uNoise, vec3(q.xz * W1_SCALE + W1_OFF, 0.211)).r;
+  float b = texture(uNoise, vec3(q.xz * W2_SCALE + W2_OFF, 0.733)).r;
+  return vec3((vec2(a, b) - 0.5) * WARP_AMP, b);
+}
+
 /* 调试输出（lab 用，ship 忽略） */
 float gDbgShape, gDbgCover, gDbgBody, gDbgSteps, gDbgSkips;
 
@@ -220,7 +256,7 @@ float phaseFn(float mu){
      4. 双尺度：shape 3.3 km（大菜花）+ Worley 167 m（小绒球）两级腐蚀。
 
    高度剖面 prof 放最前面：为 0 的空域直接 return，省掉 4 次 3D 采样。      */
-float cloudDensity(vec3 p, out float h01){
+float cloudDensityW(vec3 p, vec3 wq, out float h01){
   h01 = (p.y - uBase) / max(uTop - uBase, 1.0);
   float hf = clamp(h01, 0.0, 1.0);
   float prof = heightProfile(hf, uType);
@@ -236,16 +272,27 @@ float cloudDensity(vec3 p, out float h01){
      尺度：天气场原来是 16 km 周期 —— 从地面平视时，一朵云就占满整个视野，
      数不出独立云团，看上去必然是一面墙。改成 3.3 km 周期（主导特征约 1~2 km），
      20 km 外一眼能看到 5~10 朵分开的积云，中间露出天空。                     */
-  float weather = nrm(texture(uNoise, vec3(q.xz * 0.00030, 0.37)).r, uNoiseLo, uNoiseHi);
+  /* 域扭曲后的采样位置：天气 / 形状用不同的频率与 offset（周期 100 km，见文件顶部）。
+     wq 由调用方传入，主 march 每步算一次，光照步复用命中点的那一个。 */
+  vec3 qw = q + vec3(wq.x, 0.0, wq.y);
+
+  float weather = nrm(texture(uNoise, vec3(qw.xz * W_SCALE + W_OFF, 0.37)).r, uNoiseLo, uNoiseHi);
   float cov  = clamp(uCoverage, 0.0, 1.0);
   float xh   = clamp(pow(hf, 0.35) * 2.0 - 1.0, -1.0, 1.0);
   float hs   = 1.0 - xh * xh;
   float factor = 1.0 - cov * hs;
-  float occ  = remap01(mix(weather, 1.0, 0.60), factor, factor + 0.60);
+  /* 大尺度晴/云分区（5.3 km 尺度）。
+     这里修掉一个结构性 bug：旧写法 mix(weather,1,0.60) 的下限是 0.60，
+     而 factor 在中高度只有 1-cov≈0.56 → occ 永远 >0，天中间任何地方都有云，
+     云场只能是一层铺满的「爆米花」。现在晴区最低只 mix 到 0.10，
+     低于 factor → 真·零覆盖，团与团之间才露出天空。 */
+  float big  = smoothstep(0.20, 0.62, wq.z);
+  float fill = mix(0.10, 0.52, big);
+  float occ  = remap01(mix(weather, 1.0, fill), factor, factor + 0.50);
   if (occ <= 5e-4) return 0.0;
 
-  /* ── 2. 形状腐蚀：3.3 km 纹理周期（FBM 4 octave，最细约 100 m） ── */
-  float shape = nrm(texture(uNoise, q * 0.00030).r, uNoiseLo, uNoiseHi);
+  /* ── 2. 形状腐蚀：37e-5 频率（FBM 4 octave，最细约 110 m）── */
+  float shape = nrm(texture(uNoise, vec3(qw.xz * S_SCALE + S_OFF, q.y * S_SCALE)).r, uNoiseLo, uNoiseHi);
   float amt   = mix(0.42, 0.80, clamp(uDetail, 0.0, 1.0));
   float d     = remap01(occ, (1.0 - shape) * amt, 1.0);
 
@@ -269,8 +316,13 @@ float cloudDensity(vec3 p, out float h01){
   return d * uDensityMul;
 }
 
-/* 只算密度的光照版：跳过覆盖度以外的调试量 */
-float densityLite(vec3 p){ float h; return cloudDensity(p, h); }
+/* 通用入口：自己算扭曲向量 */
+float cloudDensity(vec3 p, out float h01){ return cloudDensityW(p, domainWarp(p), h01); }
+
+/* 只算密度的光照版：复用命中点的扭曲向量。太阳方向一次穿 2.3 km 云层，
+   而扭曲场的变化尺度是 4~5 km，所以沿这条光程用同一个 wq 误差在噪声内，
+   换来的是每次命中少 2*uLightSteps 次纹理采样。 */
+float densityLite(vec3 p, vec3 wq){ float h; return cloudDensityW(p, wq, h); }
 
 /* ── 多重散射：Kulla-Conty 指数和，8 阶 ────────────────────────────────────
    每一阶同时衰减三样东西，比例都是 0.5^i：
@@ -295,14 +347,14 @@ float multiScatter(float tau, float mu, out float ambOcc){
 }
 
 /* 沿太阳方向积分光学厚度（Beer-Lambert）。空域提前跳出。 */
-float lightTau(vec3 p, float sigmaE, int n){
+float lightTau(vec3 p, vec3 wq, float sigmaE, int n){
   float ls = max((uTop - uBase) / float(n), 40.0);
   float tau = 0.0;
   for (int j = 0; j < 16; j++){
     if (j >= n) break;
     vec3 lp = p + uSunDir * (float(j) + 0.5) * ls;
     if (lp.y < uBase - 300.0) break;
-    tau += densityLite(lp) * ls * sigmaE;
+    tau += densityLite(lp, wq) * ls * sigmaE;
   }
   return tau;
 }
@@ -371,7 +423,8 @@ vec4 marchClouds(vec3 ro, vec3 rd, out float outDist){
 
     vec3  p = ro + rd * t;
     float h01;
-    float d = cloudDensity(p, h01);
+    vec3  wq = domainWarp(p);
+    float d = cloudDensityW(p, wq, h01);
     gDbgSteps += 1.0;
     if (d <= 0.002) gDbgSkips += 1.0;
     dSum += d; maxD = max(maxD, d);
@@ -380,7 +433,7 @@ vec4 marchClouds(vec3 ro, vec3 rd, out float outDist){
       float sigma = d * sigmaE;
       float a = 1.0 - exp(-sigma * dt);
 
-      float tau = lightTau(p, sigmaE, uLightSteps);
+      float tau = lightTau(p, wq, sigmaE, uLightSteps);
       float ambOcc;
       float ms = multiScatter(tau, mu, ambOcc);
 
