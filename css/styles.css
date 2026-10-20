@@ -2233,9 +2233,10 @@ body.has-custom-cursor .focus-card {
     border: 1px solid rgba(18, 63, 62, 0.16);
     border-radius: 999px;
     color: rgba(18, 63, 62, 0.75);
-    background: rgba(249, 245, 234, 0.26);
-    backdrop-filter: blur(7px);
-    -webkit-backdrop-filter: blur(7px);
+    background: rgba(249, 245, 234, 0.62);
+    /* 原来这里是 backdrop-filter: blur(7px)。这个胶囊常驻在**每帧都在动的天空画布**
+       上方，backdrop-filter 会强制浏览器每帧把背景重模糊一次 —— 这是「任何操作都卡」
+       最典型的元凶之一。换成提高底色不透明度，肉眼几乎看不出差别，成本归零。 */
     transform: translateX(-50%);
     font-size: 7px;
     font-weight: 600;
@@ -2912,3 +2913,24 @@ body.has-sea-bundle .sky-wash,
 body.has-sea-bundle .light-glow,
 body.has-sea-bundle .shore-glow { display: none; }
 body.has-sea-bundle .horizon-glow { top: 26%; }
+
+/* ============================================================================
+   ?lean=1 —— 诊断 / 省电模式（index.html 里的内联脚本加 html.is-lean）
+   ----------------------------------------------------------------------------
+   用来二分「卡在渲染管线还是合成层」：
+     · backdrop-filter 会强制合成器每帧重模糊背景；
+     · mix-blend-mode 会强制新建合成层、打断 fast path；
+     · 全屏颗粒/暗角是满屏混合。
+   这些在静态站上很便宜，但在一个**每帧都在动的 WebGL 画面**上非常贵。
+   正式模式要不要保留，等真机 A/B 数据说话。                                    */
+html.is-lean *,
+html.is-lean *::before,
+html.is-lean *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  mix-blend-mode: normal !important;
+}
+html.is-lean .grain,
+html.is-lean .focus-grain {
+  display: none !important;
+}
