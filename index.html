@@ -12,6 +12,37 @@
   <!-- 诊断/省电模式：?lean=1 关掉合成器杀手（backdrop-filter / mix-blend-mode / 颗粒层）。
        用来在真机上二分「卡在渲染管线还是合成层」。必须内联同步、早于首帧。 -->
   <script>if (/[?&]lean=1/.test(location.search)) document.documentElement.classList.add("is-lean");</script>
+  <!-- ?bench=1 自测：预热 3s 后采样 4s，把 FPS / 帧时间 / 云层 ms 直接画在屏幕上。
+       不需要开控制台，截图给我就行。 -->
+  <script>
+  (function () {
+    if (!/[?&]bench=1/.test(location.search)) return;
+    window.addEventListener("load", function () {
+      var el = document.createElement("div");
+      el.setAttribute("data-bench", "1");
+      el.style.cssText = "position:fixed;left:10px;bottom:10px;z-index:2147483647;" +
+        "background:rgba(8,26,24,.92);color:#dff5ee;font:600 13px/1.55 ui-monospace,Menlo,Consolas,monospace;" +
+        "padding:10px 14px;border-radius:10px;pointer-events:none;white-space:pre;letter-spacing:.02em";
+      el.textContent = "BENCH: warming up (3s)…";
+      document.body.appendChild(el);
+      setTimeout(function () {
+        var n = 0, t0 = performance.now();
+        function tick(t) {
+          n++;
+          if (t - t0 < 4000) { requestAnimationFrame(tick); return; }
+          var fps = n / ((t - t0) / 1000);
+          var s = window.__tideStats ? window.__tideStats() : null;
+          el.textContent =
+            "FPS " + fps.toFixed(1) + "   frame " + (1000 / fps).toFixed(1) + " ms\n" +
+            "cloud " + (s ? (s.avgMs || 0).toFixed(2) + " ms  scale " + s.scale + "  steps " + s.steps : "n/a") + "\n" +
+            "flags: " + (location.search || "(none)") + "\n" +
+            "dpr " + (window.devicePixelRatio || 1) + "   viewport " + innerWidth + "x" + innerHeight;
+        }
+        requestAnimationFrame(tick);
+      }, 3000);
+    });
+  })();
+  </script>
   <link rel="preload" href="assets/postcards/02-front.png" as="image" />
   <link rel="stylesheet" href="assets/fonts/fonts.css" />
   <link rel="stylesheet" href="css/styles.css" />
