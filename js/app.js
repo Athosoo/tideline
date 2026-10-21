@@ -1213,8 +1213,11 @@ function applySeaFrame() {
     [p.sun[0] * gain, p.sun[1] * gain, p.sun[2] * gain],
   );
   seaEngine.setWeather({
-    /* 体素云层已移除：天空云板始终交给 bundle 自绘。 */
-    cloud: clamp(weather.cloudCover || 0, 0, 1),
+    /* 天空里的旧云（bundle 自绘的解析云板 uSkyDeck）是过时的「纸片」观感，
+       体素云移除后它就成了画面里唯一还剩下的云。先关掉，等新云板接上再开：
+       sea-entry.js 在 cloud<=0.001 时把 uSkyDeck 置 0，天空就干净裸着。
+       云影响海面（压暗直射）不受影响 —— 那是下面独立的 shade 字段。 */
+    cloud: 0,
     stormy: clamp(weather.storminess || 0, 0, 1),
     flash: clamp(weather.flash || 0, 0, 1),
     // The second cloud layer is the expensive one; LITE keeps a single layer.

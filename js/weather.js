@@ -499,6 +499,10 @@
 
   function updateClouds(dt, now, reduced) {
     counters.updateClouds += 1;
+    /* 上一代的 2D FBM 云（perf 案 i 优化过的那位）已经过时：它是 blurred 的
+       灰白纸片，用户直接点名要删。体素云也没了，天空暂时不画任何旧云，
+       等新的云板渲染器接上。函数体保留到接线的那一刻再真正删除。 */
+    return;
     if (state.cloudRamp) state.cloudTarget = clamp(state.cloudTarget + dt * 0.22);
     if (DIAG.no2dcloud) return;
     if (!env.cloudCtx || !env.offCtx) return;
