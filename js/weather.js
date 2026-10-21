@@ -16,16 +16,11 @@
 
   /* 诊断开关（默认全关，行为与之前完全一致）：
      ?norain=1     不画雨（含每帧全屏 clearRect）
-     ?noattr=1     不写 applySun/applySky/--flash 的任何 :root 自定义属性
-     ?no2dcloud=1  不跑 2D 兜底云的 FBM */
+     ?noattr=1     不写 applySun/applySky/--flash 的任何 :root 自定义属性 */
   window.__tidelineDiag = window.__tidelineDiag || {};
   const DIAG = Object.assign(window.__tidelineDiag, {
     norain: /[?&]norain=1/.test(window.location.search),
     noattr: /[?&]noattr=1/.test(window.location.search),
-    no2dcloud: /[?&]no2dcloud=1/.test(window.location.search),
-    /* 只给基准测试用：无头 SwiftShader 跑体素云会把主线程堵死（单帧 130~200 ms），
-       量不到 CSS/JS 的真实成本。真实机器上没有这个开关，别在交付 URL 里用它。 */
-    nocloudvolume: /[?&]nocloudvolume=1/.test(window.location.search),
     /* 测量用：强制回到「每帧无条件写 :root」的旧行为，用来在同一次运行里
        对比缓存前后的样式重算成本。 */
     nocache: /[?&]nocache=1/.test(window.location.search),
@@ -39,8 +34,6 @@
     updates: 0,
     applySun: 0,
     applySky: 0,
-    updateClouds: 0,
-    cloudGenerated: 0,
     updateRain: 0,
     rainCleared: 0,
     rootWrites: 0,
@@ -367,7 +360,6 @@
     updateLightning(dt, now, reduced);
     applySun();
     if (now - env.lastSky > 90) { env.lastSky = now; applySky(); }
-    updateClouds(dt, now, reduced);
     updateRain(dt, now, reduced);
   }
 
@@ -463,94 +455,7 @@
     env.weatherBar = document.getElementById("weatherBar");
     env.cloudCtx = env.cloudCanvas ? env.cloudCanvas.getContext("2d", { alpha: true }) : null;
     env.rainCtx = env.rainCanvas ? env.rainCanvas.getContext("2d", { alpha: true }) : null;
-    env.offCloud = document.createElement("canvas");
-    env.offCloud.width = 256;
-    env.offCloud.height = 144;
-    env.offCtx = env.offCloud.getContext("2d", { alpha: true });
-    env.cloudImage = env.offCtx.createImageData(256, 144);
-    env.lastCloud = 0;
     resizeCanvases();
-  }
-
-  function hash2(x, y) {
-    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-    return n - Math.floor(n);
-  }
-
-  function valueNoise(x, y) {
-    const xi = Math.floor(x), yi = Math.floor(y);
-    const xf = x - xi, yf = y - yi;
-    const u = xf * xf * (3 - 2 * xf);
-    const v = yf * yf * (3 - 2 * yf);
-    const a = hash2(xi, yi), b = hash2(xi + 1, yi);
-    const c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
-    return lerp(lerp(a, b, u), lerp(c, d, u), v);
-  }
-
-  function fbm(x, y, oct) {
-    let sum = 0, amp = 0.5, freq = 1;
-    for (let i = 0; i < oct; i += 1) {
-      sum += valueNoise(x * freq, y * freq) * amp;
-      freq *= 2.03;
-      amp *= 0.5;
-    }
-    return sum;
-  }
-
-  function updateClouds(dt, now, reduced) {
-    counters.updateClouds += 1;
-    /* 上一代的 2D FBM 云（perf 案 i 优化过的那位）已经过时：它是 blurred 的
-       灰白纸片，用户直接点名要删。体素云也没了，天空暂时不画任何旧云，
-       等新的云板渲染器接上。函数体保留到接线的那一刻再真正删除。 */
-    return;
-    if (state.cloudRamp) state.cloudTarget = clamp(state.cloudTarget + dt * 0.22);
-    if (DIAG.no2dcloud) return;
-    if (!env.cloudCtx || !env.offCtx) return;
-    const q = env.quality || {};
-    const interval = 1000 / (q.cloudFps || 15);
-    if (now - env.lastCloud < interval) return;
-    /* 海面引擎接管天空（has-sea-bundle）时这块 2D 画布是 display:none ——
-       生成结果没人看得见，整段 FBM + putImageData + drawImage 都是纯浪费。 */
-    if (document.body.classList.contains("has-sea-bundle")) return;
-    env.lastCloud = now;
-    const w = env.offCloud.width, h = env.offCloud.height;
-    const data = env.cloudImage.data;
-    const cover = state.cloudCover;
-    const dark = state.storminess;
-    const drift = (reduced ? 0 : state.wind) * now * 0.00002;
-    const scale = 3.4 * (q.cloudResolution || 1);
-    const oct = q.fbmOctaves || 3;
-    const threshold = 0.80 - cover * 0.72;
-    for (let y = 0; y < h; y += 1) {
-      const ny = y / h;
-      const band = smooth(clamp((0.95 - ny) / 0.95));
-      const flash = clamp(state.flash || 0, 0, 1);
-      const sun = clamp(state.sunX == null ? 0.7 : state.sunX, 0, 1);
-      for (let x = 0; x < w; x += 1) {
-        const n = fbm(x / w * scale + drift, y / h * scale * 0.55 + drift * 0.35, oct);
-        const density = clamp((n + band * 0.32 - threshold) * 3.4);
-        const idx = (y * w + x) * 4;
-        // Volume: the deck is lit along its top, dark underneath, and the side
-        // facing the sun catches the light — a flat wash has no weight.
-        const lift = clamp((0.62 - ny) / 0.62);
-        const sunSide = clamp(1 - Math.abs(x / w - sun) * 1.7);
-        const shade = clamp(
-          0.68 - dark * 0.34 + lift * 0.30 + sunSide * 0.12 * density + flash * 0.55,
-          0.18, 1.0,
-        );
-        data[idx] = Math.round(246 * shade);
-        data[idx + 1] = Math.round(248 * shade);
-        data[idx + 2] = Math.round(242 * shade);
-        data[idx + 3] = Math.round(density * 240);
-      }
-    }
-    env.offCtx.putImageData(env.cloudImage, 0, 0);
-    const ctx = env.cloudCtx;
-    const cw = env.cloudCanvas.width, ch = env.cloudCanvas.height;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, cw, ch);
-    ctx.drawImage(env.offCloud, 0, 0, cw, ch);
-    counters.cloudGenerated += 1;
   }
 
   function updateRain(dt, now, reduced) {
@@ -616,46 +521,6 @@
     }
     ctx.restore();
   }
-
-
-  /* 与 js/app.js 的 SEA_PALETTE 同一套「参考风」线性色。云的环境光 / 霾色必须
-     和 bundle 海面看到的是同一片天空，否则云和天空会脱色、出现色差硬边。 */
-  const SEA_REFERENCE = {
-    day: { zenith: [0.07, 0.20, 0.42], horizon: [0.52, 0.68, 0.82], sun: [1.0, 0.93, 0.80] },
-    dusk: { zenith: [0.03, 0.05, 0.16], horizon: [0.85, 0.36, 0.16], sun: [1.0, 0.42, 0.14] },
-    night: { zenith: [0.012, 0.02, 0.05], horizon: [0.06, 0.09, 0.15], sun: [0.75, 0.80, 0.90] },
-    storm: { zenith: [0.08, 0.10, 0.12], horizon: [0.28, 0.32, 0.34], sun: [0.58, 0.62, 0.64] },
-  };
-
-  function mix3(a, b, t) {
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-  }
-
-  function cloudPalette() {
-    const s = state;
-    const elevation = clamp((s.sunElevation == null ? 20 : s.sunElevation) / 60, 0, 1);
-    let p = {
-      zenith: mix3(SEA_REFERENCE.dusk.zenith, SEA_REFERENCE.day.zenith, elevation),
-      horizon: mix3(SEA_REFERENCE.dusk.horizon, SEA_REFERENCE.day.horizon, elevation),
-      sun: mix3(SEA_REFERENCE.dusk.sun, SEA_REFERENCE.day.sun, elevation),
-    };
-    if (s.isNight) {
-      p = { zenith: SEA_REFERENCE.night.zenith, horizon: SEA_REFERENCE.night.horizon, sun: SEA_REFERENCE.night.sun };
-    }
-    /* 阴天压暗天空的起算点：原来 overcast*0.8 从 0 就开始压，35%~45% 云量
-       （"多云"）已经把整片天压成灰绿，连带把云的环境光一起拉暗 —— 用户报的
-       "发灰、不自然"里有一半是这里。真实的多云天，天空只在接近满云时才明显变灰。 */
-    const gloom = clamp(Math.max((Math.max(s.overcast || 0, 0.0) - 0.55) * 2.0, s.storminess || 0), 0, 1);
-    if (gloom > 0.01) {
-      p = {
-        zenith: mix3(p.zenith, SEA_REFERENCE.storm.zenith, gloom),
-        horizon: mix3(p.horizon, SEA_REFERENCE.storm.horizon, gloom),
-        sun: mix3(p.sun, SEA_REFERENCE.storm.sun, gloom),
-      };
-    }
-    return p;
-  }
-
 
   function resizeCanvases() {
     const cap = env.quality && env.quality.dprCap ? env.quality.dprCap : 2;

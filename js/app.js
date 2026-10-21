@@ -157,7 +157,6 @@ function makeSeed() {
 /* ── 诊断开关（全部默认关闭，关闭时行为与之前完全一致）──────────────────
    ?norain=1     跳过雨滴/涟漪绘制（含每帧全屏 clearRect 与冰晶）
    ?noattr=1     跳过 applySun/applySky/--flash 对 :root 自定义属性的写入
-   ?no2dcloud=1  跳过 2D 兜底云的 FBM 生成
    ?nocardfx=1   卡片冻结 + 关掉光晕 blur（量「写 transform + blur」的总成本）
    ?nocardmove=1 卡片冻结但保留光晕 blur（和 nocardfx 相减即 blur 的成本） */
 window.__tidelineDiag = window.__tidelineDiag || {};
@@ -165,7 +164,6 @@ const DIAG = Object.assign(window.__tidelineDiag, {
   bench: /[?&]bench=1/.test(window.location.search),
   norain: /[?&]norain=1/.test(window.location.search),
   noattr: /[?&]noattr=1/.test(window.location.search),
-  no2dcloud: /[?&]no2dcloud=1/.test(window.location.search),
   nocardfx: /[?&]nocardfx=1/.test(window.location.search),
   nocardmove: /[?&]nocardmove=1/.test(window.location.search),
   /* ?ghosts=1 把「聚焦时其它明信片仍留在画面上」的旧行为放回来，用来在真机上
