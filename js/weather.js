@@ -153,10 +153,6 @@
     panel: null,
     celestial: null,
     cloudCanvas: null,
-    cloudVolume: null,
-    clouds: null,
-    cloudFailed: false,
-    cloudSlow: 0,
     rainCanvas: null,
     rainDirty: false,
     flashEl: null,
@@ -332,7 +328,6 @@
       initDOM();
       initPanel();
       initCelestial();
-      syncCloudVolume();
       fetchLiveWeather();
     },
     update: function (dt, now) { update(dt, now); },
@@ -374,7 +369,6 @@
     if (now - env.lastSky > 90) { env.lastSky = now; applySky(); }
     updateClouds(dt, now, reduced);
     updateRain(dt, now, reduced);
-    feedCloudFrame(now);
   }
 
   function updateLightning(dt, now, reduced) {
@@ -459,7 +453,6 @@
     env.panel = document.getElementById("weatherPanel");
     env.celestial = document.getElementById("celestial");
     env.cloudCanvas = document.getElementById("cloudCanvas");
-    env.cloudVolume = document.getElementById("cloudVolume");
     env.rainCanvas = document.getElementById("rainCanvas");
     env.flashEl = document.getElementById("lightningFlash");
     /* 自定义属性的写入目标（见 setVar）：只让真正消费它们的子树失效。 */
@@ -512,11 +505,9 @@
     const q = env.quality || {};
     const interval = 1000 / (q.cloudFps || 15);
     if (now - env.lastCloud < interval) return;
-    /* 体素云接管天空（has-cloud-volume）或海面引擎接管天空（has-sea-bundle）时，
-       这块 2D 画布是 display:none —— 生成结果没人看得见，整段 FBM + putImageData
-       + drawImage 都是纯浪费。只在真正可见时才跑。 */
-    if (document.body.classList.contains("has-cloud-volume")
-      || document.body.classList.contains("has-sea-bundle")) return;
+    /* 海面引擎接管天空（has-sea-bundle）时这块 2D 画布是 display:none ——
+       生成结果没人看得见，整段 FBM + putImageData + drawImage 都是纯浪费。 */
+    if (document.body.classList.contains("has-sea-bundle")) return;
     env.lastCloud = now;
     const w = env.offCloud.width, h = env.offCloud.height;
     const data = env.cloudImage.data;
@@ -622,65 +613,6 @@
     ctx.restore();
   }
 
-  /* ── 体素云层（GIFT/js/clouds.js）────────────────────────────────────────
-     只有 FULL 档、且没有 reduced-motion 时才尝试接管天空。create 返回 null
-     或抛错就什么都不做，现有 2D 云画布路径原样保留（LITE / 无 WebGL2 回落）。 */
-  function cloudEligible() {
-    if (DIAG.nocloudvolume) return false;
-    if (env.reducedMotion && env.reducedMotion.matches) return false;
-    if (!env.quality) return false;
-    /* 3D 噪声是在头几百毫秒里分帧生成的；那段时间的画面抖动不能算进
-       js/app.js 的 45fps 画质探测，否则整个站会被云层自己拖成 LITE
-       ——而 LITE 又恰好会把云层关掉，形成「永远看不到体积云」的死结。 */
-    if (performance.now() < 2600) return false;
-    return true;
-  }
-
-  function syncCloudVolume() {
-    if (env.clouds) {
-      if (!cloudEligible()) { disposeCloudVolume(); return; }
-      /* 兜底：如果压到最低画质还是追不上预算，就交还天空，
-         让 bundle 自绘云板 / 2D 画布接管，而不是留一块卡死的画布。 */
-      const s = env.clouds.stats && env.clouds.stats();
-      if (s && s.avgMs > 42) env.cloudSlow = (env.cloudSlow || 0) + 1;
-      else env.cloudSlow = 0;
-      if (env.cloudSlow > 180) {
-        disposeCloudVolume();
-        env.cloudFailed = true;
-      }
-      return;
-    }
-    if (env.cloudFailed || !cloudEligible()) return;
-    if (!env.cloudVolume || !window.TideClouds || typeof window.TideClouds.create !== "function") {
-      env.cloudFailed = true;
-      return;
-    }
-    const lite = env.quality.level === "lite";
-    let api = null;
-    try {
-      /* LITE 也要有体积云：这块只有 26% 高的天空带，像素极少，
-         降分辨率 + 降步数就够便宜了，比整块关掉值得多。
-         FULL：v3 密度（腐蚀算子）需要足够的样本才出轮廓 —— 48 步时云在站点上
-         会退化成一层薄雾；96 步是「能看出独立积云」的实测下限。预算控制器
-         仍然会在弱机上自动降回。 */
-      api = window.TideClouds.create(env.cloudVolume, lite
-        ? { renderScale: 0.50, steps: 26, lightSteps: 3, budgetMs: 12 }
-        : { renderScale: 0.75, steps: 96, lightSteps: 5, budgetMs: 6 });
-    } catch (error) {
-      console.warn("[TIDELINE] volumetric clouds unavailable:", error && error.message ? error.message : error);
-      api = null;
-    }
-    if (!api) { env.cloudFailed = true; return; }
-    env.clouds = api;
-    document.body.classList.add("has-cloud-volume");
-  }
-
-  function disposeCloudVolume() {
-    if (!env.clouds) return;
-    try { env.clouds.dispose(); } catch (error) { /* no-op */ }
-    env.clouds = null;
-    document.body.classList.remove("has-cloud-volume");
-  }
 
   /* 与 js/app.js 的 SEA_PALETTE 同一套「参考风」线性色。云的环境光 / 霾色必须
      和 bundle 海面看到的是同一片天空，否则云和天空会脱色、出现色差硬边。 */
@@ -720,35 +652,6 @@
     return p;
   }
 
-  /* 每帧把 kernel v2 的参数喂给云层，并驱动它渲染。 */
-  function feedCloudFrame(now) {
-    syncCloudVolume();
-    if (!env.clouds) return;
-    const s = state;
-    const night = s.isNight ? 1 : 0;
-    const palette = cloudPalette();
-    const hazeColor = mix3(palette.horizon, palette.sun, 0.10);
-    env.clouds.setParams({
-      coverage: s.cloudCover,
-      storm: s.storminess,
-      wind: 8 + s.wind * 52,              /* 8~60 m/s */
-      sunX: s.sunX,
-      sunY: s.sunY,
-      night: night,
-      haze: clamp(0.5 + s.storminess * 0.8 + s.overcast * 0.35 + night * 0.35, 0, 2),
-      sunColor: palette.sun,
-      skyTop: palette.zenith,
-      skyHorizon: palette.horizon,
-      hazeColor: hazeColor,
-      sunElevation: s.sunElevation,
-      flash: s.flash,
-      seedX: 0,
-      seedZ: 0,
-      horizonY: 0.252,
-      paused: !!(env.reducedMotion && env.reducedMotion.matches),
-    });
-    env.clouds.render(now);
-  }
 
   function resizeCanvases() {
     const cap = env.quality && env.quality.dprCap ? env.quality.dprCap : 2;
@@ -758,11 +661,6 @@
       const cdpr = Math.min(window.devicePixelRatio || 1, env.quality && env.quality.level === "lite" ? 1 : 1.5);
       env.cloudCanvas.width = Math.max(1, Math.round(rect.width * cdpr));
       env.cloudCanvas.height = Math.max(1, Math.round(rect.height * cdpr));
-    }
-    if (env.cloudVolume && env.clouds) {
-      const crect = env.cloudVolume.getBoundingClientRect();
-      const cdpr = Math.min(window.devicePixelRatio || 1, cap);
-      env.clouds.resize(crect.width || window.innerWidth, crect.height || window.innerHeight * 0.26, cdpr);
     }
     if (env.rainCanvas && env.rainCtx) {
       const rect = env.rainCanvas.getBoundingClientRect();

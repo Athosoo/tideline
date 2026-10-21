@@ -1213,10 +1213,8 @@ function applySeaFrame() {
     [p.sun[0] * gain, p.sun[1] * gain, p.sun[2] * gain],
   );
   seaEngine.setWeather({
-    /* 体素云层活着时把 bundle 的 2D 云板关掉，避免两层云叠在一起。 */
-    cloud: document.body.classList.contains("has-cloud-volume")
-      ? 0
-      : clamp(weather.cloudCover || 0, 0, 1),
+    /* 体素云层已移除：天空云板始终交给 bundle 自绘。 */
+    cloud: clamp(weather.cloudCover || 0, 0, 1),
     stormy: clamp(weather.storminess || 0, 0, 1),
     flash: clamp(weather.flash || 0, 0, 1),
     // The second cloud layer is the expensive one; LITE keeps a single layer.
