@@ -2276,6 +2276,7 @@ function animate(now) {
   state.lastFrame = now;
 
   updateScrollState(dt);
+  if (window.CakeGate) CakeGate.update(dt, state.gate);
   applyCardTransforms(now, dt);
   updateCursor(dt);
   if (window.Weather) Weather.update(dt, now);
@@ -2468,6 +2469,8 @@ function init() {
   initQuality();
   if (window.Weather) Weather.init({ quality: quality, reducedMotion: REDUCED_MOTION });
   setActiveCard(0, true);
+
+  if (window.CakeGate) CakeGate.init({ openArchive: openArchive, reducedMotion: REDUCED_MOTION });
 
   state.initialized = true;
   window.requestAnimationFrame(animate);

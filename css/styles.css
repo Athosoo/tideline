@@ -2989,3 +2989,382 @@ html.is-lean .focus-grain {
 html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
   opacity: 1 !important;
 }
+
+/* ============================================================================
+   开屏 · 潮汐台布（index.html #cakeGate / js/cakegate.js）
+   ----------------------------------------------------------------------------
+   一张铺满全屏的亚麻台布。场上唯一光源是蛋糕上的十九支蜡烛，光从蛋糕向四周
+   衰减；台布上印着一张潮汐海图，蛋糕就是海图上那座岛；刀是罗盘指针 ——
+   所以刀尖永远指着圆心，这是罗盘的规矩，不是动画的随手设定。
+
+   滚动（--gate）和这一刀（--cut）谁先到算谁的。切开时台布裂成互补的两半，
+   露出来的是底下一只活着的海 —— 不画假的「里面」。
+   `?nocake=1` 关掉整个开屏层，回到原来的两扇门。                              */
+
+.cake-gate {
+  --cdx: 1;
+  --cdy: 0;
+  --cnx: 0;
+  --cny: 1;
+  --cut: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  perspective: 1400px;
+  color: #6b5f4c;
+  transition: opacity 0.45s linear;
+}
+
+.cake-gate.is-out {
+  opacity: 0;
+}
+
+/* 门退休：台布盖住以后，两扇门留在 DOM 里但不再露面，
+   于是台布裂开时透出来的是后面那片一直在跑的海。 */
+.intro.has-cake .door,
+.intro.has-cake .door-seam {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* 刀在手上时，站点那颗自绘光标让位给刀 */
+body.is-cake-cursor .cursor {
+  opacity: 0;
+}
+
+/* ── 布 ─────────────────────────────────────────────────────────────────── */
+.cloth {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 92% 78% at 50% 44%, #f8f1e2 0%, #f3e9d6 42%, #e6d9c0 100%),
+    linear-gradient(158deg, #f4ebd9 0%, #e8dbc4 58%, #dccfb8 100%);
+  isolation: isolate;
+}
+
+.cloth.is-source {
+  visibility: hidden;
+}
+
+.cloth-weave {
+  position: absolute;
+  inset: 0;
+  opacity: 0.55;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(120, 104, 80, 0.055) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(120, 104, 80, 0.045) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+
+.cloth-crease {
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.cloth-crease--a {
+  left: -10%;
+  top: 58%;
+  width: 130%;
+  height: 44%;
+  transform: rotate(-3.5deg);
+  background: linear-gradient(180deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.13) 58%, rgba(255, 250, 238, 0.5) 100%);
+}
+
+.cloth-crease--b {
+  left: -8%;
+  top: 21%;
+  width: 120%;
+  height: 26%;
+  transform: rotate(2.2deg);
+  background: linear-gradient(0deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.09) 70%, rgba(255, 250, 238, 0.34) 100%);
+}
+
+.cloth-crease--c {
+  left: 76%;
+  top: -10%;
+  width: 26%;
+  height: 120%;
+  transform: rotate(6deg);
+  background: linear-gradient(90deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.1) 62%, rgba(255, 250, 238, 0.36) 100%);
+}
+
+/* 光池：唯一的暖光，从蛋糕往外衰减。暗角不是遮丑，是它的物理结果。 */
+.cloth-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 62%, rgba(255, 226, 176, 0.55) 0%, rgba(255, 213, 158, 0.26) 26%, rgba(255, 205, 150, 0.09) 46%, rgba(255, 200, 145, 0) 66%);
+  mix-blend-mode: screen;
+}
+
+.cloth-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 62%, rgba(25, 27, 24, 0) 34%, rgba(25, 27, 24, 0.32) 62%, rgba(25, 27, 24, 0.82) 96%),
+    linear-gradient(180deg, rgba(25, 27, 24, 0.24) 0%, rgba(25, 27, 24, 0) 22%, rgba(25, 27, 24, 0) 74%, rgba(25, 27, 24, 0.34) 100%);
+}
+
+/* 海图线稿：只画在光里 —— 亮处有线可看，暗处干净。
+   这一条同时解决「太空」和「太满」。 */
+.cloth-chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: #6b5f4c;
+  opacity: 0.95;
+  -webkit-mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
+  mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
+}
+
+/* ── 两半：互补多边形，铰链就在切口线上 ───────────────────────────────── */
+.cloth-half {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform-origin: 50% 62%;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.cloth-half--a {
+  transform:
+    translate3d(calc(var(--cnx) * 13vw * var(--cut)), calc(var(--cny) * 13vw * var(--cut)), 0)
+    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * 30deg));
+}
+
+.cloth-half--b {
+  transform:
+    translate3d(calc(var(--cnx) * -13vw * var(--cut)), calc(var(--cny) * -13vw * var(--cut)), 0)
+    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * -30deg));
+}
+
+/* ── 蛋糕（俯视，全场中心） ─────────────────────────────────────────────── */
+.cake {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  pointer-events: none;
+}
+
+.cake-halo {
+  position: absolute;
+  inset: -46%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 221, 168, 0.5) 0%, rgba(255, 208, 148, 0.2) 42%, rgba(255, 200, 140, 0) 70%);
+  mix-blend-mode: screen;
+}
+
+.cake-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.cake-number {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 96px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  fill: #b08f62;
+  stroke: rgba(255, 253, 246, 0.92);
+  stroke-width: 1.6px;
+  paint-order: stroke fill;
+}
+
+.cake-candles {
+  position: absolute;
+  inset: 0;
+}
+
+.candle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #fff6e4;
+  box-shadow: 0 0 0 1px rgba(176, 143, 98, 0.35) inset;
+}
+
+.candle::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 233, 195, 0.95) 0%, rgba(255, 206, 140, 0.55) 38%, rgba(255, 183, 101, 0) 74%);
+  animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate;
+  will-change: transform, opacity;
+}
+
+@keyframes cakeFlame {
+  from { transform: scale(0.84); opacity: 0.62; }
+  to { transform: scale(1.16); opacity: 1; }
+}
+
+/* ── 刀：尖端钉在指针上，刀身沿半径躺下 ─────────────────────────────────── */
+.knife {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  filter: drop-shadow(0 6px 10px rgba(42, 44, 41, 0.18));
+}
+
+.knife-art {
+  position: absolute;
+  right: 0;
+  top: -27px;
+}
+
+/* 方位虚线：从刀尖指向圆心，罗盘上那条读数线 */
+.knife-bearing {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100px;
+  height: 1px;
+  transform-origin: 0 0;
+  opacity: 0.32;
+  background-image: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 9px);
+  will-change: transform, opacity;
+}
+
+/* ── 切开 ───────────────────────────────────────────────────────────────── */
+.cut-seam {
+  position: absolute;
+  left: -1400px;
+  top: -1px;
+  width: 2800px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 214, 160, 0) 0%, rgba(255, 231, 192, 0.9) 34%, rgba(255, 245, 226, 1) 50%, rgba(255, 231, 192, 0.9) 66%, rgba(255, 214, 160, 0) 100%);
+  transition: opacity 0.12s linear;
+}
+
+.cut-seam.is-live {
+  opacity: 0.95;
+}
+
+.crumbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.crumb {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #d9a574;
+  animation: crumbFly 620ms cubic-bezier(0.18, 0.72, 0.32, 1) forwards;
+}
+
+.crumb:nth-child(even) {
+  background: #fbf3e4;
+}
+
+@keyframes crumbFly {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(var(--dx, 0), var(--dy, 0), 0) rotate(var(--r, 0deg)) scale(0.34);
+    opacity: 0;
+  }
+}
+
+/* 指针落脚的那一层。整块布都不能拦滚动，只有它接点击。 */
+.cut-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: none;
+}
+
+/* ── 小屏：竖屏没有鼠标，刀收到 0.72，蛋糕收到 62vw ─────────────────────── */
+@media (max-width: 680px) {
+  .cake {
+    width: 56vw;
+    height: 56vw;
+    margin: -28vw 0 0 -28vw;
+  }
+
+  .cake-number {
+    font-size: 84px;
+  }
+
+  .knife-art {
+    transform: scale(0.72);
+    transform-origin: 100% 50%;
+  }
+
+  .cloth-chart {
+    -webkit-mask-image: radial-gradient(closest-side at 50% 62%, #000 0 34%, transparent 78%);
+    mask-image: radial-gradient(closest-side at 50% 62%, #000 0 34%, transparent 78%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cake-gate {
+    transition: opacity 0.32s linear;
+  }
+
+  .cloth-half--a,
+  .cloth-half--b {
+    transform: none;
+  }
+}
+
+/* ── 标题让位 ───────────────────────────────────────────────────────────────
+   蛋糕占了画面中央，原来那张「Between the tides」的字号就压不住了：
+   200px 的行高直接压在蛋糕上，谁也读不清。所以台布在场时，封面标题
+   缩小成一条印刷体抬头，退到页眉下面，把中央整块让给蛋糕。
+   `?nocake=1` 回到原来的封面，这组规则完全不起作用。                    */
+.intro.has-cake .cover-content {
+  justify-content: flex-start;
+}
+
+.intro.has-cake .cover-footer {
+  margin-top: auto;
+}
+
+.intro.has-cake .cover-hero {
+  margin-top: clamp(18px, 5vh, 54px);
+  margin-bottom: 0;
+  transform: none;
+}
+
+.intro.has-cake .cover-title {
+  font-size: clamp(2.1rem, 3.4vw, 3.1rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 24px rgba(247, 242, 230, 0.4);
+}
+
+.intro.has-cake .cover-eyebrow {
+  margin-bottom: clamp(12px, 1.5vh, 18px);
+}
+
+.intro.has-cake .cover-lede {
+  margin-top: clamp(10px, 1.6vh, 18px);
+  max-width: 40ch;
+}
