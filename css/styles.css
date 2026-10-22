@@ -841,6 +841,10 @@ img {
   background-repeat: no-repeat;
   background-position: center;
   transform: none;
+  /* 贴图本身是不透明的，淡入淡出只能靠元素级 opacity（--sun-core-* 的 alpha
+     只管得住下面那层兜底渐变）。日月共用同一个元素，入夜那一刻它要从右缘
+     跳到左缘，没有这一行就会看见月亮凭空闪一下。 */
+  opacity: var(--sun-disc-opacity, 1);
 }
 
 /* 提示文字必须待在 .celestial 外面：那一层整体在做 screen 加光，暗色文字会被

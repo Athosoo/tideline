@@ -313,9 +313,9 @@
     if (!celestial) return;
     const day = !state.isNight;
     /* 弧线进度按真实的日出/日落时刻归一化，而不是写死 6..18：太阳在日出那一刻
-       正好从画面左缘出现、日落那一刻正好从右缘消失，月亮从同一个日落点接过这条
-       弧的反向行程。写死 6..18 的话，本纬度 10 月会多出 0.36 小时的空档 ——
-       日盘/月盘卡在边缘不动将近 2 秒，2 分钟一天的时候看得出一次「停顿」。 */
+       正好从画面左缘出现、日落那一刻正好从右缘消失（左 = 东，右 = 西）。写死
+       6..18 的话，本纬度 10 月会多出 0.36 小时的空档 —— 日盘/月盘卡在边缘不动
+       将近 2 秒，2 分钟一天的时候看得出一次「停顿」。 */
     const win = dayWindow(state.dayOfYear, state.latitude);
     const daySpan = Math.max(0.5, win.set - win.rise);
     const nightSpan = Math.max(0.5, 24 - daySpan);
@@ -325,11 +325,10 @@
     const theta = clamp(u, 0, 1) * Math.PI;
     // Polar-light framing: the disc travels a short, low arc and never leaves
     // the frame, so it stays draggable and the sea always keeps a grazing sun.
-    /* 夜里取反号：月亮是反日的（满月永远在太阳对面），太阳从右侧落下时月亮
-       就从右侧升起，一路逆行到左侧，正好接上第二天日出时日盘出现的位置。
-       不取反号的话，日落那一瞬间日盘会从 88% 瞬移到 12% —— 时间按真实速度
-       流的时候看不出来，现在 2 分钟一天，每天都会看见两次横跳。 */
-    const x = 50 + (day ? -38 : 38) * Math.cos(theta);
+    /* 日月同向：左缘是东、右缘是西，两个天体都东升西落。月亮不因为「反日」就
+       倒着走 —— 满月只是与太阳相隔 12 小时，太阳在西边落下时它才刚从东边升起，
+       然后和太阳一样从左往右走完自己的那半圈。所以两段用同一个符号。 */
+    const x = 50 - 38 * Math.cos(theta);
     // Keep the sun and the moon above the shoreline. The CSS horizon sits at
     // about 47.8% of the viewport, so elevation 0 maps just above it.
     const horizonY = 25.2;
@@ -359,16 +358,26 @@
       const belowHorizon = clamp((-rawElev - 0.5) / 7.5, 0, 1);
       /* 光球中心过曝：往白里推一点，否则正午的太阳偏灰。 */
       const hot = mix(core, [1, 1, 1], 0.35);
-      /* 「太阳换成月亮」是这套设计里唯一的硬切换（月亮只在夜里出现）。
-         用 2.5° 把月面从暖到冷、从淡到实地淡入，避免过地平线时瞬间跳色。 */
-      const moonIn = day ? 1 : clamp((-rawElev - 0.5) / 2.5, 0, 1);
+      /* 交接（rawElev = -0.5）两侧都必须收到 0：日月共用同一个元素，那一刻它的
+         位置要从右缘跳到左缘（太阳在西边落下、月亮在东边升起）—— 这是天文事实，
+         不是 bug，但只要还亮着就会看见一次「闪」。所以日面在最后 2° 里淡出、
+         月面在最初 4° 里淡入，交接点两边都是 0，换位藏在「谁都还没亮」的瞬间。 */
+      const sunDisc = smooth(clamp((rawElev + 0.5) / 2.0, 0, 1));
+      const moonIn = day ? 0 : smooth(clamp((-rawElev - 0.5) / 2.5, 0, 1));
+      /* 天光（日晕/炫光/月晕）用长得多的 6° 窗口：那是一片大面积柔光，跟着光球
+         一起在 2° 里灭掉，2 分钟一天的时候看起来是「啪」地关灯。光球 2°、天光
+         6°，两者在交接点都是 0，换位仍然看不见。 */
+      const skyVis = day
+        ? smooth(clamp((rawElev + 0.5) / 6.0, 0, 1))
+        : smooth(clamp((-rawElev - 0.5) / 6.0, 0, 1));
       const discCore = day ? hot : mix([1.00, 0.74, 0.54], hot, moonIn);
       const discMid = day ? mix(core, bloom, 0.45) : mix([1.00, 0.70, 0.50], mix(core, bloom, 0.45), moonIn);
       /* 月面不吃 dim：普通混合下 alpha < 1 等于把月面往夜空里掺，满月会显得
-         发灰发透，细节也跟着糊。夜间的 alpha 直接给满，深浅交给贴图本身；
-         刚入夜那 2.5° 的淡入仍由 moonIn 从 0.32 拉上来。 */
-      const discA = day ? look.a * dim : lerp(0.32, look.a, moonIn);
-      const discA1 = day ? look.a1 * dim : lerp(0.16, look.a1, moonIn);
+         发灰发透，细节也跟着糊。夜间的深浅只由淡入淡出的 moonIn 决定。
+         日面乘 sunDisc：贴海平线那最后 2° 里它越来越红、越来越暗，沉下去的一刻
+         正好收干净。 */
+      const discA = day ? look.a * dim * sunDisc : look.a * moonIn;
+      const discA1 = day ? look.a1 * dim * sunDisc : look.a1 * moonIn;
       const sunColor = rgb(core);
       const sunGlow = rgb(bloom);
       setAtmo("--sun-x", x.toFixed(2) + "%");
@@ -376,20 +385,23 @@
       /* 最里面那一小块是过曝的「死白」：太阳之所以刺眼，靠的就是这块没有细节的白，
          外面才有橙金的层次。月亮不参与（月面要留住纹理）。 */
       const hotWhite = mix(discCore, [1, 1, 1], day ? 0.88 : 0.30 * moonIn);
-      setAtmo("--sun-core-hot", rgba(hotWhite, clamp(discA + 0.04)));
+      setAtmo("--sun-core-hot", rgba(hotWhite, clamp(discA + (day ? 0.04 : 0))));
       setAtmo("--sun-core-0", rgba(discCore, discA));
       setAtmo("--sun-core-1", rgba(discMid, discA1));
       setAtmo("--sun-core-2", rgba(bloom, 0));
       /* 远处大范围眩光：逆光时整片天被洗亮一层，是「耀眼」最直接的证据。 */
-      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.05) * dim));
+      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.05) * dim * skyVis));
       /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。 */
       const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon);
-      setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim));
-      setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.52));
-      setAtmo("--sun-bloom-3", rgba(bloom, baUse * dim * 0.20));
+      setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim * skyVis));
+      setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.52 * skyVis));
+      setAtmo("--sun-bloom-3", rgba(bloom, baUse * dim * 0.20 * skyVis));
       setAtmo("--sun-bloom-2", rgba(bloom, 0));
       setAtmo("--sun-bloom-scale", look.spread.toFixed(3));
       setAtmo("--sun-flatten", look.flat.toFixed(3));
+      /* 月面是真实贴图（本身不透明），淡入淡出只能靠元素级 opacity，
+         不能指望 --sun-core-* 的 alpha（那只管得住兜底渐变）。 */
+      setAtmo("--sun-disc-opacity", (day ? 1 : moonIn).toFixed(3));
       /* 大气泛白（.atmosphere 第一层）负责整片天光；.celestial-bloom 只负责
          太阳近处那一圈紧光，由 spread 控制张开。白天低角度收到 0.62，
          与入夜那一刻接上，地平线两侧不跳。 */
@@ -397,7 +409,7 @@
          贴近地平线时散射铺满整片天，那才是落日的橙。 */
       /* 亮度上限必须留给日面：日晕一浓，太阳就变成同一片白里的一块，反而看不出亮。
          所以日晕只做到「把天洗亮一点」，越贴地平线越宽（散射铺得开）。 */
-      const haloA = (day ? 0.26 + 0.20 * (1 - clamp(state.sunElevation / 20, 0, 1)) : lerp(0.46, 0.34, belowHorizon)) * dim;
+      const haloA = (day ? 0.26 + 0.20 * (1 - clamp(state.sunElevation / 20, 0, 1)) : lerp(0.46, 0.34, belowHorizon)) * dim * skyVis;
       /* 夜里的余晖还是暖的（被散射掉的落日），越接近深蓝调才越接近月色。 */
       /* 日晕画的是「被点亮的天」，不是光本身：直接用饱和的日色压上去会把天空的
          G/B 通道一起拉低，日落时那圈橙色就发闷发褐。先往白里提，才像光在扩散。 */
@@ -524,6 +536,9 @@
     if (!el) return;
     let dragging = false, moved = false;
     let startX = 0, startY = 0;
+    /* 拖的是太阳还是月亮，按「按下那一刻是白天还是夜里」判断。不能用指针高度
+       猜：月亮夜里也在天顶，p.y < 0.6 会把深夜的拖动误判成白天弧。 */
+    let nightDrag = false;
     function pos(e) {
       const g = document.getElementById("gallery");
       const r = g ? g.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
@@ -531,15 +546,15 @@
     }
     function applyDrag(e) {
       const p = pos(e);
-      const dayArc = p.y < 0.6;
-      /* 反解 applySun 的弧线：白天 x = 50 - 38·cos(theta)，夜里 x = 50 + 38·cos(theta)
-         —— 月亮是反日的，同一个屏幕位置在夜里对应的是「从右侧升起」那半圈的反向行程。
+      const dayArc = !nightDrag;
+      /* 反解 applySun 的弧线：两段都是 x = 50 - 38·cos(theta)（日月同向，左 = 东、
+         右 = 西），只是走的是各自的时间区间 —— 白天 [rise, set]，夜里 [set, 24+rise]。
          振幅必须和 applySun 里的 38 一致，否则拖到画面边缘时刻会差几十分钟。 */
       const win = dayWindow(state.dayOfYear, state.latitude);
       const daySpan = Math.max(0.5, win.set - win.rise);
       const nightSpan = Math.max(0.5, 24 - daySpan);
       const cx = clamp((p.x * 100 - 50) / 38, -1, 1);
-      const u = Math.acos(dayArc ? -cx : cx) / Math.PI;
+      const u = Math.acos(-cx) / Math.PI;
       const t = dayArc ? win.rise + u * daySpan : win.set + u * nightSpan;
       state.timeTarget = mod(t, 24);
       state.manualTime = true;
@@ -551,6 +566,7 @@
     el.addEventListener("pointerdown", function (e) {
       dragging = true; moved = false;
       startX = e.clientX; startY = e.clientY;
+      nightDrag = state.isNight;
       el.classList.add("is-dragging");
       if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
       e.preventDefault();
