@@ -4,7 +4,9 @@
    所以刀尖永远指着圆心，这是罗盘的规矩，不是动画的随手设定。
 
    滚动（--gate）和这一刀（--cut）谁先到算谁的：--open = max(--gate, --cut)。
-   切开时台布裂成互补的两半，露出来的是底下一只活着的海 —— 不画假的「里面」。
+   切开时蛋糕沿刀轴裂成两半，缝里什么都没有 —— 只有一道阴影（css 的 .cut-gap）：
+  不画剖面、不摆奶油果酱（2026-10-22 用户否掉了那五层夹层）。镜头随后钻进这道缝，
+  缝外面的台布才被洞口吃掉，洞里是那只活着的海。
 
    ?cake=aim|cut 冻结/预演某个相位（截图对照用）。
    两扇门已于 2026-10-22 删除，这一层就是封面本身，没有退路可退。 */
@@ -18,16 +20,19 @@
 
   var TAU = Math.PI * 2;
   var DEG = 180 / Math.PI;
-  var CY_RATIO = 0.62;          // 蛋糕圆心：偏下。上面那条带子留给封面标题，下面留给页脚
+  var CY_RATIO = 0.5;           // 蛋糕圆心 = 画面中心：题字退场之后，圆心就是视口中心
   var FLY = 1.4;                // 刀入场 1400ms
   var FLY_A = 0.28;             // 加速段结束
   var FLY_B = 0.74;             // 匀速段结束
   var FLY_V = 2 / (1 + (FLY_B - FLY_A));   // 峰值 1.3699：由「三段位移和 = 1」解出
   var CUT = 2.6;                // 切开：布慢慢裂开，2.6s 走完
   var HOLD = 0.28;              // 先亮一道缝 280ms，布纹丝不动
-  var STITCH = 1.1;             // 回封面缝合 1100ms
+  var STITCH = 1.6;             // 回封面：镜头从裂口里退出来 1600ms
 
   var clothWrap = document.getElementById("clothWrap");
+  var cakeStage = document.getElementById("cakeStage");
+  var cakeEl = cakeStage ? cakeStage.querySelector(".cake") : null;
+  var cutGap = document.getElementById("cutGap");
   var chartLines = document.getElementById("chartLines");
   var chartStars = document.getElementById("chartStars");
   var scallop = document.getElementById("scallop");
@@ -44,6 +49,9 @@
 
   // 截图用：?cutat=0.55 把切开进度钉在这个值（仍然走真实的 cut() 路径）
   var CUTAT = params.has("cutat") ? clamp(parseFloat(params.get("cutat")) || 0, 0, 1) : null;
+  // 沙箱里页面一滚动，position:fixed 的整层就会被画偏（见 TODO 抓图教训），
+  // 所以验下潜构图时可以拿 ?nojump=1 把那次瞬移关掉。
+  var NOJUMP = params.get("nojump") === "1";
 
   var hooks = { openArchive: null, reduced: null };
 
@@ -55,6 +63,7 @@
     cutTarget: 0,
     cutHold: 0,
     opened: false,
+    archiveJump: false,
     finished: false,
     sawGate: false,
     tip: { x: 0, y: 0 },
@@ -349,53 +358,77 @@
     });
   }
 
-  /* ---------- 两半：互补多边形，切口带撕的噪声 ---------- */
+  /* ---------- 劈开：沿刀线把蛋糕分成两半，缝里只有一道阴影 ----------
+     台布不再撕 —— 撕出来的那两条数学直边，正是上一版被挑出的瑕疵。
+     两半之间那一条是 .cut-gap：切开的地方光进不去，所以是暗的，不是一张剖面图。
+     镜头正是从这道缝钻进去的，台布在那之后才被那个洞吃掉（CSS 的 --hole）。 */
   var CUT_N = 26;
-  // 半径只取视口量级：坐标动辄 ±40000px 时 Chrome 会把整块裁掉不画（实测变空白）
-  var CUT_R = 2600;
+  var halfA = null;
+  var halfB = null;
 
-  function halfPolygon(dx, dy, sign, seed) {
-    // 过圆心、沿刀轴 (dx,dy) 的直线；sign 决定取哪半。两半共用同一条噪声边，
-    // 所以拼起来严丝合缝 —— 撕的痕迹必须是同一条。
-    // 法线不随手性翻转：两半用的是**同一条**带噪声的切口边，
-    // 否则一边往里、一边往外，拼起来就有一道 ±3px 的缝。
+  // 克隆体里的 id 会和外层撞（渐变靠 url(#…) 取），所以整套改名并重写引用
+  function uniqIds(root, suffix) {
+    var list = root.querySelectorAll("[id]");
+    var map = {};
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var old = list[i].id;
+      map[old] = old + suffix;
+      list[i].id = old + suffix;
+    }
+    var all = root.querySelectorAll("*");
+    for (i = 0; i < all.length; i++) {
+      var at = all[i].attributes;
+      for (var k = 0; k < at.length; k++) {
+        if (at[k].value && at[k].value.indexOf("url(#") !== -1) {
+          at[k].value = at[k].value.replace(/url\(#([\w-]+)\)/g, function (m, id) {
+            return "url(#" + (map[id] || id) + ")";
+          });
+        }
+      }
+    }
+  }
+
+  // 半平面多边形，坐标是蛋糕自己的盒子（圆心在 size/2）。
+  // 噪声只有零点几像素：刀切出来的口子是一条干净的线，不是撕纸。
+  function localPolygon(dx, dy, sign, cx, cy, R, far, amp, ov) {
     var nx = -dy;
     var ny = dx;
-    var rnd = mulberry32(seed);
-    var ph = [rnd() * TAU, rnd() * TAU, rnd() * TAU];
+    var ph = [0.9, 2.4, 5.1];
     var edge = [];
     for (var i = 0; i <= CUT_N; i++) {
-      var t = -CUT_R + (2 * CUT_R * i) / CUT_N;
-      var j = Math.sin(t * 0.004 + ph[0]) * 1.5 + Math.sin(t * 0.0013 + ph[1]) * 1.2 + Math.sin(t * 0.021 + ph[2]) * 0.6;
-      edge.push([dx * t + nx * j, dy * t + ny * j]);
+      var t = -R + (2 * R * i) / CUT_N;
+      var j = amp * (Math.sin(t * 0.071 + ph[0]) * 0.62 + Math.sin(t * 0.019 + ph[1]) * 0.38);
+      // 沿法线朝对方那侧多压 ov 像素，两半才会重叠而不是刚好贴边
+      var o = j - sign * (ov || 0);
+      edge.push([cx + dx * t + nx * o, cy + dy * t + ny * o]);
     }
-    var far = 5200;
     var list = edge.slice();
     var last = edge[edge.length - 1];
     var first = edge[0];
     list.push([last[0] + nx * far * sign, last[1] + ny * far * sign]);
     list.push([first[0] + nx * far * sign, first[1] + ny * far * sign]);
     var pts = [];
-    for (var k = 0; k < list.length; k++) {
-      pts.push((list[k][0] + S.geom.cx).toFixed(1) + "px " + (list[k][1] + S.geom.cy).toFixed(1) + "px");
+    for (var n = 0; n < list.length; n++) {
+      pts.push(list[n][0].toFixed(1) + "px " + list[n][1].toFixed(1) + "px");
     }
     return "polygon(" + pts.join(",") + ")";
   }
 
-  function buildHalves() {
-    if (!clothWrap) return;
+  function buildCakeHalves() {
+    if (!cakeEl || !cakeStage) return;
     ["a", "b"].forEach(function (side) {
-      var half = document.createElement("div");
-      half.className = "cloth-half cloth-half--" + side;
-      half.id = "half" + side.toUpperCase();
-      var copy = clothWrap.cloneNode(true);
-      copy.removeAttribute("id");
-      var all = copy.querySelectorAll("[id]");
-      for (var i = 0; i < all.length; i++) all[i].removeAttribute("id");
-      half.appendChild(copy);
-      gateEl.insertBefore(half, clothWrap);
+      var half = cakeEl.cloneNode(true);
+      half.removeAttribute("id");
+      half.classList.add("cake--half", "cake--" + side);
+      uniqIds(half, "-" + side);
+      cakeStage.appendChild(half);
+      if (side === "a") halfA = half; else halfB = half;
     });
-    clothWrap.classList.add("is-source");
+    // 暗缝要压在两个半块下面：插到第一个半块之前
+    if (cutGap && halfA) cakeStage.insertBefore(cutGap, halfA);
+    cakeEl.classList.add("is-source");
+    S.cakeSize = cakeEl.offsetWidth || 360;
     applyCutGeometry(S.cutAngle);
   }
 
@@ -406,12 +439,16 @@
     gateEl.style.setProperty("--cdy", dy.toFixed(5));
     gateEl.style.setProperty("--cnx", (-dy).toFixed(5));
     gateEl.style.setProperty("--cny", dx.toFixed(5));
+    gateEl.style.setProperty("--cda", (angle * DEG).toFixed(2) + "deg");
     // 窗口尺寸可能在 init 之后变过：切口必须重新量，否则那条线不落在蛋糕圆心上
     measure();
-    var a = document.getElementById("halfA");
-    var b = document.getElementById("halfB");
-    if (a) a.style.clipPath = halfPolygon(dx, dy, 1, 17);
-    if (b) b.style.clipPath = halfPolygon(dx, dy, -1, 17);
+    var size = S.cakeSize || (cakeEl ? cakeEl.offsetWidth : 0) || 360;
+    S.cakeSize = size;
+    var c = size / 2;
+    var R = size * 1.6;
+    var far = size * 3;
+    if (halfA) halfA.style.clipPath = localPolygon(dx, dy, 1, c, c, R, far, 0.9, 1.2);
+    if (halfB) halfB.style.clipPath = localPolygon(dx, dy, -1, c, c, R, far, 0.9, 1.2);
   }
 
   /* ---------- 刀 ---------- */
@@ -423,7 +460,9 @@
     var dx = g.cx - S.tip.x;
     var dy = g.cy - S.tip.y;
     var dist = Math.sqrt(dx * dx + dy * dy);
-    bearingEl.style.transform = tf + " scaleX(" + (dist / 100).toFixed(3) + ")";
+    // 虚线只画到盘沿：越过盘沿就是在蛋糕身上划一道
+    var r0 = (S.cakeSize || 360) * 0.42;
+    bearingEl.style.transform = tf + " scaleX(" + (Math.max(0, dist - r0) / 100).toFixed(3) + ")";
     bearingEl.style.opacity = clamp(1 - S.cut * 4, 0, 1).toFixed(2);
   }
 
@@ -510,6 +549,9 @@
     S.cutTarget = 1;
     applyCutGeometry(S.cutAngle);
     gateEl.classList.add("is-cut");
+    // 一刀的力：画面抖 170ms，烛焰跟着顿一下。没有这一下，刀像是贴上去的。
+    gateEl.classList.add("is-impact");
+    setTimeout(function () { gateEl.classList.remove("is-impact"); }, 180);
     if (seamEl) {
       seamEl.style.transform = "translate3d(" + S.geom.cx.toFixed(0) + "px," + S.geom.cy.toFixed(0) + "px,0) rotate(" + (S.bearing * DEG).toFixed(2) + "deg)";
       seamEl.classList.add("is-live");
@@ -532,6 +574,7 @@
     S.cutTarget = 0;
     S.opened = false;
     S.finished = false;
+    S.archiveJump = false;
     gateEl.classList.remove("is-cut");
     if (seamEl) seamEl.classList.remove("is-live");
   }
@@ -621,8 +664,7 @@
           // 布全裂开了才算这一刀走完：这时候才把 --gate 交还给滚动，
           // 整层随之淡出，长廊满屏。此前一直锁在 0。
           S.phase = "open";
-          // 布已经飞出屏幕（eff=1 → .is-gone），这时候瞬移进长廊是隐形的
-          if (hooks.openArchive) hooks.openArchive(true);
+          // 长廊早就在 dive 0.45 那次跳好了；这里只把 --gate 交还给滚动
           if (hooks.setCoverLocked) hooks.setCoverLocked(false);
         }
       }
@@ -649,6 +691,35 @@
     // 再把 --gate 算进来，揭开那一帧 gate 就是 1，布会当场飞到底 —— 又成了「太快」。
     var eff = S.phase === "cut" || S.phase === "open" ? easeInOut(S.cut) : S.cut;
     gateEl.style.setProperty("--cut", eff.toFixed(4));
+    // 一刀是两件事：先劈开（裂缝里露出切面），再下潜（镜头钻进裂口）。
+    // 劈开用 easeInOut —— 两头慢中间快，像被掰开的；下潜是纯加速，越到后面越快。
+    var p = S.cut;
+    S.split = easeInOut(clamp((p - 0.02) / 0.44, 0, 1));
+    var splitB = easeInOut(clamp((p - 0.055) / 0.44, 0, 1));   // 另一半晚 30ms 起步
+    var dz = clamp((p - 0.28) / 0.66, 0, 1);
+    S.dive = clamp(dz * dz * (1.15 - 0.15 * dz), 0, 1);
+    // 缝只要开到「看得见那道暗」就够：再大两半就飞出画面了，那里还不到下潜的时候。
+    // 0.12 是从上一版的 0.17 收窄来的 —— 没有剖面要露，太宽就成了沟。
+    var gapMax = Math.min((S.cakeSize || 360) * 0.12, 64);
+    gateEl.style.setProperty("--split", S.split.toFixed(4));
+    gateEl.style.setProperty("--gap", (S.split * gapMax).toFixed(1));
+    gateEl.style.setProperty("--gapb", (splitB * gapMax).toFixed(1));
+    gateEl.style.setProperty("--dive", S.dive.toFixed(4));
+    // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
+    // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
+    var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
+    gateEl.style.setProperty("--hole", (hz * hz).toFixed(4));
+    gateEl.classList.toggle("is-diving", S.dive > 0.002);
+    gateEl.style.setProperty("--fade", clamp((S.dive - 0.5) / 0.5, 0, 1).toFixed(4));
+    // 那道亮缝是一瞬间的事：它只负责「刀切进来」这一下
+    if (seamEl) seamEl.style.opacity = clamp(1 - S.cut * 7, 0, 1).toFixed(2);
+    // 洞里必须有海。归档案在页面下面，不跳到那儿，洞口就只是一块空背景 ——
+    // 所以在洞还小的时候（dive 0.45）就把长廊瞬移到位，剩下半个下潜
+    // 是隔着越来越大的洞看真实的海。此时 --gate 还锁着 0，整层不会提前淡出。
+    if (S.dive > 0.45 && !S.archiveJump && !NOJUMP) {
+      S.archiveJump = true;
+      if (hooks.openArchive) hooks.openArchive(true);
+    }
     // 门开完了、--gate 也爬上来了，这时候封面那套字才允许回来（否则会闪一下）
     if (S.phase === "open" && !S.finished && g > 0.6) {
       S.finished = true;
@@ -680,7 +751,7 @@
     measure();
     buildChart();
     buildCake();
-    buildHalves();
+    buildCakeHalves();
     S.tip.x = S.geom.cx;
     S.tip.y = window.innerHeight + 150;
     S.bearing = bearingTo(S.tip.x, S.tip.y);
@@ -716,6 +787,11 @@
           " body=[" + document.body.className + "]" +
           " sawGate=" + S.sawGate + " opened=" + S.opened +
           " eff=" + (gateEl.style.getPropertyValue("--cut") || "-") +
+          " split=" + (S.split || 0).toFixed(2) + " dive=" + (S.dive || 0).toFixed(2) +
+          " halves=" + gateEl.querySelectorAll(".cake--half").length +
+          " clip=" + [].map.call(gateEl.querySelectorAll(".cake--half"), function (h) {
+            return (h.style.clipPath || "-").length;
+          }).join("/") +
           " scrollY=" + Math.round(window.scrollY) +
           " stack=" + (function () {
             var list = document.elementsFromPoint(window.innerWidth * 0.5, window.innerHeight * 0.3) || [];

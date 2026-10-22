@@ -3024,7 +3024,7 @@ body.is-cake-cursor .cursor {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 62%, rgba(255, 224, 172, 0.34) 0%, rgba(255, 212, 156, 0.16) 28%, rgba(255, 205, 150, 0.05) 48%, rgba(255, 200, 145, 0) 68%);
+    radial-gradient(circle at 50% 50%, rgba(255, 224, 172, 0.34) 0%, rgba(255, 212, 156, 0.16) 28%, rgba(255, 205, 150, 0.05) 48%, rgba(255, 200, 145, 0) 68%);
   mix-blend-mode: screen;
 }
 
@@ -3033,7 +3033,7 @@ body.is-cake-cursor .cursor {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 62%, rgba(25, 27, 24, 0) 40%, rgba(25, 27, 24, 0.18) 66%, rgba(25, 27, 24, 0.5) 98%),
+    radial-gradient(circle at 50% 50%, rgba(25, 27, 24, 0) 40%, rgba(25, 27, 24, 0.18) 66%, rgba(25, 27, 24, 0.5) 98%),
     linear-gradient(180deg, rgba(25, 27, 24, 0.12) 0%, rgba(25, 27, 24, 0) 20%, rgba(25, 27, 24, 0) 76%, rgba(25, 27, 24, 0.16) 100%);
 }
 
@@ -3044,50 +3044,28 @@ body.is-cake-cursor .cursor {
   inset: 0;
   width: 100%;
   height: 100%;
-  color: #554632;
+  color: #3E3425;
   opacity: 1;
-  -webkit-mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
-  mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
-}
-
-/* ── 两半：互补多边形，铰链就在切口线上 ───────────────────────────────── */
-.cloth-half {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  transform-origin: 50% 62%;
-  will-change: transform;
-  backface-visibility: hidden;
-}
-
-.cloth-half--a {
-  transform:
-    translate3d(calc(var(--cnx) * 22vw * var(--cut)), calc(var(--cny) * 22vw * var(--cut)), 0)
-    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * 15deg));
-}
-
-.cloth-half--b {
-  transform:
-    translate3d(calc(var(--cnx) * -22vw * var(--cut)), calc(var(--cny) * -22vw * var(--cut)), 0)
-    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * -15deg));
+  -webkit-mask-image: radial-gradient(closest-side at 50% 50%, #000 0 52%, rgba(0, 0, 0, 0.62) 76%, rgba(0, 0, 0, 0.14) 94%, transparent 100%);
+  mask-image: radial-gradient(closest-side at 50% 50%, #000 0 52%, rgba(0, 0, 0, 0.62) 76%, rgba(0, 0, 0, 0.14) 94%, transparent 100%);
 }
 
 /* ── 蛋糕（俯视，全场中心） ─────────────────────────────────────────────── */
 .cake {
   position: absolute;
   left: 50%;
-  top: 62%;
-  width: clamp(300px, 31vw, 440px);
-  height: clamp(300px, 31vw, 440px);
+  top: 50%;
+  width: var(--cs);
+  height: var(--cs);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
 .cake-halo {
   position: absolute;
-  inset: -30%;
+  inset: -26%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 219, 160, 0.26) 0%, rgba(255, 206, 142, 0.12) 44%, rgba(255, 200, 140, 0) 72%);
+  background: radial-gradient(circle, rgba(255, 219, 160, 0.18) 0%, rgba(255, 206, 142, 0.08) 44%, rgba(255, 200, 140, 0) 72%);
   mix-blend-mode: screen;
 }
 
@@ -3271,10 +3249,8 @@ body.is-cake-cursor .cursor {
 
 /* ── 小屏：竖屏没有鼠标，刀收到 0.72，蛋糕收到 62vw ─────────────────────── */
 @media (max-width: 680px) {
-  .cake {
-    width: 56vw;
-    height: 56vw;
-    margin: -28vw 0 0 -28vw;
+  .cake-gate {
+    --cs: 56vw;
   }
 
   .cake-number {
@@ -3287,8 +3263,8 @@ body.is-cake-cursor .cursor {
   }
 
   .cloth-chart {
-    -webkit-mask-image: radial-gradient(closest-side at 50% 62%, #000 0 34%, transparent 78%);
-    mask-image: radial-gradient(closest-side at 50% 62%, #000 0 34%, transparent 78%);
+    -webkit-mask-image: radial-gradient(closest-side at 50% 50%, #000 0 34%, transparent 78%);
+    mask-image: radial-gradient(closest-side at 50% 50%, #000 0 34%, transparent 78%);
   }
 }
 
@@ -3297,9 +3273,9 @@ body.is-cake-cursor .cursor {
     transition: opacity 0.32s linear;
   }
 
-  .cloth-half--a,
-  .cloth-half--b {
+  .cake-stage {
     transform: none;
+    filter: none;
   }
 }
 
@@ -3404,7 +3380,7 @@ body.is-cake-cursor .cursor {
 /* 烛光别把纹理洗白：光还是那么暖，但不再盖住布 */
 .cloth-light {
   background:
-    radial-gradient(circle at 50% 62%, rgba(255, 224, 172, 0.24) 0%, rgba(255, 212, 156, 0.12) 28%, rgba(255, 205, 150, 0.04) 48%, rgba(255, 200, 145, 0) 68%);
+    radial-gradient(circle at 50% 50%, rgba(255, 224, 172, 0.24) 0%, rgba(255, 212, 156, 0.12) 28%, rgba(255, 205, 150, 0.04) 48%, rgba(255, 200, 145, 0) 68%);
 }
 
 /* ── 开幕只留图画（2026-10-22 用户拍板）────────────────────────────────
@@ -3414,4 +3390,195 @@ body.is-cake-cursor .cursor {
    所以没有提示也不会找不到入口；触屏照样可以划。                      */
 .cover-content {
   display: none;
+}
+
+/* ── 镜头：切蛋糕 → 钻进裂口（2026-10-22 用户拍板）─────────────────────────
+   撕幕布退场了：撕出来那两条数学直边正是被挑出的瑕疵，而且布一撕开，四周
+   已经露出画廊，「从里面出来」的惊喜就没了。现在只发生一件事 ——
+   刀切开蛋糕，两半向外滑开（裂缝里是切面），镜头随即钻进那道裂口，
+   台布被这个洞吃掉：洞的外面还是布，洞里是活着的海。
+   JS 每帧把下面这几个量写上来：
+     --split 劈开进度 / --gap 半块位移(px) / --gapb 另一半（错 30ms）
+     --dive 下潜进度 / --hole 洞口半径 / --fade 近景淡出 / --cda 切口角度 */
+.cake-gate {
+  --split: 0;
+  --gap: 0;
+  --gapb: 0;
+  --dive: 0;
+  --hole: 0;
+  --fade: 0;
+  --cda: 0deg;
+  --cs: clamp(320px, 34vw, 500px);
+}
+
+/* 洞开在整层上，不是开在布上：洞一合上，台布、蛋糕、暗角一起消失，
+   所以不需要一层淡出来收尾（淡出总会留下一帧半透明的东西）。
+   is-diving 才挂 mask：--hole 为 0 时三个 stop 全在 0，那种退化的
+   radial-gradient 在 Chrome 里会栅格化出从圆心张开的楔形残渣。 */
+.cake-gate.is-diving {
+  -webkit-mask-image: radial-gradient(circle at 50% 50%,
+    rgba(0, 0, 0, 0) calc(var(--hole) * 118vmax),
+    rgba(0, 0, 0, 0.55) calc(var(--hole) * 121vmax),
+    #000 calc(var(--hole) * 129vmax));
+  mask-image: radial-gradient(circle at 50% 50%,
+    rgba(0, 0, 0, 0) calc(var(--hole) * 118vmax),
+    rgba(0, 0, 0, 0.55) calc(var(--hole) * 121vmax),
+    #000 calc(var(--hole) * 129vmax));
+}
+
+/* 蛋糕台：下潜时整体放大，近景在最后一段失焦 ——
+   「飞进去」靠的不是位移，是近的东西先糊、先淡。 */
+.cake-stage {
+  position: absolute;
+  inset: 0;
+  transform: scale(calc(1 + var(--dive) * 2.25));
+  transform-origin: 50% 50%;
+  filter: blur(calc(var(--fade) * 2.6px));
+  opacity: calc(1 - var(--fade) * 0.92);
+  will-change: transform, opacity;
+}
+
+.cake.is-source {
+  visibility: hidden;
+}
+
+/* 光晕只属于整块蛋糕。跟着克隆进两半之后，两半一分开，各自那份
+   screen 混合的光晕就在缝里拼出一条淡色带（截图里那道白楔子）。 */
+.cake--half .cake-halo {
+  display: none;
+}
+
+/* 两半沿法线滑开。B 比 A 晚 30ms、转得再歪一点 ——
+   两半同速同相就是上一版第二个瑕疵，布也好蛋糕也好，都不会那么齐。 */
+.cake--half {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.cake--a {
+  transform:
+    translate(-50%, -50%)
+    translate3d(calc(var(--cnx) * (var(--gap) + var(--dive) * 220) * 1px), calc(var(--cny) * (var(--gap) + var(--dive) * 220) * 1px), 0)
+    rotate(calc(var(--split) * 1.3deg));
+}
+
+.cake--b {
+  transform:
+    translate(-50%, -50%)
+    translate3d(calc(var(--cnx) * (var(--gapb) + var(--dive) * 220) * -1px), calc(var(--cny) * (var(--gapb) + var(--dive) * 220) * -1px), 0)
+    rotate(calc(var(--split) * -1.8deg));
+}
+
+/* 裂缝：两半之间那一道暗。里面什么都没有 —— 没有奶油、没有胚层、没有果酱。
+   2026-10-22 用户砍掉了那五层剖面（原话「蛋糕被切开里面不需要搞什么乱七八糟填充物」）：
+   切开一块蛋糕，从斜上方看见的是一道有深度的暗缝，不是一张蛋糕广告的剖面图。
+   这一层夹在台布和两个半块之间 —— 半块压它，它压布。 */
+.cut-gap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--cs);
+  height: var(--cs);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  /* mask 收到「蛋糕 + 盘子」那团轮廓里（蛋糕体 rx 34%，盘沿 41%）：不收的话
+     一条直带会从蛋糕侧面伸出去，横在布上。 */
+  -webkit-mask-image: radial-gradient(ellipse 41% 26% at 50% 48%, #000 0 52%, rgba(0, 0, 0, 0.6) 82%, rgba(0, 0, 0, 0) 100%);
+  mask-image: radial-gradient(ellipse 41% 26% at 50% 48%, #000 0 52%, rgba(0, 0, 0, 0.6) 82%, rgba(0, 0, 0, 0) 100%);
+  opacity: min(1, calc(var(--split) * 14));
+}
+
+/* 一条只有阴影的缝：长轴躺在切口方向上（rotate(--cda)），
+   厚度 = 两半让开的距离（两次 --gap + 下潜多推的 220px 各一次）。
+   两头收掉、中间最深 —— 缝的深浅是光进不去，不是里面塞了东西。
+   两条边那圈羽化是被半块压住的（.cut-gap 在它们下面），只负责让接缝不生硬。 */
+.cut-gap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: calc((max(var(--gap), var(--gapb)) + var(--dive) * 220) * 2px + 10px);
+  transform: translateY(-50%) rotate(var(--cda));
+  background: linear-gradient(90deg,
+    rgba(32, 24, 16, 0) 0%,
+    rgba(32, 24, 16, 0.3) 6%,
+    rgba(30, 23, 15, 0.58) 16%,
+    rgba(26, 20, 13, 0.74) 34%,
+    rgba(22, 17, 11, 0.8) 50%,
+    rgba(26, 20, 13, 0.74) 66%,
+    rgba(30, 23, 15, 0.58) 84%,
+    rgba(32, 24, 16, 0.3) 94%,
+    rgba(32, 24, 16, 0) 100%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000 20%, #000 80%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000 20%, #000 80%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* 一刀的力：抖 180ms。用独立的 translate 属性，不抢子元素各自的 transform。 */
+@keyframes cakeImpact {
+  0%, 100% { translate: 0 0; }
+  16% { translate: -2.5px 1.5px; }
+  32% { translate: 2.5px -1.5px; }
+  50% { translate: -1.5px 1px; }
+  68% { translate: 1.5px -1px; }
+  84% { translate: -0.8px 0; }
+}
+
+.cake-gate.is-impact {
+  animation: cakeImpact 0.18s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes candleJolt {
+  0%, 100% { translate: 0 0; }
+  30% { translate: 0 -2.5px; }
+  62% { translate: 0 1.5px; }
+}
+
+.cake-gate.is-impact .candle {
+  animation: candleJolt 0.18s ease-out;
+}
+
+/* 下潜时台布跟着放大一点（纹理往外走，画面才有推进感），
+   再加 7% 对比把灰雾压掉 —— 整层压暗只会得到一张灰卡纸，拉对比才提得起明暗 */
+.cloth {
+  transform: scale(calc(1 + var(--dive) * 0.5));
+  transform-origin: 50% 50%;
+  filter: contrast(1.07) saturate(1.05);
+}
+
+/* ── 明暗对比（2026-10-22 用户要求）───────────────────────────────────────
+   布要看得出来是一张有起伏的布：亮的更亮（烛光那一圈），暗的更暗（四角、
+   桌沿、褶子的谷底），中间那层灰雾压掉。对比靠「明暗贴近」而不是整层压暗 ——
+   整层乘一遍深色只会得到一张灰卡纸（前两轮踩过）。                      */
+.cloth-vignette {
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(28, 25, 18, 0) 36%,
+      rgba(28, 25, 18, 0.08) 60%,
+      rgba(24, 21, 15, 0.34) 82%,
+      rgba(20, 18, 13, 0.66) 100%),
+    linear-gradient(180deg,
+      rgba(22, 20, 14, 0.26) 0%,
+      rgba(22, 20, 14, 0) 15%,
+      rgba(22, 20, 14, 0) 76%,
+      rgba(18, 16, 11, 0.3) 100%);
+}
+
+/* 烛光：范围收紧、中心更亮。范围一宽就把织纹洗白了。 */
+.cloth-light {
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(255, 236, 194, 0.46) 0%,
+      rgba(255, 221, 170, 0.22) 18%,
+      rgba(255, 208, 154, 0.075) 34%,
+      rgba(255, 200, 145, 0) 52%);
+}
+
+.cloth-weave {
+  opacity: 0.72;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(96, 76, 48, 0.22) 0 1px, rgba(255, 253, 244, 0.62) 1px 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(96, 76, 48, 0.19) 0 1px, rgba(255, 253, 244, 0.56) 1px 2px, transparent 2px 4px),
+    repeating-linear-gradient(45deg, rgba(96, 76, 48, 0.07) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(78deg, rgba(88, 70, 46, 0.06) 0 1px, transparent 1px 7px);
 }
