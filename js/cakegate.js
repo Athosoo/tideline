@@ -23,7 +23,7 @@
   var FLY_A = 0.28;             // 加速段结束
   var FLY_B = 0.74;             // 匀速段结束
   var FLY_V = 2 / (1 + (FLY_B - FLY_A));   // 峰值 1.3699：由「三段位移和 = 1」解出
-  var CUT = 0.9;
+  var CUT = 0.72;
   var STITCH = 0.7;             // 回封面缝合 700ms
 
   var clothWrap = document.getElementById("clothWrap");
@@ -31,6 +31,9 @@
   var chartStars = document.getElementById("chartStars");
   var scallop = document.getElementById("scallop");
   var beads = document.getElementById("beads");
+  var swirls = document.getElementById("swirls");
+  var drips = document.getElementById("drips");
+  var sideGrain = document.getElementById("sideGrain");
   var candles = document.getElementById("candles");
   var knife = document.getElementById("knife");
   var bearingEl = document.getElementById("bearing");
@@ -228,33 +231,110 @@
     }));
   }
 
-  /* ---------- 蛋糕：十九个瓣、十九颗糖珠、十九支蜡烛 ---------- */
+  /* ---------- 蛋糕：俯视改成 3/4 —— 盘子有厚度，蛋糕有侧壁，奶油会流 ----------
+     顶面是椭圆（cx 240 / cy 190 / rx 164 / ry 60），所有环、瓣、蜡烛都按
+     K = ry/rx 压扁，才「躺」在这张斜着的桌面上，而不是浮在正圆里。 */
+  var TOP = { cx: 240, cy: 190, rx: 164, ry: 60 };
+  var K = TOP.ry / TOP.rx;
+
+  function ringPoint(r, a, extra) {
+    return svgEl("circle", extra || {
+      cx: (TOP.cx + Math.cos(a) * r).toFixed(1),
+      cy: (TOP.cy + Math.sin(a) * r * K).toFixed(1),
+      r: 12,
+    });
+  }
+
   function buildCake() {
+    // 十九瓣奶油花边，压着顶面的边
+    // 画成「一条波浪线 + 粗描边」：描边本身就是挤出来的那条奶油，
+    // 比十九个圆点更像裱花，也不会在侧壁上浮成一串珍珠。
+    var d = "";
     for (var i = 0; i < 19; i++) {
-      var a = (i / 19) * TAU - Math.PI / 2;
-      scallop.appendChild(svgEl("circle", {
-        cx: (240 + Math.cos(a) * 162).toFixed(1),
-        cy: (240 + Math.sin(a) * 162).toFixed(1),
-        r: 13,
-      }));
-      beads.appendChild(svgEl("circle", {
-        cx: (240 + Math.cos(a) * 124).toFixed(1),
-        cy: (240 + Math.sin(a) * 124).toFixed(1),
-        r: 2.6,
+      var a0 = (i / 19) * TAU - Math.PI / 2;
+      var a1 = ((i + 1) / 19) * TAU - Math.PI / 2;
+      var am = (a0 + a1) / 2;
+      var p0 = { x: TOP.cx + Math.cos(a0) * 156, y: TOP.cy + Math.sin(a0) * 156 * K };
+      var pm = { x: TOP.cx + Math.cos(am) * 172, y: TOP.cy + Math.sin(am) * 172 * K };
+      var p1 = { x: TOP.cx + Math.cos(a1) * 156, y: TOP.cy + Math.sin(a1) * 156 * K };
+      d += (i === 0 ? "M" + p0.x.toFixed(1) + " " + p0.y.toFixed(1) : "") +
+        " Q" + pm.x.toFixed(1) + " " + pm.y.toFixed(1) +
+        " " + p1.x.toFixed(1) + " " + p1.y.toFixed(1);
+    }
+    scallop.appendChild(svgEl("path", { d: d + " Z" }));
+
+    // 糖珠：小一号，是点缀不是主角
+    for (var b = 0; b < 19; b++) {
+      var ab = (b / 19) * TAU - Math.PI / 2;
+      beads.appendChild(ringPoint(112, ab, {
+        cx: (TOP.cx + Math.cos(ab) * 108).toFixed(1),
+        cy: (TOP.cy + Math.sin(ab) * 108 * K).toFixed(1),
+        r: 2.2,
       }));
     }
 
-    var rnd = mulberry32(5);
+    // 顶面抹刀留下的同心圈
+    [34, 62, 90, 118].forEach(function (r) {
+      swirls.appendChild(svgEl("ellipse", {
+        cx: TOP.cx, cy: TOP.cy,
+        rx: r, ry: (r * K).toFixed(1),
+      }));
+    });
+
+    // 奶油从顶边流下来：前缘一段才看得见，长短不齐才像真的在流
+    var rnd = mulberry32(91);
+    for (var d = 0; d < 15; d++) {
+      var t = Math.PI * (0.08 + (d / 14) * 0.84);
+      var px = TOP.cx + Math.cos(t) * (TOP.rx - 2);
+      var py = TOP.cy + Math.sin(t) * (TOP.ry - 2);
+      var w = 9 + rnd() * 6;
+      var h = 7 + rnd() * 14 + Math.sin(t) * 5;
+      drips.appendChild(svgEl("rect", {
+        x: (px - w / 2).toFixed(1),
+        y: (py - 5).toFixed(1),
+        width: w.toFixed(1),
+        height: h.toFixed(1),
+        rx: (w / 2).toFixed(1),
+      }));
+    }
+
+    // 侧壁的抹面竖纹：有它，圆柱才不是一块平的色
+    for (var g = 0; g < 34; g++) {
+      var gx = 84 + rnd() * 312;
+      var gy = 196 + rnd() * 24;
+      var gl = 16 + rnd() * 46;
+      sideGrain.appendChild(svgEl("path", {
+        d: "M" + gx.toFixed(1) + " " + gy.toFixed(1) + "v" + gl.toFixed(1),
+        stroke: "#C9AE84",
+        "stroke-width": 0.7,
+        opacity: (0.12 + rnd() * 0.22).toFixed(2),
+      }));
+    }
+
+    // 十九支蜡烛，站在顶面这一圈上；后面的略小、先画，前面的略大、后画
+    var rc = mulberry32(5);
+    var ring = [];
     for (var c = 0; c < 19; c++) {
       var ang = (c / 19) * TAU - Math.PI / 2;
+      ring.push({
+        x: TOP.cx + Math.cos(ang) * 104,
+        y: TOP.cy + Math.sin(ang) * 104 * K,
+        dur: (1.7 + rc() * 1.2).toFixed(2),
+        delay: (-rc() * 2.6).toFixed(2),
+      });
+    }
+    ring.sort(function (p, q) { return p.y - q.y; });
+    ring.forEach(function (p) {
       var cd = document.createElement("span");
       cd.className = "candle";
-      cd.style.left = (50 + Math.cos(ang) * 31.25).toFixed(2) + "%";
-      cd.style.top = (50 + Math.sin(ang) * 31.25).toFixed(2) + "%";
-      cd.style.setProperty("--dur", (1.7 + rnd() * 1.2).toFixed(2) + "s");
-      cd.style.setProperty("--delay", (-rnd() * 2.6).toFixed(2) + "s");
+      cd.style.left = ((p.x / 480) * 100).toFixed(2) + "%";
+      cd.style.top = ((p.y / 480) * 100).toFixed(2) + "%";
+      cd.style.setProperty("--dur", p.dur + "s");
+      cd.style.setProperty("--delay", p.delay + "s");
+      // 靠后的蜡烛缩一点，纵深感就是这么来的
+      cd.style.setProperty("--s", (0.82 + ((p.y - TOP.cy + 60) / 120) * 0.18).toFixed(3));
       candles.appendChild(cd);
-    }
+    });
   }
 
   /* ---------- 两半：互补多边形，切口带撕的噪声 ---------- */
@@ -408,18 +488,23 @@
     }
     spawnCrumbs();
     document.body.classList.remove("is-cake-cursor");
+    // 布一裂开，布上的字和那道框就得跟着走：它们印在布上，不是浮在海面上。
+    document.body.classList.add("is-cutting");
     // 切口先亮一会儿，再让整张幕布跟着开 —— 一刀是一件事，不是两件
+    // 立刻把长廊就位（instant），而不是边切边滚：切开时长廊必须已经在那儿，
+    // 否则布裂开了，观众看到的是一帧还在滑动的半成品。
     setTimeout(function () {
       if (hooks.openArchive && !S.opened) {
         S.opened = true;
-        hooks.openArchive();
+        hooks.openArchive(true);
       }
-    }, 240);
-    setTimeout(function () { S.phase = "open"; }, 640);
+    }, 110);
+    setTimeout(function () { S.phase = "open"; }, 520);
   }
 
   /* ---------- 缝合：回封面时台布从切口缝回去 ---------- */
   function stitch() {
+    document.body.classList.remove("is-cutting");
     S.cutTarget = 0;
     S.opened = false;
     gateEl.classList.remove("is-cut");
@@ -483,6 +568,8 @@
 
   /* ---------- 主循环 ---------- */
   function update(dt, gate) {
+    S.__ticks = (S.__ticks || 0) + 1;
+    S.__lastGate = gate;
     if (!S.geom.cx) measure();
     var reduced = hooks.reduced && hooks.reduced.matches;
 
@@ -516,6 +603,9 @@
     if (g > eff) eff = g;
     gateEl.style.setProperty("--cut", eff.toFixed(4));
     gateEl.classList.toggle("is-out", eff > 0.55);
+    // 切开到位了就把整层从绘制里撤掉：布已经飞出去，留着它等于在长廊上
+    // 压着一层看不见却还在屏幕上的东西 —— 那正是「切完还剩一帧」的来历。
+    gateEl.classList.toggle("is-gone", eff > 0.995 && S.phase === "open");
     return eff;
   }
 
@@ -553,16 +643,41 @@
       S.bearing = bearingTo(t.x, t.y);
       S.phase = "aim";
       placeKnife();
+      // 调试：把关键状态写进 DOM，--dump-dom 才看得到（沙箱里没有 CDP eval）
+      var DBG = params.get("dbg") === "1";
+      var dbg = document.createElement("div");
+      dbg.id = "cakeDebug";
+      dbg.style.cssText = "position:fixed;left:0;top:0;z-index:9999;font:13px/1.35 monospace;color:#000;background:rgba(255,255,255,.92);padding:4px 6px;max-width:100vw;white-space:pre-wrap";
+      if (!DBG) dbg.style.display = "none";
+      document.body.appendChild(dbg);
+      if (DBG) setInterval(function () {
+        var i = document.getElementById("intro");
+        var cloth = gateEl.querySelector(".cloth");
+        dbg.textContent = "phase=" + S.phase + " cut=" + S.cut.toFixed(2) +
+          " intro=[" + (document.getElementById("intro") || {}).className + "]" +
+          " gate=[" + gateEl.className + "]" +
+          " scrollY=" + Math.round(window.scrollY) +
+          " stack=" + (function () {
+            var list = document.elementsFromPoint(window.innerWidth * 0.5, window.innerHeight * 0.3) || [];
+            return list.slice(0, 7).map(function (e) {
+              var cs = getComputedStyle(e);
+              return e.tagName + "." + (e.className || "").toString().split(" ")[0] +
+                "{" + cs.backgroundColor + "|op" + cs.opacity + "|vis" + cs.visibility + "}";
+            }).join(" > ");
+          })();
+      }, 120);
+
+      if (FREEZE === "archive") {
+        // A/B 对照：完全不参与开屏，只像「切完」那样瞬移进长廊
+        gateEl.remove();
+        document.body.classList.add("is-cutting");
+        setTimeout(function () { if (hooks.openArchive) hooks.openArchive(true); }, 120);
+        return;
+      }
+
       if (FREEZE === "cut") {
-        setTimeout(function () {
-          S.cutAngle = S.bearing;
-          applyCutGeometry(S.cutAngle);
-          gateEl.classList.add("is-cut");
-          S.cut = 1;
-          S.cutTarget = 1;
-          gateEl.style.setProperty("--cut", "1");
-          document.body.classList.remove("is-cake-cursor");
-        }, 400);
+        // 调试截图必须走真路径：绕过去等于没验证那一刀
+        setTimeout(function () { cut(); }, 400);
       }
     }
   }

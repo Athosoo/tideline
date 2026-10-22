@@ -596,3 +596,38 @@ Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，并在桌面上弹
 **风险（如实记）**：仍然没有截图。删的是视觉主体，配色/密度/遮挡全靠推算；
 第一次真机（浏览器）打开时最该看的三件事：① 台布是否铺满、有没有露出底下的纸色；
 ② 小标题 + 蛋糕 + 页脚三者在 1280×800 与 390×844 下是否互不压；③ 切开后露出的「活海」是否真的接得上。
+
+### 7.18 第二轮返工（用户 m00366 三条反馈 → 已改，待真机确认）
+
+用户原话（m00366）：**「一：切开后还是有一帧画面，不是直接进入长廊；二：蛋糕不像蛋糕，桌布不像表布，看不出纹理，没褶皱和纹理；三：背景里面可以搞出桌子的边缘」**
+
+**第一条「切完还剩一帧」的真凶有三个，都修了**
+
+| 残影 | 根因 | 修法 |
+|---|---|---|
+| 布裂开时，布上的字还浮在海面上 | `.cover-content` 的 `opacity` 由 `--gate` 驱动，而 `--gate` 要 0.4s 才爬到 1 | 切的那一下给 `body` 加 `.is-cutting`，`css/styles.css:2833` 起把 `.cover-content` / `.intro-frame` / `.intro-vignette` 一并 `opacity: 0 !important`；`stitch()` 移除这个类 |
+| 滚进长廊那一跳里，有一张明信片被放大到铺满屏 | `openArchive(true)` 瞬时跳滚动，但相机 `state.camX` 还是阻尼的，要飞一帧 | `js/app.js:1396` 的 `direct` 加上 `state.snapCamera`；`openArchive()` 在 `instant` 时置位，`updateScrollState` 用掉即清 —— 只生效一帧，正好是那一下 |
+| 布飞走了，整层还留在绘制里压着长廊 | 只知道 `--cut: 1`，图层没撤 | `js/cakegate.js` 的 `update()` 里 `is-gone`（`eff > 0.995 && phase === 'open'`），CSS `.cake-gate.is-gone { visibility: hidden }` |
+
+**第二条：蛋糕与台布重做**
+
+- 蛋糕从「正俯视的平面圆」改成**三分之四视角的圆柱**（`index.html:270-292`）：盘沿 `ellipse cy=283 rx=196 ry=66` → 侧壁 `path M76 190 v78 a164 60 0 0 0 328 0 v-78 z` → 顶面 `ellipse cy=190 rx=164 ry=60`。有厚度才像蛋糕。
+- 裱花改成**一条挤出来的波浪带**（`path` + `stroke-width: 15` + `stroke-linejoin: round`，19 个 Q 弧），原来是 19 个圆点，像一串珍珠不像奶油；糖珠降到 `r=2.2`。
+- 奶油从顶边**流下来压住侧壁**（`#drips`），侧壁加抹面竖纹 `#sideGrain`。
+- 「19」原来写在顶面中央，必然撞上蜡烛蜡身 —— 挪到**侧壁正中**（`index.html:287-290`，`y=302`、字号 52px、`scale(1 0.9)` 跟进圆柱弧度）。顶面留给十九支蜡烛。
+- 蜡烛：左暗右亮的蜡身 + 顶端 3px 深色烛芯（`background-image` 两层）+ 呼吸式火苗（`--dur` / `--delay` 打散同步）。
+- 台布：3px 经纬织纹提到 `opacity: .52`；三道褶子改成「宽雾 + 一道硬芯」；下沿加了**真实桌沿**（`.table-edge`，木色渐变 + 94° 细木纹 + 上沿高光 + 台布投影），桌面从此有边。
+
+**第三条：桌子边缘** —— 见上表最后一行，`.table-edge` 抬到封面上文字之下、内框线之上，`height: 18vh / min-height: 104px`。
+
+**验的手段（这是这轮最大的收获）**：无头 Chrome 在这个沙箱里**能出图**了，关键是这三个 flag 一起给：
+`--headless=new --disable-gpu --no-sandbox --disable-breakpad --disable-crash-reporter --hide-scrollbars --run-all-compositor-stages-before-draw --virtual-time-budget=3000 --user-data-dir=<每次新建> --screenshot=<png>`。
+少了 `--run-all-compositor-stages-before-draw` 的话 **rAF 几乎不跑**，动画类的相位（切开、飞刀）截到的全是「一帧都没推进」的假图 —— 这一点坑了很久。
+`?cake=aim` 可以稳定出图（静态相位）；`?cake=cut` 在 `--virtual-time-budget` 拉到 20000 以上才能跑到 `cut=1`，但长廊自身的摄像机会在这段时间里漂移，所以**长廊落点的最终观感仍只能真机看**。
+另加 `?cake=archive`（完全跳过开屏、只做瞬移进长廊）当 A/B 对照，`&dbg=1` 会在左上角把 `phase / cut / intro.class / gate.class / scrollY / elementsFromPoint` 全打出来 —— 没有 CDP 也能读出状态。
+
+**仍未确认（要用户看图定）**
+
+1. 切开那一下的落点观感 —— 无头浏览器判不了，需真机。
+2. 封面文案仍有一处不齐：`SCROLL TO OPEN` 配「滚动开启 · 切一刀」，`lede` 里英文写的是 `Push the ride aside and step in.`（`ride`？还是 `tide`？）—— 等用户定。
+3. 台布织纹与褶子在**亮区**里几乎看不见（径向 mask 只放过光里那一圈），要不要再压暗一档。

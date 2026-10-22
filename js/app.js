@@ -1393,7 +1393,10 @@ function updateScrollState(dt) {
   }
   state.lastScrollY = window.scrollY;
 
-  const direct = REDUCED_MOTION.matches;
+  // 切开那一刀是「啪」一下就到长廊的：相机必须同一帧就位，
+  // 否则滚动瞬间会有一张放大到铺满屏的明信片飞过（那正是「切完还剩一帧」）。
+  const direct = REDUCED_MOTION.matches || state.snapCamera === true;
+  if (state.snapCamera) state.snapCamera = false;
   const start = Math.max(1, state.introPx);
   const gateRaw = clamp((window.scrollY - start * 0.08) / (start * 0.92));
   const gateTarget = smootherstep(gateRaw);
@@ -1559,12 +1562,14 @@ function updateCursor(dt) {
   dom.cursor.style.transform = `translate3d(${state.pointer.smoothX.toFixed(2)}px, ${state.pointer.smoothY.toFixed(2)}px, 0)`;
 }
 
-function openArchive() {
+function openArchive(instant) {
   if (state.focusOpen) return;
+  // 瞬移进长廊时让相机同帧对齐（见 updateScrollState 里的 direct）
+  if (instant) state.snapCamera = true;
   const target = state.introPx * 1.02
   window.scrollTo({
     top: target,
-    behavior: REDUCED_MOTION.matches ? "auto" : "smooth",
+    behavior: instant || REDUCED_MOTION.matches ? "auto" : "smooth",
   });
 }
 

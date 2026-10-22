@@ -140,8 +140,9 @@ img {
   z-index: 50;
   overflow: hidden;
   color: var(--ink);
-  /* 门没了，这一层就是封面的底：台布万一没加载出来，也是纸色而不是透明 */
-  background: var(--paper);
+  /* 必须透明：台布裂开的那道缝要直接露出后面活着的长廊。
+     台布自己带底色（.cloth 的渐变），所以这里不能垫纸色 —— 垫了就是「切完还剩一帧白」。 */
+  background: transparent;
   touch-action: pan-y;
 }
 
@@ -2808,11 +2809,39 @@ html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
   pointer-events: none;
   perspective: 1400px;
   color: #6b5f4c;
-  transition: opacity 0.45s linear;
+  /* 切开后不留尾帧：布一旦裂开就迅速退场，长廊随即满屏 */
+  transition: opacity 0.16s linear;
 }
 
 .cake-gate.is-out {
   opacity: 0;
+}
+
+/* 这一刀落下，刀就完成了它的事：不留在揭开的画面上 */
+.cake-gate.is-cut .knife,
+.cake-gate.is-cut .knife-bearing {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.cake-gate.is-cut .cut-surface {
+  pointer-events: none;
+}
+
+/* 布飞走了就不该再占着屏幕：整层撤出绘制 */
+.cake-gate.is-gone {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 切开的那一下：布上的字、那道内框、滚动提示，都跟着布一起走。
+   它们印在布上，不是浮在长廊上 —— 这是「切完还剩一帧」的真凶。 */
+body.is-cutting .cover-content,
+body.is-cutting .intro-frame,
+body.is-cutting .intro-vignette {
+  opacity: 0 !important;
+  transition: opacity 0.1s linear;
+  pointer-events: none;
 }
 
 /* 刀在手上时，站点那颗自绘光标让位给刀 */
@@ -2826,8 +2855,8 @@ body.is-cake-cursor .cursor {
   inset: 0;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 92% 78% at 50% 44%, #f8f1e2 0%, #f3e9d6 42%, #e6d9c0 100%),
-    linear-gradient(158deg, #f4ebd9 0%, #e8dbc4 58%, #dccfb8 100%);
+    radial-gradient(ellipse 92% 78% at 50% 44%, #fdf8ec 0%, #f8efdd 42%, #eee0c6 100%),
+    linear-gradient(158deg, #faf3e3 0%, #f2e6d0 58%, #e8d9be 100%);
   isolation: isolate;
 }
 
@@ -2838,11 +2867,38 @@ body.is-cake-cursor .cursor {
 .cloth-weave {
   position: absolute;
   inset: 0;
-  opacity: 0.55;
-  background-image:
-    repeating-linear-gradient(0deg, rgba(120, 104, 80, 0.055) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(90deg, rgba(120, 104, 80, 0.045) 0 1px, transparent 1px 3px);
+  opacity: 0.52;
   mix-blend-mode: multiply;
+  /* 经纬各一线，一亮一暗：亚麻的织点是「一根压一根」，所以每 4px 里有明暗两层 */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(112, 92, 64, 0.1) 0 1px, rgba(255, 253, 244, 0.34) 1px 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(112, 92, 64, 0.085) 0 1px, rgba(255, 253, 244, 0.3) 1px 2px, transparent 2px 4px),
+    repeating-linear-gradient(78deg, rgba(112, 92, 64, 0.05) 0 1px, transparent 1px 7px);
+}
+
+/* 麻纤维粗细不匀：一组斜向的短线，破了经纬的死板网格 */
+.cloth-slub {
+  position: absolute;
+  inset: -18%;
+  opacity: 0.26;
+  mix-blend-mode: multiply;
+  background-image:
+    repeating-linear-gradient(46deg, rgba(118, 98, 70, 0.055) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-37deg, rgba(118, 98, 70, 0.04) 0 2px, transparent 2px 9px);
+}
+
+/* 布被浆过、叠过、摊开过：大块的深浅不匀，不是均匀的渐变 */
+.cloth-mottle {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  opacity: 0.22;
+  background-image:
+    radial-gradient(ellipse 34% 24% at 27% 33%, rgba(146, 120, 84, 0.11), transparent 72%),
+    radial-gradient(ellipse 30% 26% at 73% 61%, rgba(146, 120, 84, 0.1), transparent 74%),
+    radial-gradient(ellipse 24% 18% at 57% 20%, rgba(255, 253, 243, 0.55), transparent 72%),
+    radial-gradient(ellipse 26% 20% at 39% 76%, rgba(255, 253, 243, 0.45), transparent 74%),
+    radial-gradient(ellipse 40% 14% at 50% 96%, rgba(132, 108, 76, 0.1), transparent 78%);
 }
 
 .cloth-crease {
@@ -2852,30 +2908,114 @@ body.is-cake-cursor .cursor {
 }
 
 .cloth-crease--a {
-  left: -10%;
-  top: 58%;
-  width: 130%;
-  height: 44%;
-  transform: rotate(-3.5deg);
-  background: linear-gradient(180deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.13) 58%, rgba(255, 250, 238, 0.5) 100%);
+  left: -12%;
+  top: 30%;
+  width: 134%;
+  height: 52%;
+  transform: rotate(-4deg);
+  background: linear-gradient(180deg,
+    rgba(96, 78, 52, 0) 0%,
+    rgba(96, 78, 52, 0.03) 38%,
+    rgba(96, 78, 52, 0.12) 47%,
+    rgba(96, 78, 52, 0.18) 49.4%,
+    rgba(96, 78, 52, 0.04) 50.6%,
+    rgba(255, 253, 243, 0.72) 52.2%,
+    rgba(255, 253, 243, 0.16) 54%,
+    rgba(96, 78, 52, 0.02) 72%,
+    rgba(96, 78, 52, 0) 100%);
 }
 
 .cloth-crease--b {
-  left: -8%;
-  top: 21%;
-  width: 120%;
-  height: 26%;
-  transform: rotate(2.2deg);
-  background: linear-gradient(0deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.09) 70%, rgba(255, 250, 238, 0.34) 100%);
+  left: -10%;
+  top: 6%;
+  width: 124%;
+  height: 34%;
+  transform: rotate(2.6deg);
+  background: linear-gradient(180deg,
+    rgba(96, 78, 52, 0) 0%,
+    rgba(96, 78, 52, 0.12) 40%,
+    rgba(96, 78, 52, 0.17) 43%,
+    rgba(255, 253, 243, 0.6) 45.4%,
+    rgba(96, 78, 52, 0.03) 52%,
+    rgba(96, 78, 52, 0) 100%);
 }
 
 .cloth-crease--c {
-  left: 76%;
-  top: -10%;
-  width: 26%;
-  height: 120%;
-  transform: rotate(6deg);
-  background: linear-gradient(90deg, rgba(120, 104, 80, 0) 0%, rgba(120, 104, 80, 0.1) 62%, rgba(255, 250, 238, 0.36) 100%);
+  left: 74%;
+  top: -12%;
+  width: 34%;
+  height: 124%;
+  transform: rotate(7deg);
+  background: linear-gradient(90deg,
+    rgba(96, 78, 52, 0) 0%,
+    rgba(96, 78, 52, 0.1) 44%,
+    rgba(96, 78, 52, 0.18) 49%,
+    rgba(255, 253, 243, 0.5) 52.4%,
+    rgba(96, 78, 52, 0.03) 60%,
+    rgba(96, 78, 52, 0) 100%);
+}
+
+/* 蛋糕压出来的两道短褶：布被推开的方向都指向圆心 */
+.cloth-crease--d {
+  left: 2%;
+  top: 40%;
+  width: 34%;
+  height: 40%;
+  transform: rotate(-18deg) skewX(-7deg);
+  background: linear-gradient(90deg,
+    rgba(96, 78, 52, 0) 0%,
+    rgba(96, 78, 52, 0.05) 54%,
+    rgba(96, 78, 52, 0.07) 62%,
+    rgba(255, 253, 243, 0.24) 66%,
+    rgba(96, 78, 52, 0) 72%,
+    rgba(96, 78, 52, 0) 100%);
+}
+
+.cloth-crease--e {
+  left: 64%;
+  top: 48%;
+  width: 34%;
+  height: 38%;
+  transform: rotate(15deg) skewX(6deg);
+  background: linear-gradient(90deg,
+    rgba(96, 78, 52, 0) 0%,
+    rgba(255, 253, 243, 0.2) 30%,
+    rgba(96, 78, 52, 0.06) 34%,
+    rgba(96, 78, 52, 0.08) 46%,
+    rgba(96, 78, 52, 0) 56%,
+    rgba(96, 78, 52, 0) 100%);
+}
+
+/* ── 桌沿：布在下面翻过桌边，桌板的厚度露出来 ─────────────────────────── */
+.table-edge {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  bottom: 0;
+  height: 18vh;
+  min-height: 104px;
+  pointer-events: none;
+  background:
+    /* 布翻过桌边时自己被压暗，紧挨着的那道亮边是桌沿的反光 */
+    linear-gradient(180deg,
+      rgba(48, 36, 20, 0) 0%,
+      rgba(48, 36, 20, 0.05) 34%,
+      rgba(48, 36, 20, 0.17) 60%,
+      rgba(48, 36, 20, 0.3) 57%,
+      rgba(48, 36, 20, 0.34) 61.5%,
+      rgba(255, 250, 238, 0.9) 63%,
+      rgba(120, 92, 58, 0.32) 64.4%,
+      rgba(120, 92, 58, 0.06) 67%),
+    /* 桌沿之下：木色，不是黑洞 —— 底下的字还要读得出来 */
+    linear-gradient(180deg,
+        rgba(203, 176, 140, 0) 63%,
+        #d3bb95 64%,
+        #c9ae86 76%,
+        #bd9f76 88%,
+        #b09368 100%),
+    repeating-linear-gradient(96deg,
+        rgba(120, 92, 58, 0.1) 0 1px,
+        transparent 1px 9px);
 }
 
 /* 光池：唯一的暖光，从蛋糕往外衰减。暗角不是遮丑，是它的物理结果。 */
@@ -2884,7 +3024,7 @@ body.is-cake-cursor .cursor {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 62%, rgba(255, 226, 176, 0.55) 0%, rgba(255, 213, 158, 0.26) 26%, rgba(255, 205, 150, 0.09) 46%, rgba(255, 200, 145, 0) 66%);
+    radial-gradient(circle at 50% 62%, rgba(255, 224, 172, 0.34) 0%, rgba(255, 212, 156, 0.16) 28%, rgba(255, 205, 150, 0.05) 48%, rgba(255, 200, 145, 0) 68%);
   mix-blend-mode: screen;
 }
 
@@ -2893,8 +3033,8 @@ body.is-cake-cursor .cursor {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 62%, rgba(25, 27, 24, 0) 34%, rgba(25, 27, 24, 0.32) 62%, rgba(25, 27, 24, 0.82) 96%),
-    linear-gradient(180deg, rgba(25, 27, 24, 0.24) 0%, rgba(25, 27, 24, 0) 22%, rgba(25, 27, 24, 0) 74%, rgba(25, 27, 24, 0.34) 100%);
+    radial-gradient(circle at 50% 62%, rgba(25, 27, 24, 0) 40%, rgba(25, 27, 24, 0.18) 66%, rgba(25, 27, 24, 0.5) 98%),
+    linear-gradient(180deg, rgba(25, 27, 24, 0.12) 0%, rgba(25, 27, 24, 0) 20%, rgba(25, 27, 24, 0) 76%, rgba(25, 27, 24, 0.16) 100%);
 }
 
 /* 海图线稿：只画在光里 —— 亮处有线可看，暗处干净。
@@ -2904,8 +3044,8 @@ body.is-cake-cursor .cursor {
   inset: 0;
   width: 100%;
   height: 100%;
-  color: #6b5f4c;
-  opacity: 0.95;
+  color: #554632;
+  opacity: 1;
   -webkit-mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
   mask-image: radial-gradient(closest-side at 50% 62%, #000 0 40%, rgba(0, 0, 0, 0.55) 62%, transparent 80%);
 }
@@ -2922,14 +3062,14 @@ body.is-cake-cursor .cursor {
 
 .cloth-half--a {
   transform:
-    translate3d(calc(var(--cnx) * 13vw * var(--cut)), calc(var(--cny) * 13vw * var(--cut)), 0)
-    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * 30deg));
+    translate3d(calc(var(--cnx) * 34vw * var(--cut)), calc(var(--cny) * 34vw * var(--cut)), 0)
+    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * 21deg));
 }
 
 .cloth-half--b {
   transform:
-    translate3d(calc(var(--cnx) * -13vw * var(--cut)), calc(var(--cny) * -13vw * var(--cut)), 0)
-    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * -30deg));
+    translate3d(calc(var(--cnx) * -34vw * var(--cut)), calc(var(--cny) * -34vw * var(--cut)), 0)
+    rotate3d(var(--cdx), var(--cdy), 0, calc(var(--cut) * -21deg));
 }
 
 /* ── 蛋糕（俯视，全场中心） ─────────────────────────────────────────────── */
@@ -2937,17 +3077,17 @@ body.is-cake-cursor .cursor {
   position: absolute;
   left: 50%;
   top: 62%;
-  width: 300px;
-  height: 300px;
-  margin: -150px 0 0 -150px;
+  width: clamp(300px, 31vw, 440px);
+  height: clamp(300px, 31vw, 440px);
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
 .cake-halo {
   position: absolute;
-  inset: -46%;
+  inset: -30%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 221, 168, 0.5) 0%, rgba(255, 208, 148, 0.2) 42%, rgba(255, 200, 140, 0) 70%);
+  background: radial-gradient(circle, rgba(255, 219, 160, 0.26) 0%, rgba(255, 206, 142, 0.12) 44%, rgba(255, 200, 140, 0) 72%);
   mix-blend-mode: screen;
 }
 
@@ -2961,10 +3101,10 @@ body.is-cake-cursor .cursor {
 
 .cake-number {
   font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 96px;
+  font-size: 52px;
   font-weight: 400;
   letter-spacing: 0.02em;
-  fill: #b08f62;
+  fill: #b9853f;
   stroke: rgba(255, 253, 246, 0.92);
   stroke-width: 1.6px;
   paint-order: stroke fill;
@@ -2978,20 +3118,48 @@ body.is-cake-cursor .cursor {
 .candle {
   position: absolute;
   width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
-  border-radius: 50%;
-  background: #fff6e4;
-  box-shadow: 0 0 0 1px rgba(176, 143, 98, 0.35) inset;
+  height: 26px;
+  margin-left: -3px;
+  border-radius: 2px 2px 1px 1px;
+  background-image:
+    linear-gradient(to right, transparent calc(50% - 1px), rgba(74, 54, 30, 0.8) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(90deg, #D3B383 0%, #FFF7E6 32%, #F3DDB4 66%, #C9A776 100%);
+  background-size: 100% 3px, 100% 100%;
+  background-position: top left, center;
+  background-repeat: no-repeat, no-repeat;
+  box-shadow: 0 5px 8px -4px rgba(88, 66, 40, 0.55), inset 0 0 0 0.5px rgba(150, 118, 76, 0.35);
+  transform: translateY(-100%) scale(var(--s, 1));
+  transform-origin: 50% 100%;
 }
 
+/* 焰：下圆上尖的一粒火 */
+.candle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 7px;
+  height: 14px;
+  margin: 0 0 1px -3.5px;
+  border-radius: 50% 50% 44% 44% / 62% 62% 38% 38%;
+  background: radial-gradient(ellipse at 50% 74%, #FFFBE6 0%, #FFD98E 30%, #FF9F47 68%, rgba(255, 138, 48, 0.2) 100%);
+  box-shadow: 0 0 6px rgba(255, 186, 96, 0.55);
+  animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate;
+  will-change: transform, opacity;
+}
+
+/* 焰外那圈光：十九个不全同相，所以桌布上的光在轻轻抖 */
 .candle::after {
   content: "";
   position: absolute;
-  inset: -9px;
+  left: 50%;
+  bottom: 100%;
+  width: 38px;
+  height: 38px;
+  margin: 0 0 -12px -19px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 233, 195, 0.95) 0%, rgba(255, 206, 140, 0.55) 38%, rgba(255, 183, 101, 0) 74%);
-  animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate;
+  background: radial-gradient(circle, rgba(255, 228, 174, 0.5) 0%, rgba(255, 204, 140, 0.2) 40%, rgba(255, 190, 120, 0) 72%);
+  animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate-reverse;
   will-change: transform, opacity;
 }
 
@@ -3005,6 +3173,7 @@ body.is-cake-cursor .cursor {
   position: absolute;
   left: 0;
   top: 0;
+  transition: opacity 0.22s ease;
   width: 0;
   height: 0;
   transform-origin: 0 0;
@@ -3153,5 +3322,6 @@ body.is-cake-cursor .cursor {
 
 .cover-lede {
   margin-top: clamp(10px, 1.6vh, 18px);
-  max-width: 40ch;
+  max-width: min(76ch, 68vw);
+  flex-wrap: nowrap;
 }
