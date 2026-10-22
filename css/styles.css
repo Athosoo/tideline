@@ -140,215 +140,14 @@ img {
   z-index: 50;
   overflow: hidden;
   color: var(--ink);
-  background: transparent;
-  perspective: 1700px;
-  perspective-origin: 50% 45%;
+  /* 门没了，这一层就是封面的底：台布万一没加载出来，也是纸色而不是透明 */
+  background: var(--paper);
   touch-action: pan-y;
 }
 
 .intro.is-hidden {
   visibility: hidden;
   pointer-events: none;
-}
-
-.door {
-  position: absolute;
-  top: 0;
-  width: 50%;
-  height: 100%;
-  overflow: hidden;
-  backface-visibility: hidden;
-  will-change: transform;
-  z-index: 1;
-}
-
-.door--left {
-  left: 0;
-  transform-origin: left center;
-  transform: translate3d(calc(var(--gate) * -55vw), 0, 0) rotateY(calc(var(--gate) * -10deg));
-}
-
-.door--right {
-  right: 0;
-  transform-origin: right center;
-  transform: translate3d(calc(var(--gate) * 55vw), 0, 0) rotateY(calc(var(--gate) * 10deg));
-}
-
-.door-surface {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  isolation: isolate;
-  background:
-    radial-gradient(ellipse 110% 80% at 46% 38%, rgba(255, 250, 237, 0.58), transparent 66%),
-    linear-gradient(148deg, #f4ecdd 0%, #eee5d5 56%, #e4e6d8 100%);
-}
-
-.door--right .door-surface {
-  background:
-    radial-gradient(ellipse 100% 82% at 58% 36%, rgba(252, 250, 239, 0.5), transparent 68%),
-    linear-gradient(216deg, #e7efe7 0%, #e9eadd 52%, #efe6d5 100%);
-}
-
-.door-tone {
-  position: absolute;
-  pointer-events: none;
-  opacity: 0.75;
-}
-
-.door-tone--one {
-  width: 56vw;
-  height: 56vw;
-  min-width: 520px;
-  min-height: 520px;
-  left: 14%;
-  top: 3%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(187, 222, 211, 0.22), rgba(187, 222, 211, 0) 70%);
-  filter: blur(12px);
-  transform: translate3d(calc(var(--gate) * -7vw), calc(var(--gate) * -2vw), 0);
-}
-
-.door--right .door-tone--one {
-  left: auto;
-  right: 7%;
-  top: 26%;
-  background: radial-gradient(circle, rgba(220, 196, 158, 0.2), rgba(220, 196, 158, 0) 72%);
-}
-
-.door-tone--two {
-  width: 44vw;
-  height: 32vw;
-  right: -14%;
-  bottom: -8%;
-  background: radial-gradient(ellipse, rgba(114, 177, 176, 0.18), rgba(114, 177, 176, 0) 70%);
-  filter: blur(20px);
-}
-
-.door--right .door-tone--two {
-  left: -9%;
-  right: auto;
-  bottom: 4%;
-  background: radial-gradient(ellipse, rgba(255, 249, 229, 0.68), rgba(255, 249, 229, 0) 72%);
-}
-
-.door-lines {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100%;
-  color: rgba(22, 80, 79, 0.76);
-  overflow: visible;
-  pointer-events: none;
-  transform-origin: 50% 48%;
-  transform: scale(calc(1 + var(--gate) * 0.095));
-}
-
-.door--right .door-lines {
-  left: -100%;
-}
-
-.door-lines .line-cluster {
-  transform-box: fill-box;
-  transform-origin: center;
-  will-change: transform;
-}
-
-.line-cluster--orbit {
-  transform: translate3d(calc(var(--gate) * -30px), calc(var(--gate) * 26px), 0) scale(calc(1 + var(--gate) * 0.2)) rotate(calc(var(--gate) * 4deg));
-}
-
-.line-cluster--horizon {
-  transform: translate3d(calc(var(--gate) * -118px), calc(var(--gate) * -18px), 0) scaleX(calc(1 + var(--gate) * 0.42));
-}
-
-.door--right .line-cluster--horizon {
-  transform: translate3d(calc(var(--gate) * 86px), calc(var(--gate) * 24px), 0) scaleX(calc(1 + var(--gate) * 0.32));
-}
-
-.line-cluster--ticks {
-  transform: translateY(calc(var(--gate) * -55px));
-}
-
-.line-cluster--stars {
-  transform: translate3d(calc(var(--gate) * 48px), calc(var(--gate) * -32px), 0) scale(calc(1 + var(--gate) * 0.45));
-  opacity: calc(1 - var(--gate) * 0.8);
-}
-
-.line-cluster--vertical {
-  transform: translateY(calc(var(--gate) * -62px));
-}
-
-.door-surface::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.door--left .door-surface::after {
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.22), transparent 17%, transparent 84%, rgba(18, 63, 62, 0.07)),
-    repeating-linear-gradient(90deg, rgba(246, 241, 228, 0.25) 0 1px, transparent 1px 7px);
-  background-size: auto, 100% 100%;
-  mix-blend-mode: soft-light;
-}
-
-.door--right .door-surface::after {
-  background:
-    linear-gradient(270deg, rgba(255, 255, 255, 0.2), transparent 18%, transparent 86%, rgba(18, 63, 62, 0.06)),
-    repeating-linear-gradient(90deg, rgba(246, 241, 228, 0.2) 0 1px, transparent 1px 9px);
-  mix-blend-mode: soft-light;
-}
-
-.door-side-label {
-  position: absolute;
-  top: 49%;
-  z-index: 4;
-  color: rgba(18, 63, 62, 0.45);
-  font-family: var(--sans);
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  writing-mode: vertical-rl;
-  text-transform: uppercase;
-}
-
-.door-side-label--left {
-  left: clamp(22px, 3vw, 48px);
-  transform: rotate(180deg) translateY(50%);
-}
-
-.door-side-label--right {
-  right: clamp(22px, 3vw, 48px);
-  transform: translateY(-50%);
-}
-
-.door-seam {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  z-index: 4;
-  width: 1px;
-  height: 100%;
-  pointer-events: none;
-  background: rgba(18, 63, 62, 0.23);
-  box-shadow: 0 0 24px rgba(247, 242, 230, 0.8);
-  transform: translateX(-50%);
-  opacity: calc(1 - var(--gate) * 4);
-}
-
-.door-seam span {
-  position: absolute;
-  top: 8%;
-  left: 50%;
-  width: 1px;
-  height: 84%;
-  background: linear-gradient(180deg, transparent, rgba(255, 251, 237, 0.95) 21%, rgba(255, 251, 237, 0.95) 79%, transparent);
-  transform: translateX(-50%);
-  filter: blur(0.2px);
 }
 
 .intro-frame {
@@ -2187,7 +1986,6 @@ body.has-custom-cursor .focus-card {
 @media (max-width: 680px) {
   .scroll-track { height: 440vh; }
   .intro-frame { inset: 12px; }
-  .door-side-label { display: none; }
   .cover-content {
     padding: 26px 25px 25px;
   }
@@ -2222,8 +2020,6 @@ body.has-custom-cursor .focus-card {
   .cue-orbit { width: 40px; height: 40px; }
   .cue-copy b { font-size: 8px; letter-spacing: 0.16em; }
   .cue-copy small { font-size: 7px; }
-  .door-lines { width: 142vw; }
-  .door--right .door-lines { left: -100%; }
   .gallery-header {
     padding: 18px 18px;
     align-items: flex-start;
@@ -2541,7 +2337,6 @@ body.has-custom-cursor .focus-card {
   .scroll-cue { grid-column: auto; justify-self: auto; }
   .cue-orbit { width: 40px; height: 40px; }
   .intro-frame { inset: 10px; }
-  .door-side-label { display: none; }
 
   .gallery-header { padding: 14px 18px; }
   .gallery-footer {
@@ -2999,7 +2794,7 @@ html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
 
    滚动（--gate）和这一刀（--cut）谁先到算谁的。切开时台布裂成互补的两半，
    露出来的是底下一只活着的海 —— 不画假的「里面」。
-   `?nocake=1` 关掉整个开屏层，回到原来的两扇门。                              */
+   两扇门 2026-10-22 已删除：这一层就是封面本身。`?cake=aim|cut` 可冻结相位拍图。 */
 
 .cake-gate {
   --cdx: 1;
@@ -3018,14 +2813,6 @@ html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
 
 .cake-gate.is-out {
   opacity: 0;
-}
-
-/* 门退休：台布盖住以后，两扇门留在 DOM 里但不再露面，
-   于是台布裂开时透出来的是后面那片一直在跑的海。 */
-.intro.has-cake .door,
-.intro.has-cake .door-seam {
-  opacity: 0;
-  visibility: hidden;
 }
 
 /* 刀在手上时，站点那颗自绘光标让位给刀 */
@@ -3334,37 +3121,37 @@ body.is-cake-cursor .cursor {
   }
 }
 
-/* ── 标题让位 ───────────────────────────────────────────────────────────────
-   蛋糕占了画面中央，原来那张「Between the tides」的字号就压不住了：
-   200px 的行高直接压在蛋糕上，谁也读不清。所以台布在场时，封面标题
-   缩小成一条印刷体抬头，退到页眉下面，把中央整块让给蛋糕。
-   `?nocake=1` 回到原来的封面，这组规则完全不起作用。                    */
-.intro.has-cake .cover-content {
+/* ── 标题让位（2026-10-22 用户拍板：永远让）────────────────────────────────
+   原来那张 200px 的「Between the tides」和居中的蛋糕必然重叠（1280×800 下
+   标题占 250–550px、336px 的蛋糕占 232–568px，无解）。既然蛋糕是主体，
+   标题就永久缩成一条印刷体抬头、退到页眉下面，把中央整块让出来。
+   大标题那套 font-size 不再需要，删掉了（历史在 git）。                    */
+.cover-content {
   justify-content: flex-start;
 }
 
-.intro.has-cake .cover-footer {
+.cover-footer {
   margin-top: auto;
 }
 
-.intro.has-cake .cover-hero {
+.cover-hero {
   margin-top: clamp(18px, 5vh, 54px);
   margin-bottom: 0;
   transform: none;
 }
 
-.intro.has-cake .cover-title {
+.cover-title {
   font-size: clamp(2.1rem, 3.4vw, 3.1rem);
   line-height: 1.06;
   letter-spacing: -0.03em;
   text-shadow: 0 0 24px rgba(247, 242, 230, 0.4);
 }
 
-.intro.has-cake .cover-eyebrow {
+.cover-eyebrow {
   margin-bottom: clamp(12px, 1.5vh, 18px);
 }
 
-.intro.has-cake .cover-lede {
+.cover-lede {
   margin-top: clamp(10px, 1.6vh, 18px);
   max-width: 40ch;
 }

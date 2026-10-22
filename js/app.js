@@ -2462,7 +2462,7 @@ function init() {
   createParticles();
 
   if (window.matchMedia("(pointer: coarse)").matches) {
-    dom.scrollCue.querySelector(".cue-copy small").textContent = "向上滑动 · 点击推门";
+    dom.scrollCue.querySelector(".cue-copy small").textContent = "向上滑动 · 切一刀";
   }
 
   startSea();

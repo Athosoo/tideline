@@ -6,17 +6,14 @@
    滚动（--gate）和这一刀（--cut）谁先到算谁的：--open = max(--gate, --cut)。
    切开时台布裂成互补的两半，露出来的是底下一只活着的海 —— 不画假的「里面」。
 
-   ?nocake=1 关掉整个开屏层；?cake=aim|cut 冻结/预演某个相位（截图对照用）。 */
+   ?cake=aim|cut 冻结/预演某个相位（截图对照用）。
+   两扇门已于 2026-10-22 删除，这一层就是封面本身，没有退路可退。 */
 (function () {
   "use strict";
 
   var gateEl = document.getElementById("cakeGate");
   if (!gateEl) return;
   var params = new URLSearchParams(location.search);
-  if (params.get("nocake") === "1") {
-    gateEl.remove();
-    return;
-  }
   var FREEZE = params.get("cake") || "";
 
   var TAU = Math.PI * 2;

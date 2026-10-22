@@ -457,7 +457,7 @@
 | `GIFT/index.html` | 在 `#intro`（`index.html:203`）内、`<div class="door-seam">`（`index.html:282`）之前插入 `<div class="cake-gate" id="cakeGate">`（布 / 线稿 SVG / 蛋糕 / 刀 / 暗角 / 颗粒）。**两半不写在 HTML 里**，点击时克隆 |
 | `GIFT/css/styles.css` | 新块 `/* 开屏 · 潮汐台布 */`；新增变量 `--candle`、`--cut-dx/--cut-dy/--cut-nx/--cut-ny`、`--cut`、`--fold` |
 | `GIFT/js/app.js` | `state` 里加 `cake: {phase,t,tipX,tipY,bearing,cutAngle}`（挨着 `app.js:344 introPx`）；`initCakeGate()` 一次性建 DOM 与噪点；`updateCakeGate(dt)` 由 `animate()`（`app.js:2272`）调用、紧跟 `updateScrollState(dt)`；鼠标复用 `state.pointer`（`app.js:1555 updateCursor`） |
-| 调试开关 | `?nocake=1` 关掉整个开屏层；`?cake=idle\|fly\|aim\|cut` 冻结在某相位（与 `?t=` / `?nogl=1` 同一套习惯，截图对照用） |
+| 调试开关 | `?cake=idle\|fly\|aim\|cut` 冻结在某相位（与 `?t=` / `?nogl=1` 同一套习惯，截图对照用）。原 `?nocake=1` 已随门一起删掉 |
 
 **性能红线**：单帧只写 2 个节点上的 CSS 变量；所有动画只用 `transform` / `opacity`；
 **不对移动中的大元素用 `filter: blur()`**（项目已经为此付过代价，见 §2.3-e）。
@@ -471,22 +471,16 @@
 - ✅ 与两档画质无关：开屏是两档共用的「门外」，进去以后才分 FULL / LITE。
 - ✅ FULL 仍然「不做云」：开屏里没有任何云，只有布、图、火、刀。
 
-### 7.13 待确认（8 条，按影响排序）
+### 7.13 待确认（原 8 条 → 第 1、8 条已拍板，剩 6 条）
 
-1. **两扇门要不要退休？**（推荐退休：门上的文案印到台布上，`index.html` 少 118 行重复 SVG）
+1. ~~**两扇门要不要退休？**~~ **已拍板（2026-10-22）：删。** 见 §7.17
 2. 切口方向**跟手走**（每次不同，推荐）还是固定一条对角线（每次都一样、更好调好看）？
 3. 「19」的表现：浮雕数字 + 19 支蜡烛环 + 19 颗糖珠（推荐），还是只要一个数字？
 4. 蛋糕配色：奶油白 + 莓红（推荐，全图唯一红点）还是抹茶 / 巧克力？
 5. 台词「切一刀，海就进来了 / ONE CUT, AND THE TIDE COMES IN」用不用？要换成你自己的话就给我一句。
 6. 手机竖屏没有鼠标：改成**手指划一刀**（划的方向 = 切口方向，推荐）还是轻点即切？
 7. 回封面要不要「缝合」动画（700ms）？
-8. **封面大标题要不要让位？**（实现时暴露的真问题，见 §7.16 第 1 条）
-   `Between the tides` 现在 `font-size: clamp(7.5rem, 14.25vw, 14rem)`、`line-height: .72`、
-   两行约 300px 高、垂直居中——**和居中的蛋糕必然重叠**，200px 的衬线字压在蛋糕上谁也读不清。
-   我的处置：台布在场时（`.intro.has-cake`）标题缩成 `clamp(2.1rem, 3.4vw, 3.1rem)` 的印刷体抬头、
-   退到页眉下方，中央整块让给蛋糕；`?nocake=1` 回到原来的封面。
-   留给你的选择：**(a) 认可让位**（推荐，等于承认「蛋糕才是主体」）/ **(b) 标题保持原大，蛋糕缩小到 190px**
-   （19 支蜡烛会挤，蜡烛间距约 19px）/ **(c) 标题保持原大，蛋糕不要居中**（偏离你的原话「进画面中央」）。
+8. ~~**封面大标题要不要让位？**~~ **已拍板（2026-10-22）：让位，而且是永久让。** 见 §7.17
 
 ### 7.14 被否掉的三个方案（省一轮讨论）
 
@@ -579,3 +573,26 @@ Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，并在桌面上弹
 - 台布层 `z-index: 5`，夹在 `.door-seam`（`z-index: 4`）和 `.intro-frame`（`z-index: 6`）之间，
   按设计意图台布应该盖住门缝、被页眉压住——这一点只有肉眼能确认。
 - `?cake=aim` / `?cake=cut` 两个调试入口已实现（`GIFT/js/cakegate.js` 里读 `location.search`），未截图。
+
+### 7.17 用户拍板记录（2026-10-22）
+
+用户原话（m00286）：**「旧的东西就去掉呀，让位，然后两扇门也去掉呀删除」** —— 选 (a) 标题让位、两扇门删除。
+
+**做了什么**
+
+| 位置 | 动作 |
+|---|---|
+| `GIFT/index.html` | 删掉两扇门整块（`door--left` / `door--right` / 两套 `line-cluster` 海图 / `door-side-label` 经纬度）共 **79 行**；`door-seam` 那条 1px 缝一并删除。文件从 473 行降到 394 行 |
+| `GIFT/css/styles.css` | 删掉 `.door` / `.door-surface` / `.door-tone` / `.door-lines` / `.line-cluster` / `.door-side-label` / `.door-seam` 共 **34 个选择器块**（含两处 media query 里的 `.door-side-label`、`.door-lines`），净 **-225 行**；`.intro` 的 `perspective: 1700px` / `perspective-origin` 随之变成死代码，一并去掉。剩下的 `.intro-frame` / `.intro-vignette` 仍按 `--gate` 淡出，滚动逻辑不变 |
+| 标题 | 原来只在 `.intro.has-cake` 下缩小的那套规则，改成**无条件生效**：`.cover-title` 缩为 `clamp(2.1rem, 3.4vw, 3.1rem)`、行高 1.06、字距 -0.03em；`.cover-content` 改 `justify-content: flex-start`、`.cover-footer` 用 `margin-top: auto` 顶到底，`.cover-hero` 贴页眉下方。蛋糕圆心固定在 62%，中央整块是蛋糕 |
+| 文案 | 门的语言全部换掉：`aria-label` → 「封面：切一刀，进入明信片长廊」；`SCROLL TO OPEN` 下方小字 → 「滚动开启 · 切一刀」（`GIFT/js/app.js:2465` 的触屏版同改）；中文副文案 → 「切一刀，随潮汐漂进长廊」 |
+| 兜底 | 门是原来封面的底，删掉后 `.intro { background: transparent }` 会让封面透出长廊。改成 `background: var(--paper)`，台布万一没跑起来也是纸色 |
+| 调试开关 | `?nocake=1`（删掉台布层退回门）已经没有退路可退，**移除**；`?cake=aim|cut` 保留 |
+
+**为什么这样做**：门的 118 行 SVG 是重复的手绘海图，和台布上的潮汐海图是两套语言；
+台布接管后门只是「藏着不显示」，留着等于每次改配色都要维护两份。删掉后 `index.html` 少一成行数，
+`--gate` 仍然驱动「台布淡出 → 长廊」，所以 §§7.9 那条「不推翻滚动」的约束不变。
+
+**风险（如实记）**：仍然没有截图。删的是视觉主体，配色/密度/遮挡全靠推算；
+第一次真机（浏览器）打开时最该看的三件事：① 台布是否铺满、有没有露出底下的纸色；
+② 小标题 + 蛋糕 + 页脚三者在 1280×800 与 390×844 下是否互不压；③ 切开后露出的「活海」是否真的接得上。
