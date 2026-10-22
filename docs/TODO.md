@@ -631,3 +631,19 @@ Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，并在桌面上弹
 1. 切开那一下的落点观感 —— 无头浏览器判不了，需真机。
 2. 封面文案仍有一处不齐：`SCROLL TO OPEN` 配「滚动开启 · 切一刀」，`lede` 里英文写的是 `Push the ride aside and step in.`（`ride`？还是 `tide`？）—— 等用户定。
 3. 台布织纹与褶子在**亮区**里几乎看不见（径向 mask 只放过光里那一圈），要不要再压暗一档。
+
+### 7.19 第三轮：慢切、封滚轮、质感、题字退场（2026-10-22，提交 `35ff719`）
+
+用户 m00647 原话：「一：开门速度太快，而且还错误地保留了滚轮开门？ 二：没有蜡烛和桌布纹理的感觉」
+
+**切的节奏重排**（`js/cakegate.js:26-28`）：`HOLD = 0.28`（先亮一道缝）→ `CUT = 2.6s`（布分开）→ `STITCH = 1.1s`（回封面缝合）。切开的位移缓动从 `easeOut` 换成 `easeInOut`：两头慢、中段快，才像布被撕开。两个 `setTimeout` 推进改由 `update()` 按 `dt` 走。
+
+**滚轮封印**：`js/app.js:1398` 的 `gateRaw` 在 `state.coverLocked` 时恒为 0 —— 滚动条、键盘、滚轮、触屏滑都开不了门；`js/cakegate.js` 里 wheel/touchmove/keydown 在 `phase !== "open"` 时 `preventDefault()`。开门只剩一条路：点或划一下（`.cut-surface` 接住 pointerup）。
+
+**关键时刻才瞬移**：原先 `revealCover()` 在 0.28s 就 `openArchive(true)`，布还在裂、页面已经滚走 —— 那一帧就是「切完还剩一张画」（截图上表现为布被画到了屏幕下方）。现在瞬移挪到 `S.cut >= 1`（布已飞出屏幕、`.is-gone`），用户看不到任何跳变。撕裂的 2.6s 里，裂口后面是 scroll 0 处的活海与明信片。
+
+**质感**：蜡烛 7×30（六段蜡身渐变 + 5px 烛芯线）、焰 9×19（蓝焰心 + 白/蜜/橙四层）、光晕 46px、四帧 flicker（含 `translateX(±0.3px)` 与 `rotate`）；台布新增 `.cloth-fiber`（data-URI `feTurbulence` 纤维颗粒，220×220 平铺，multiply .32）、`.cloth-weave` 提到 .66 并加了 45° 斜纹、`.cloth-slub` .34、折痕加 1–2px 硬芯、`.cloth-light` 峰值降到 .24（烛光不再洗白织纹）。
+
+**题字退场**（用户 m00911：「开幕的那些文字太多余了，可以只留图画」）：`css/styles.css` 末尾 `.cover-content { display: none }` —— 眉标、大标题、lede、坐标、卷号、`SCROLL TO OPEN` 与中文提示一起消失。交互不变：点/划屏幕任何地方仍是那一刀。`.intro-frame` 的细画框保留（是图形不是文字）。
+
+**抓图教训**：本沙箱里「页面已滚动 + `position: fixed` 的 `.intro`」会被画偏约 573px（m00792–m00872 一路误判成「两半不绘制」）。判据是文件字节数：健康帧 ~2.2MB，坏帧 ~0.5MB。凡是带 `openArchive` 的切帧截图都不可信。
