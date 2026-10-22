@@ -14,6 +14,10 @@
   const damp = (current, target, lambda, dt) => lerp(current, target, 1 - Math.exp(-lambda * dt));
   const mod = (v, m) => ((v % m) + m) % m;
   const DEG = Math.PI / 180;
+  /* 时间流速：5 秒走完 1 小时，一昼夜 24 小时 = 2 分钟。
+     dt 的单位是秒（app.js 把每帧的毫秒差除以 1000 并夹在 0.001~0.05），
+     所以这里就是「1 小时需要多少秒」这个除数。 */
+  const SECONDS_PER_HOUR = 5;
 
   /* 诊断开关（默认全关，行为与之前完全一致）：
      ?noattr=1     不写 applySun/applySky 的任何自定义属性 */
@@ -138,6 +142,16 @@
     return { elevation, azimuth: mod(azimuth, 360) };
   }
 
+  /* 日出/日落时刻（小时，真太阳时）。球面三角的时角公式：
+     cos(H0) = -tan(纬)·tan(赤纬)，H0 是半昼长（度）。用来给日/月弧线做归一化，
+     这样日盘在日出那一刻正好落在画面左缘、日落那一刻落在右缘，不会在边缘空转。 */
+  function dayWindow(doy, latitude) {
+    const decl = 23.44 * Math.sin(2 * Math.PI * (doy - 81) / 365) * DEG;
+    const cosH = clamp(-Math.tan(latitude * DEG) * Math.tan(decl), -1, 1);
+    const half = Math.acos(cosH) / DEG / 15;
+    return { rise: 12 - half, set: 12 + half };
+  }
+
   function dayOfYear(date) {
     const start = Date.UTC(date.getFullYear(), 0, 0);
     return Math.floor((date.getTime() - start) / 86400000);
@@ -224,7 +238,7 @@
     counters.updates += 1;
     const reduced = env.reducedMotion && env.reducedMotion.matches;
     if (state.autoTime && !state.manualTime) {
-      state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / 3600), 24);
+      state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / SECONDS_PER_HOUR), 24);
     }
     state.timeOfDay = state.manualTime ? damp(state.timeOfDay, state.timeTarget, 1.7, dt) : state.timeTarget;
     state.wind = damp(state.wind, state.windTarget, 0.5, dt);
@@ -298,16 +312,34 @@
     const celestial = env.celestial;
     if (!celestial) return;
     const day = !state.isNight;
-    const raw = day ? state.timeOfDay : mod(state.timeOfDay - 12, 24);
-    const theta = clamp((mod(raw, 24) - 6) / 12, 0, 1) * Math.PI;
+    /* 弧线进度按真实的日出/日落时刻归一化，而不是写死 6..18：太阳在日出那一刻
+       正好从画面左缘出现、日落那一刻正好从右缘消失，月亮从同一个日落点接过这条
+       弧的反向行程。写死 6..18 的话，本纬度 10 月会多出 0.36 小时的空档 ——
+       日盘/月盘卡在边缘不动将近 2 秒，2 分钟一天的时候看得出一次「停顿」。 */
+    const win = dayWindow(state.dayOfYear, state.latitude);
+    const daySpan = Math.max(0.5, win.set - win.rise);
+    const nightSpan = Math.max(0.5, 24 - daySpan);
+    const u = day
+      ? (state.timeOfDay - win.rise) / daySpan
+      : mod(state.timeOfDay - win.set, 24) / nightSpan;
+    const theta = clamp(u, 0, 1) * Math.PI;
     // Polar-light framing: the disc travels a short, low arc and never leaves
     // the frame, so it stays draggable and the sea always keeps a grazing sun.
-    const x = 50 - 38 * Math.cos(theta);
+    /* 夜里取反号：月亮是反日的（满月永远在太阳对面），太阳从右侧落下时月亮
+       就从右侧升起，一路逆行到左侧，正好接上第二天日出时日盘出现的位置。
+       不取反号的话，日落那一瞬间日盘会从 88% 瞬移到 12% —— 时间按真实速度
+       流的时候看不出来，现在 2 分钟一天，每天都会看见两次横跳。 */
+    const x = 50 + (day ? -38 : 38) * Math.cos(theta);
     // Keep the sun and the moon above the shoreline. The CSS horizon sits at
     // about 47.8% of the viewport, so elevation 0 maps just above it.
     const horizonY = 25.2;
     const topY = 13.4;
-    const visualElev = day ? clamp(state.sunElevation, 0, 90) : clamp(-(state.sunElevationRaw == null ? state.sunElevation : state.sunElevationRaw), 0, 74);
+    /* 月亮高度 = 太阳高度的相反数（反日：满月永远在太阳对面）。再减掉 0.5° ——
+       也就是 isNight 的翻转阈值本身：太阳刚落到 -0.5° 时它那支已被 clamp 在 0、
+       停在地平线上，月亮此刻也应当正好从地平线升起。不减这 0.5°，交接瞬间
+       日盘会凭空往上跳半个度（约 4px）；2 分钟一天，这半度每轮都会看见。 */
+    const rawElevForArc = state.sunElevationRaw == null ? state.sunElevation : state.sunElevationRaw;
+    const visualElev = day ? clamp(state.sunElevation, 0, 90) : clamp(-rawElevForArc - 0.5, 0, 74);
     // Perspective, not a linear ramp: the 3D sea reads this screen position as
     // a light direction, and a linear ramp squashes every daylight hour into
     // the last few degrees above the horizon (one permanent sunset glitter).
@@ -466,10 +498,12 @@
       state.autoTime = false;
     });
     if (auto) auto.addEventListener("click", function () {
+      /* 只是「恢复流动」，从当前这一刻继续 —— 跳回真实时钟是 RESET 的事。
+         以前时间按真实速度走，AUTO 顺带对表没有代价；现在一按就跨出几小时，
+         必须分开。 */
       state.manualTime = false;
       state.autoTime = true;
       state.elevationOffset = 0;
-      readSystemTime();
       useClimate();
     });
     if (reset) reset.addEventListener("click", function () {
@@ -498,9 +532,16 @@
     function applyDrag(e) {
       const p = pos(e);
       const dayArc = p.y < 0.6;
-      const cosT = clamp((50 - p.x * 100) / 42, -1, 1);
-      const t = 6 + Math.acos(cosT) / Math.PI * 12;
-      state.timeTarget = mod(dayArc ? t : t + 12, 24);
+      /* 反解 applySun 的弧线：白天 x = 50 - 38·cos(theta)，夜里 x = 50 + 38·cos(theta)
+         —— 月亮是反日的，同一个屏幕位置在夜里对应的是「从右侧升起」那半圈的反向行程。
+         振幅必须和 applySun 里的 38 一致，否则拖到画面边缘时刻会差几十分钟。 */
+      const win = dayWindow(state.dayOfYear, state.latitude);
+      const daySpan = Math.max(0.5, win.set - win.rise);
+      const nightSpan = Math.max(0.5, 24 - daySpan);
+      const cx = clamp((p.x * 100 - 50) / 38, -1, 1);
+      const u = Math.acos(dayArc ? -cx : cx) / Math.PI;
+      const t = dayArc ? win.rise + u * daySpan : win.set + u * nightSpan;
+      state.timeTarget = mod(t, 24);
       state.manualTime = true;
       state.autoTime = false;
       const solarNow = solarPosition(state.timeTarget, state.dayOfYear, state.latitude);
@@ -526,8 +567,8 @@
       dragging = false;
       el.classList.remove("is-dragging");
       if (!moved) {
-        state.manualTime = true;
-        state.autoTime = false;
+        /* 轻点 = 跳到正午/午夜，然后继续流动。这里不能把 manualTime 置真：
+           时间本来就在走，一次误触就把表停住，会让人以为页面坏了。 */
         state.timeTarget = state.isNight ? 12 : 0;
         state.elevationOffset = 0;
       }
@@ -539,8 +580,7 @@
     el.addEventListener("keydown", function (e) {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
-      state.manualTime = true;
-      state.autoTime = false;
+      /* 同轻点：跳过去，时间继续流。 */
       state.timeTarget = state.isNight ? 12 : 0;
       state.elevationOffset = 0;
     });
