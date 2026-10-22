@@ -2156,7 +2156,7 @@ function focusFirstCardWhenReady(attempt = 0) {
    The promenade is a horizontal thing, so a horizontal gesture should move it.
    A trackpad swipe (a wheel event whose deltaX dominates) or a finger dragged
    across the stage is simply turned into the very same page scroll the
-   vertical swipe produces — everything downstream (the door opening, the ring,
+   vertical swipe produces — everything downstream (the cover gate, the ring,
    the camera damping) is untouched, and both ends still wrap. */
 function initSidewaysInput() {
   const canWalk = () => !state.focusOpen && !state.focusClosing;
