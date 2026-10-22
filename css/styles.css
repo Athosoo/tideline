@@ -699,7 +699,7 @@ img {
   position: absolute;
   left: var(--sun-x, 74%);
   top: var(--sun-y, 11%);
-  width: var(--sun-size, clamp(200px, 23vw, 420px));
+  width: var(--sun-size, clamp(155px, 12vw, 240px));
   aspect-ratio: 1;
   z-index: 1;
   transform: translate(-50%, -50%) translate3d(calc(var(--scene) * -3.5vw + var(--mx) * -9px), calc(var(--scene) * -1.6vh + var(--my) * -5px), 0);
@@ -712,6 +712,18 @@ img {
 
 .celestial.is-dragging { cursor: grabbing; }
 
+/* 关键：光必须「加」到天空上，而不是盖在天空上。
+   .celestial 自己带 transform（视差），transform 会生成一个隔离的层叠上下文——
+   所以写在内层元素上的 mix-blend-mode 只能和内层的兄弟节点混合，整个太阳组最后
+   仍然是普通叠加：alpha < 1 的暖色压上去，日面就变成一块偏暗的橙色贴片，边缘也
+   看得见。把 screen 提到组这一层，整组（光晕 + 日面 + 纱光）一起以加法落在天空
+   上，才有「亮得溢出来」的效果。 */
+.celestial { mix-blend-mode: screen; }
+
+/* 月亮不能加光：屏幕混合会把月海的暗部一起吃掉，满月就洗成一团白。
+   夜空的月亮本来也比周围亮，普通叠加就够。 */
+.celestial.is-moon { mix-blend-mode: normal; }
+
 /* 真实太阳在眼里没有「边」：光球过曝压在白色上，外面只剩散开的光晕。
    所以这里不描边、不用 box-shadow、也不用 filter: blur()（一块跟太阳移动的大元素
    每帧做模糊要重算整片，很贵）。改用两层径向渐变，各自把外缘渐变到 alpha 0，
@@ -719,14 +731,29 @@ img {
    ::after 虚线）会画出两圈假边缘，已删除。 */
 .celestial-bloom {
   position: absolute;
-  inset: -30%;
+  inset: -48%;
   border-radius: 50%;
   background: radial-gradient(circle,
     var(--sun-bloom-0, rgba(255, 246, 214, 0.46)) 0%,
-    var(--sun-bloom-1, rgba(255, 238, 190, 0.16)) 34%,
-    var(--sun-bloom-2, rgba(255, 232, 178, 0)) 72%);
+    var(--sun-bloom-1, rgba(255, 238, 190, 0.16)) 30%,
+    var(--sun-bloom-2, rgba(255, 232, 178, 0)) 70%);
+  /* 混合模式在组这一层（见 .celestial），这里只负责形状。 */
   transform: scale(var(--sun-bloom-scale, 1)) scaleY(var(--sun-flatten, 1));
   pointer-events: none;
+}
+
+/* 远处那层大范围眩光：逆光看太阳时，整片天都被洗亮一层，这才是「耀眼」
+   最直接的证据。单独一层大渐变，不做 filter: blur()，代价近乎为零。 */
+.celestial-bloom::after {
+  content: "";
+  position: absolute;
+  inset: -150%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    var(--sun-veil, rgba(255, 250, 232, 0.26)) 0%,
+    rgba(255, 250, 232, 0.09) 34%,
+    transparent 64%);
+  transform: scale(var(--sun-bloom-scale, 1));
 }
 
 /* 光球：亮核 + 持续衰减，最外缘完全不透明度为 0 —— 没有可见边缘。
@@ -739,38 +766,42 @@ img {
      所以亮核一直平铺到 56%，再用 56→100% 把 alpha 收到 0 —— 既没有可见
      边缘，视觉直径又接近标称直径（之前 46% 就开始掉，看着只有一半大）。 */
   background: radial-gradient(circle,
-    var(--sun-core-0, rgba(255, 252, 236, 0.97)) 0%,
-    var(--sun-core-0, rgba(255, 252, 236, 0.97)) 56%,
-    var(--sun-core-1, rgba(255, 240, 202, 0.62)) 78%,
+    var(--sun-core-hot, rgba(255, 255, 255, 0.99)) 0%,
+    var(--sun-core-hot, rgba(255, 255, 255, 0.99)) 14%,
+    var(--sun-core-0, rgba(255, 252, 236, 0.97)) 40%,
+    var(--sun-core-0, rgba(255, 252, 236, 0.97)) 52%,
+    var(--sun-core-1, rgba(255, 240, 202, 0.62)) 68%,
     var(--sun-core-2, rgba(255, 226, 168, 0)) 100%);
+  /* 光球中心是「死白」——没有细节、没有层次，人眼才判定它耀眼。 */
   transform: scaleY(var(--sun-flatten, 1));
   pointer-events: none;
 }
 
-/* 月亮相反：视直径小、没有大气辉光，所以轮廓真的清楚。
-   保留实心到 90% 再快速羽化，同时不做压扁。 */
+/* 月亮：满月，用真实月面贴图（NASA/Goddard，公有领域，见 THIRD-PARTY-NOTICES.md）。
+   贴图自带 alpha 羽化边，所以不需要 mask；下面那层渐变只是贴图加载失败时的兜底。
+   满月没有明暗界线，原来那层按时刻算出来的「假月相」暗斑已删。 */
 .celestial.is-moon .celestial-disc {
-  /* 月面比日面小：远看才像「一颗」月亮，不是一块饼。 */
-  inset: 34%;
-  background: radial-gradient(circle,
-    var(--sun-core-0, rgba(250, 252, 247, 1)) 0%,
-    var(--sun-core-1, rgba(228, 237, 241, 1)) 90%,
-    var(--sun-core-2, rgba(220, 232, 240, 0)) 100%);
+  inset: 26%;
+  background-image:
+    url("../assets/moon/full-moon.webp"),
+    radial-gradient(circle,
+      var(--sun-core-0, rgba(250, 252, 247, 1)) 0%,
+      var(--sun-core-1, rgba(228, 237, 241, 1)) 88%,
+      var(--sun-core-2, rgba(220, 232, 240, 0)) 100%);
+  background-size: 100% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
   transform: none;
 }
 
-.celestial.is-moon .celestial-disc::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at calc(62% + (var(--moon-phase, 0.5) - 0.5) * 42%) 30%, var(--sky-mid, #0b1220) 0 58%, transparent 62%);
-}
-
+/* 提示文字必须待在 .celestial 外面：那一层整体在做 screen 加光，暗色文字会被
+   当成「没有光」直接抹掉。所以改成 .celestial 的兄弟节点，用同一组太阳坐标定位，
+   再借 :has() 把太阳的 hover / 键盘焦点转过来。 */
 .celestial-hint {
   position: absolute;
-  left: 50%;
-  bottom: -18px;
+  left: var(--sun-x, 74%);
+  top: calc(var(--sun-y, 11%) + 11%);
+  z-index: 2;
   transform: translateX(-50%);
   color: rgba(247, 242, 230, 0.55);
   font-size: 6px;
@@ -781,8 +812,8 @@ img {
   pointer-events: none;
 }
 
-.celestial:hover .celestial-hint,
-.celestial:focus-visible .celestial-hint { opacity: 1; }
+.atmosphere:has(.celestial:hover) .celestial-hint,
+.atmosphere:has(.celestial:focus-visible) .celestial-hint { opacity: 1; }
 
 .horizon-glow {
   position: absolute;

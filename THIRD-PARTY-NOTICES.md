@@ -80,3 +80,12 @@ THE SOFTWARE.
 | Manrope | SIL Open Font License 1.1 |
 
 两者均已转换为 woff2 内嵌在 `assets/fonts/`，随页面离线分发。
+
+---
+
+## 4. 月球贴图
+
+- **来源**：NASA / Goddard Space Flight Center Scientific Visualization Studio 的月球可视化影像（`GSFC_20171208_Archive_e000868`），经 <https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000868/collection.json> 获取。
+- **使用位置**：`assets/moon/full-moon.webp`（512×512，由该影像的预览图裁切、缩小并转码为 WebP），在 `css/styles.css` 里作为 `.celestial.is-moon .celestial-disc` 的背景贴图。
+- **改动说明**：仅做等比缩放与格式转码，未改动月面内容。
+- **许可证**：公有领域（U.S. Government Work，不受版权保护）。依据 NASA 媒体使用指南 <https://www.nasa.gov/nasa-brand-center/images-and-media/>，NASA 素材可用于非商业与商业用途，无需授权，但不得暗示 NASA 为本项目背书。

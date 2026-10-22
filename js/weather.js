@@ -258,18 +258,18 @@
        spread 光晕张开倍数（越大越张开：路径更长、前向散射更强）
        flat   竖直压扁（折射，真实约 0.85） */
   var SUN_LOOK = [
-    { e: -4, core: [1.00, 0.42, 0.18], a: 0.00, a1: 0.00, bloom: [1.00, 0.40, 0.18], ba: 0.00, spread: 1.85, flat: 0.82 },
-    { e: -1, core: [1.00, 0.38, 0.14], a: 0.55, a1: 0.28, bloom: [1.00, 0.36, 0.14], ba: 0.20, spread: 1.75, flat: 0.85 },
-    { e: 2, core: [1.00, 0.52, 0.20], a: 0.80, a1: 0.40, bloom: [1.00, 0.48, 0.20], ba: 0.27, spread: 1.62, flat: 0.89 },
-    { e: 6, core: [1.00, 0.68, 0.36], a: 0.90, a1: 0.45, bloom: [1.00, 0.62, 0.30], ba: 0.30, spread: 1.45, flat: 0.92 },
-    { e: 14, core: [1.00, 0.86, 0.62], a: 0.93, a1: 0.44, bloom: [1.00, 0.82, 0.56], ba: 0.31, spread: 1.22, flat: 0.96 },
-    { e: 26, core: [1.00, 0.96, 0.86], a: 0.96, a1: 0.46, bloom: [1.00, 0.95, 0.82], ba: 0.32, spread: 1.05, flat: 0.99 },
-    { e: 45, core: [1.00, 0.99, 0.96], a: 0.97, a1: 0.48, bloom: [1.00, 0.99, 0.94], ba: 0.33, spread: 0.92, flat: 1.00 },
-    { e: 70, core: [1.00, 1.00, 1.00], a: 0.98, a1: 0.50, bloom: [1.00, 1.00, 0.98], ba: 0.34, spread: 0.86, flat: 1.00 },
+    { e: -4, core: [1.00, 0.42, 0.18], a: 0.00, a1: 0.00, bloom: [1.00, 0.40, 0.18], ba: 0.00, spread: 1.85, flat: 0.82, hs: 58 },
+    { e: -1, core: [1.00, 0.38, 0.14], a: 0.66, a1: 0.30, bloom: [1.00, 0.36, 0.14], ba: 0.30, spread: 1.72, flat: 0.85, hs: 52 },
+    { e: 2, core: [1.00, 0.52, 0.20], a: 0.92, a1: 0.44, bloom: [1.00, 0.48, 0.20], ba: 0.46, spread: 1.60, flat: 0.89, hs: 40 },
+    { e: 6, core: [1.00, 0.68, 0.36], a: 0.98, a1: 0.47, bloom: [1.00, 0.62, 0.30], ba: 0.54, spread: 1.44, flat: 0.92, hs: 31 },
+    { e: 14, core: [1.00, 0.86, 0.62], a: 1.00, a1: 0.45, bloom: [1.00, 0.82, 0.56], ba: 0.58, spread: 1.22, flat: 0.96, hs: 23 },
+    { e: 26, core: [1.00, 0.96, 0.86], a: 1.00, a1: 0.44, bloom: [1.00, 0.95, 0.82], ba: 0.68, spread: 1.08, flat: 0.99, hs: 18 },
+    { e: 45, core: [1.00, 0.99, 0.96], a: 1.00, a1: 0.45, bloom: [1.00, 0.99, 0.94], ba: 0.68, spread: 1.02, flat: 1.00, hs: 16 },
+    { e: 70, core: [1.00, 1.00, 1.00], a: 1.00, a1: 0.47, bloom: [1.00, 1.00, 0.98], ba: 0.66, spread: 0.98, flat: 1.00, hs: 15 },
   ];
 
   /* 月亮：视直径小、没有大气辉光，所以轮廓清楚、光晕很淡且偏冷。 */
-  var MOON_LOOK = { core: [0.96, 0.98, 0.95], a: 0.97, a1: 0.97, bloom: [0.72, 0.82, 0.92], ba: 0.10, spread: 1.15, flat: 1.00 };
+  var MOON_LOOK = { core: [0.96, 0.98, 0.95], a: 0.97, a1: 0.97, bloom: [0.72, 0.82, 0.92], ba: 0.14, spread: 1.12, flat: 1.00, hs: 16 };
 
   function lookFor(elev) {
     var L = SUN_LOOK;
@@ -289,6 +289,7 @@
       ba: lerp(p.ba, q.ba, t),
       spread: lerp(p.spread, q.spread, t),
       flat: lerp(p.flat, q.flat, t),
+      hs: lerp(p.hs, q.hs, t),
     };
   }
 
@@ -337,9 +338,15 @@
       const sunGlow = rgb(bloom);
       setAtmo("--sun-x", x.toFixed(2) + "%");
       setAtmo("--sun-y", y.toFixed(2) + "%");
+      /* 最里面那一小块是过曝的「死白」：太阳之所以刺眼，靠的就是这块没有细节的白，
+         外面才有橙金的层次。月亮不参与（月面要留住纹理）。 */
+      const hotWhite = mix(discCore, [1, 1, 1], day ? 0.88 : 0.30 * moonIn);
+      setAtmo("--sun-core-hot", rgba(hotWhite, clamp(discA + 0.04)));
       setAtmo("--sun-core-0", rgba(discCore, discA));
       setAtmo("--sun-core-1", rgba(discMid, discA1));
       setAtmo("--sun-core-2", rgba(bloom, 0));
+      /* 远处大范围眩光：逆光时整片天被洗亮一层，是「耀眼」最直接的证据。 */
+      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.04) * dim));
       /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。 */
       const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon);
       setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim));
@@ -350,17 +357,22 @@
       /* 大气泛白（.atmosphere 第一层）负责整片天光；.celestial-bloom 只负责
          太阳近处那一圈紧光，由 spread 控制张开。白天低角度收到 0.62，
          与入夜那一刻接上，地平线两侧不跳。 */
-      const haloA = (day ? lerp(0.62, 0.74, clamp(state.sunElevation / 12, 0, 1)) : lerp(0.62, 0.22, belowHorizon)) * dim;
+      /* 正午的日晕要又小又猛：天光还是蓝的，太阳才刺得出来。
+         贴近地平线时散射铺满整片天，那才是落日的橙。 */
+      /* 亮度上限必须留给日面：日晕一浓，太阳就变成同一片白里的一块，反而看不出亮。
+         所以日晕只做到「把天洗亮一点」，越贴地平线越宽（散射铺得开）。 */
+      const haloA = (day ? 0.26 + 0.20 * (1 - clamp(state.sunElevation / 20, 0, 1)) : lerp(0.46, 0.18, belowHorizon)) * dim;
       /* 夜里的余晖还是暖的（被散射掉的落日），越接近深蓝调才越接近月色。 */
-      const haloColor = day ? bloom : mix(bloom, [1.00, 0.52, 0.30], (1 - belowHorizon) * 0.55);
-      const haloScale = day ? clamp(0.86 + 0.30 * (look.spread - 0.86), 0.86, 1.40) : 1;
+      /* 日晕画的是「被点亮的天」，不是光本身：直接用饱和的日色压上去会把天空的
+         G/B 通道一起拉低，日落时那圈橙色就发闷发褐。先往白里提，才像光在扩散。 */
+      const haloColor = day ? mix(bloom, [1, 1, 1], 0.55) : mix(bloom, [1.00, 0.62, 0.42], 0.45);
       setAtmo("--sun-halo", rgba(haloColor, haloA));
-      setAtmo("--sun-halo-x", (47 * haloScale).toFixed(1) + "%");
-      setAtmo("--sun-halo-y", (42 * haloScale * (0.62 + 0.38 * look.flat)).toFixed(1) + "%");
+      setAtmo("--sun-halo-x", look.hs.toFixed(1) + "%");
+      setAtmo("--sun-halo-y", (look.hs * (0.72 + 0.28 * look.flat)).toFixed(1) + "%");
       /* 仍被 .light-glow（3D 海面取光方向）与天气条圆点消费的旧变量。 */
       setAtmo("--sun-color", sunColor);
       setAtmo("--sun-glow", sunGlow);
-      setAtmo("--sun-glow-alpha", (0.7 * dim).toFixed(3));
+      setAtmo("--sun-glow-alpha", (clamp((0.72 + 0.30 * state.ambient) * dim, 0, 1)).toFixed(3));
       /* 顶部天气条的圆点也用 --sun-color/--sun-glow，单独写它自己那一小块。 */
       setVar(env.weatherBar, "--sun-color", sunColor);
       setVar(env.weatherBar, "--sun-glow", sunGlow);
@@ -381,7 +393,6 @@
     setAtmo("--sea-near", rgb(state.sky.seaNear));
     setAtmo("--sea-deep", rgb(state.sky.seaDeep));
     setAtmo("--shade", ((1 - state.ambient) * 0.42).toFixed(3));
-    setAtmo("--moon-phase", mod(state.timeOfDay / 12, 1).toFixed(3));
     /* 卡片面与聚焦层都要用的光照参数：只写 .gallery 与 #focus 两处。 */
     setLight("--ambient", state.ambient.toFixed(3));
     setLight("--light-angle", (90 + (state.sunAzimuth - 180) * 0.5).toFixed(1) + "deg");
