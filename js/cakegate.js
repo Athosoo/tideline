@@ -23,8 +23,9 @@
   var FLY_A = 0.28;             // 加速段结束
   var FLY_B = 0.74;             // 匀速段结束
   var FLY_V = 2 / (1 + (FLY_B - FLY_A));   // 峰值 1.3699：由「三段位移和 = 1」解出
-  var CUT = 0.72;
-  var STITCH = 0.7;             // 回封面缝合 700ms
+  var CUT = 2.6;                // 切开：布慢慢裂开，2.6s 走完
+  var HOLD = 0.28;              // 先亮一道缝 280ms，布纹丝不动
+  var STITCH = 1.1;             // 回封面缝合 1100ms
 
   var clothWrap = document.getElementById("clothWrap");
   var chartLines = document.getElementById("chartLines");
@@ -41,15 +42,20 @@
   var surface = document.getElementById("cutSurface");
   var seamEl = document.getElementById("cutSeam");
 
+  // 截图用：?cutat=0.55 把切开进度钉在这个值（仍然走真实的 cut() 路径）
+  var CUTAT = params.has("cutat") ? clamp(parseFloat(params.get("cutat")) || 0, 0, 1) : null;
+
   var hooks = { openArchive: null, reduced: null };
 
   var S = {
+    mounted: false,     // 层是否真的装上了（reduced motion 会把它摘掉）
     phase: "idle",      // idle → fly → aim → cut → open → (缝合) aim
     t: 0,
     cut: 0,             // --cut 0..1
     cutTarget: 0,
     cutHold: 0,
     opened: false,
+    finished: false,
     sawGate: false,
     tip: { x: 0, y: 0 },
     bearing: Math.PI * 0.5,
@@ -70,6 +76,12 @@
     var w = 1 - u;
     return 1 - (0.5 * FLY_V * w * w) / (1 - FLY_B);
   }
+  // 布被慢慢撕开：两头慢，中段快。匀速或纯 easeOut 都会显得轻。
+  function easeInOut(u) {
+    u = clamp(u, 0, 1);
+    return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+  }
+
   function easeOut(u) { return 1 - Math.pow(1 - u, 3); }
   function mulberry32(seed) {
     var a = seed >>> 0;
@@ -339,7 +351,8 @@
 
   /* ---------- 两半：互补多边形，切口带撕的噪声 ---------- */
   var CUT_N = 26;
-  var CUT_R = 8000;
+  // 半径只取视口量级：坐标动辄 ±40000px 时 Chrome 会把整块裁掉不画（实测变空白）
+  var CUT_R = 2600;
 
   function halfPolygon(dx, dy, sign, seed) {
     // 过圆心、沿刀轴 (dx,dy) 的直线；sign 决定取哪半。两半共用同一条噪声边，
@@ -356,7 +369,7 @@
       var j = Math.sin(t * 0.004 + ph[0]) * 1.5 + Math.sin(t * 0.0013 + ph[1]) * 1.2 + Math.sin(t * 0.021 + ph[2]) * 0.6;
       edge.push([dx * t + nx * j, dy * t + ny * j]);
     }
-    var far = 40000;
+    var far = 5200;
     var list = edge.slice();
     var last = edge[edge.length - 1];
     var first = edge[0];
@@ -393,6 +406,8 @@
     gateEl.style.setProperty("--cdy", dy.toFixed(5));
     gateEl.style.setProperty("--cnx", (-dy).toFixed(5));
     gateEl.style.setProperty("--cny", dx.toFixed(5));
+    // 窗口尺寸可能在 init 之后变过：切口必须重新量，否则那条线不落在蛋糕圆心上
+    measure();
     var a = document.getElementById("halfA");
     var b = document.getElementById("halfB");
     if (a) a.style.clipPath = halfPolygon(dx, dy, 1, 17);
@@ -474,6 +489,19 @@
     }
   }
 
+  /* ---------- 揭开：布裂开的那一瞬，长廊必须已经在后面 ---------- */
+  function revealCover() {
+    if (S.opened) return;
+    S.opened = true;
+    if (hooks.setCutting) hooks.setCutting(true);
+    // 注意：这里**不解锁** --gate。--gate 一升上去，.intro 整层就淡出
+    // （styles.css:160 opacity: calc(1 - var(--gate) * 1.4)），
+    // 布会在揭开的那一帧连题字一起消失 —— 那就还是「开门太快」。
+    // 也**不**在这里瞬移进长廊：布还在裂的时候页面已经滚走，那一帧就是
+    // 「切完还剩一张画」。先让布自己裂开（裂口后面就是活着的海），
+    // 布彻底离场了再瞬移，用户看不到任何跳变。
+  }
+
   function cut() {
     if (S.phase !== "aim" && S.phase !== "fly") return;
     S.cutAngle = S.bearing;
@@ -493,20 +521,17 @@
     // 切口先亮一会儿，再让整张幕布跟着开 —— 一刀是一件事，不是两件
     // 立刻把长廊就位（instant），而不是边切边滚：切开时长廊必须已经在那儿，
     // 否则布裂开了，观众看到的是一帧还在滑动的半成品。
-    setTimeout(function () {
-      if (hooks.openArchive && !S.opened) {
-        S.opened = true;
-        hooks.openArchive(true);
-      }
-    }, 110);
-    setTimeout(function () { S.phase = "open"; }, 520);
+    // 揭开时机交给 update()：HOLD 之后裂布，CUT 走完才算 open。
   }
 
   /* ---------- 缝合：回封面时台布从切口缝回去 ---------- */
   function stitch() {
     document.body.classList.remove("is-cutting");
+    if (hooks.setCutting) hooks.setCutting(false);
+    if (hooks.setCoverLocked) hooks.setCoverLocked(true);
     S.cutTarget = 0;
     S.opened = false;
+    S.finished = false;
     gateEl.classList.remove("is-cut");
     if (seamEl) seamEl.classList.remove("is-live");
   }
@@ -515,6 +540,14 @@
   var drag = { down: false, x: 0, y: 0, moved: 0 };
 
   function initEvents() {
+    // 门只剩刀这一条路：布没裂开之前，滚轮、指头、翻页键都不许把封面顶开。
+    function holdCover() { return S.phase !== "open"; }
+    window.addEventListener("wheel", function (e) { if (holdCover()) e.preventDefault(); }, { passive: false });
+    window.addEventListener("touchmove", function (e) { if (holdCover()) e.preventDefault(); }, { passive: false });
+    window.addEventListener("keydown", function (e) {
+      if (!holdCover()) return;
+      if (e.key === " " || e.key === "Spacebar" || e.key === "PageDown" || e.key === "PageUp" || e.key === "ArrowDown" || e.key === "ArrowUp") e.preventDefault();
+    }, { passive: false });
     window.addEventListener("pointermove", function (e) {
       S.pointer.x = e.clientX;
       S.pointer.y = e.clientY;
@@ -579,7 +612,20 @@
 
     if (S.cut < S.cutTarget) {
       S.cutHold += dt;
-      if (S.cutHold > 0.09) S.cut = clamp(S.cut + dt / (reduced ? 0.001 : CUT), 0, 1);
+      // 先亮缝，再裂布：HOLD 这一段布一动不动，只有切口一道光
+      if (S.cutHold > HOLD) {
+        revealCover();
+        S.cut = clamp(S.cut + dt / (reduced ? 0.001 : CUT), 0, 1);
+        if (CUTAT !== null) S.cut = CUTAT;
+        if (S.cut >= 1 && S.phase === "cut") {
+          // 布全裂开了才算这一刀走完：这时候才把 --gate 交还给滚动，
+          // 整层随之淡出，长廊满屏。此前一直锁在 0。
+          S.phase = "open";
+          // 布已经飞出屏幕（eff=1 → .is-gone），这时候瞬移进长廊是隐形的
+          if (hooks.openArchive) hooks.openArchive(true);
+          if (hooks.setCoverLocked) hooks.setCoverLocked(false);
+        }
+      }
     } else if (S.cut > S.cutTarget) {
       S.cut = clamp(S.cut - dt / STITCH, 0, 1);
       if (S.cut === 0) {
@@ -599,10 +645,17 @@
       stitch();
       S.sawGate = false;
     }
-    var eff = S.phase === "cut" || S.phase === "open" ? easeOut(S.cut) : S.cut;
-    if (g > eff) eff = g;
+    // 只认这一刀。滚动早就不是开门的路了（app.js 的 coverLocked），
+    // 再把 --gate 算进来，揭开那一帧 gate 就是 1，布会当场飞到底 —— 又成了「太快」。
+    var eff = S.phase === "cut" || S.phase === "open" ? easeInOut(S.cut) : S.cut;
     gateEl.style.setProperty("--cut", eff.toFixed(4));
-    gateEl.classList.toggle("is-out", eff > 0.55);
+    // 门开完了、--gate 也爬上来了，这时候封面那套字才允许回来（否则会闪一下）
+    if (S.phase === "open" && !S.finished && g > 0.6) {
+      S.finished = true;
+      if (hooks.setCutting) hooks.setCutting(false);
+    }
+    // 淡出只负责「最后一点尾帧」，不能在半路把布抹掉：0.92 之后才退场
+    gateEl.classList.toggle("is-out", eff > 0.92);
     // 切开到位了就把整层从绘制里撤掉：布已经飞出去，留着它等于在长廊上
     // 压着一层看不见却还在屏幕上的东西 —— 那正是「切完还剩一帧」的来历。
     gateEl.classList.toggle("is-gone", eff > 0.995 && S.phase === "open");
@@ -614,6 +667,8 @@
     if (h) {
       hooks.openArchive = h.openArchive || null;
       hooks.reduced = h.reducedMotion || null;
+      hooks.setCutting = h.setCutting || null;
+      hooks.setCoverLocked = h.setCoverLocked || null;
     }
     if (hooks.reduced && hooks.reduced.matches) {
       // 不飞刀、不切：让原来的封面照常开门，320ms 淡出交给 .intro
@@ -631,6 +686,8 @@
     S.bearing = bearingTo(S.tip.x, S.tip.y);
     placeKnife();
     initEvents();
+    S.mounted = true;
+    if (hooks.setCoverLocked) hooks.setCoverLocked(true);
     document.body.classList.add("is-cake-cursor");
 
     if (FREEZE === "aim" || FREEZE === "cut") {
@@ -656,6 +713,9 @@
         dbg.textContent = "phase=" + S.phase + " cut=" + S.cut.toFixed(2) +
           " intro=[" + (document.getElementById("intro") || {}).className + "]" +
           " gate=[" + gateEl.className + "]" +
+          " body=[" + document.body.className + "]" +
+          " sawGate=" + S.sawGate + " opened=" + S.opened +
+          " eff=" + (gateEl.style.getPropertyValue("--cut") || "-") +
           " scrollY=" + Math.round(window.scrollY) +
           " stack=" + (function () {
             var list = document.elementsFromPoint(window.innerWidth * 0.5, window.innerHeight * 0.3) || [];
@@ -687,6 +747,7 @@
     update: update,
     cut: cut,
     stitch: stitch,
+    isActive: function () { return S.mounted === true && S.phase !== "open"; },
     debug: function () {
       return {
         phase: S.phase,

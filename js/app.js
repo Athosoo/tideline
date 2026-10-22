@@ -1398,7 +1398,8 @@ function updateScrollState(dt) {
   const direct = REDUCED_MOTION.matches || state.snapCamera === true;
   if (state.snapCamera) state.snapCamera = false;
   const start = Math.max(1, state.introPx);
-  const gateRaw = clamp((window.scrollY - start * 0.08) / (start * 0.92));
+  // 幕布锁着时滚动一律不算数：这道门只能切，不能滚。
+  const gateRaw = state.coverLocked ? 0 : clamp((window.scrollY - start * 0.08) / (start * 0.92));
   const gateTarget = smootherstep(gateRaw);
   state.gate = direct ? gateTarget : damp(state.gate, gateTarget, 9, dt);
 
@@ -1422,7 +1423,8 @@ function updateScrollState(dt) {
   dom.coverContent.style.transform = `translate3d(0, ${(-coverLift).toFixed(2)}px, 0)`;
   dom.intro.style.pointerEvents = state.gate > 0.86 || coverFade <= 0.01 ? "none" : "auto";
 
-  const shouldHideIntro = state.gate > 0.997;
+  // 刀还没走完，这一层就不能撤：撤了布当场消失，看着就是「开门太快」。
+  const shouldHideIntro = state.gate > 0.997 && !state.cakeCutting;
   if (shouldHideIntro && !state.introHidden) {
     dom.intro.classList.add("is-hidden");
     state.introHidden = true;
@@ -2262,7 +2264,10 @@ function initSidewaysInput() {
 
 function initEvents() {
   initSidewaysInput();
-  dom.scrollCue.addEventListener("click", openArchive);
+  dom.scrollCue.addEventListener("click", () => {
+    if (window.CakeGate && CakeGate.isActive()) CakeGate.cut();
+    else openArchive(true);
+  });
   dom.brandHome.addEventListener("click", returnToCover);
   dom.shuffleButton.addEventListener("click", randomizeCards);
   dom.skipLink.addEventListener("click", (event) => {
@@ -2460,6 +2465,8 @@ function init() {
   state.wander = 0;
   state.loopScene = 0;
   state.bgScene = 0;
+  state.coverLocked = false;   // 幕布层接管后由 CakeGate 置 true
+  state.cakeCutting = false;
   initCursor();
   initFocus();
   initEvents();
@@ -2475,7 +2482,14 @@ function init() {
   if (window.Weather) Weather.init({ quality: quality, reducedMotion: REDUCED_MOTION });
   setActiveCard(0, true);
 
-  if (window.CakeGate) CakeGate.init({ openArchive: openArchive, reducedMotion: REDUCED_MOTION });
+  if (window.CakeGate) {
+    CakeGate.init({
+      openArchive: openArchive,
+      reducedMotion: REDUCED_MOTION,
+      setCoverLocked: (locked) => { state.coverLocked = locked === true; },
+      setCutting: (cutting) => { state.cakeCutting = cutting === true; },
+    });
+  }
 
   state.initialized = true;
   window.requestAnimationFrame(animate);
