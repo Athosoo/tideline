@@ -86,6 +86,6 @@ THE SOFTWARE.
 ## 4. 月球贴图
 
 - **来源**：NASA / Goddard Space Flight Center Scientific Visualization Studio 的月球可视化影像（`GSFC_20171208_Archive_e000868`），经 <https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000868/collection.json> 获取。
-- **使用位置**：`assets/moon/full-moon.webp`（512×512，由该影像的预览图裁切、缩小并转码为 WebP），在 `css/styles.css` 里作为 `.celestial.is-moon .celestial-disc` 的背景贴图。
-- **改动说明**：仅做等比缩放与格式转码，未改动月面内容。
+- **使用位置**：`assets/moon/full-moon.webp`（256×256，由该影像的预览图裁切、缩小并转码为 WebP），在 `css/styles.css` 里作为 `.celestial.is-moon .celestial-disc` 的背景贴图。
+- **改动说明**：除等比缩放与格式转码外，还做了这些处理——轻微高斯模糊（抹掉缩到 100px 显示尺寸后会碎成噪点的环形山细节）、压缩动态范围（`0.55 + 0.46 × 原值`，把月海暗部抬起来）、一层低强度柔光叠加、乘一个冷银偏色（R 0.965 / G 0.985 / B 1.03），最后加圆形 alpha 羽化边。结果是同一张月球影像的「去细节」重绘，月面地理格局（雨海、静海、第谷辐射纹）仍对应真实月球。
 - **许可证**：公有领域（U.S. Government Work，不受版权保护）。依据 NASA 媒体使用指南 <https://www.nasa.gov/nasa-brand-center/images-and-media/>，NASA 素材可用于非商业与商业用途，无需授权，但不得暗示 NASA 为本项目背书。

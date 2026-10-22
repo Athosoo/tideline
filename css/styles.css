@@ -695,6 +695,51 @@ img {
   opacity: var(--sun-glow-alpha, 0.9);
 }
 
+/* 夜里的月光小路：从月盘出发、向下张开的一条银白反光带，越近越宽，
+   到画面底部中央摊成一片。真实成因是波面把月光反射进眼睛，形状本来就是
+   一个从光源向下张开的锥形——所以这里用 conic-gradient 从月盘位置张开
+   ±16° 的楔形（几何就是这个形状），再用两个椭圆补足形状：一个贴着月亮
+   正下方，一个落在画面底部中央，让光带随着靠近视点往中间偏（人站在滩上
+   往下看，近处的反光总是收在脚前）。闪烁不归它管：引擎在算真实高光带
+   （GIFT/js/app.js 的 setLight 跟随日/月盘方位）画在下面一层，两层叠在
+   一起才有波光粼粼的颗粒。整层只是静态渐变，不加 filter、不做位移动画。 */
+.moon-path {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: var(--moon-path, 0);
+  background:
+    /* 主锥：±24°，11 个停点。停点密是必须的——三段线性衰减在锥形上会露出
+       两条笔直的「光柱边」，加密到这种程度，边缘才是真的散开。 */
+    conic-gradient(from 156deg at var(--sun-x, 50%) var(--sun-y, 18%),
+      transparent 0deg,
+      rgba(206, 227, 255, 0.03) 5deg,
+      rgba(212, 231, 255, 0.10) 10deg,
+      rgba(220, 237, 255, 0.17) 15deg,
+      rgba(228, 241, 255, 0.21) 20deg,
+      rgba(232, 243, 255, 0.22) 24deg,
+      rgba(228, 241, 255, 0.20) 28deg,
+      rgba(220, 237, 255, 0.15) 33deg,
+      rgba(212, 231, 255, 0.08) 38deg,
+      rgba(206, 227, 255, 0.02) 43deg,
+      transparent 48deg),
+    /* 月亮正下方那一段：锥形在海平线附近还很窄，靠这层把「从月亮出发」接上。 */
+    radial-gradient(ellipse 13% 30% at var(--sun-x, 50%) 70%,
+      rgba(214, 233, 255, 0.16) 0%,
+      rgba(198, 222, 252, 0.06) 55%,
+      transparent 84%),
+    /* 最近处：光带摊成一片躺在画面底部中央（人站在滩上往下看，反光总收在脚前）。 */
+    radial-gradient(ellipse 34% 16% at 50% 101%,
+      rgba(232, 243, 255, 0.24) 0%,
+      rgba(204, 226, 255, 0.10) 50%,
+      transparent 82%);
+  /* 地平线以上不该有光：楔形的顶点藏在天空里，从海面才开始显影。 */
+  mask-image: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.5) 46%, #000 60%, #000 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.5) 46%, #000 60%, #000 100%);
+}
+
 .celestial {
   position: absolute;
   left: var(--sun-x, 74%);
@@ -733,10 +778,14 @@ img {
   position: absolute;
   inset: -48%;
   border-radius: 50%;
+  /* 四个停点（而不是三个）：三段线性衰减在交界处会画出看得见的一圈光环，
+     亮度差越大人眼越容易把折线读成边缘。停点按 1 → 0.52 → 0.20 → 0 排，
+     近似高斯的衰减曲线，紧光就没有轮廓了。 */
   background: radial-gradient(circle,
     var(--sun-bloom-0, rgba(255, 246, 214, 0.46)) 0%,
-    var(--sun-bloom-1, rgba(255, 238, 190, 0.16)) 30%,
-    var(--sun-bloom-2, rgba(255, 232, 178, 0)) 70%);
+    var(--sun-bloom-1, rgba(255, 238, 190, 0.24)) 24%,
+    var(--sun-bloom-3, rgba(255, 235, 186, 0.09)) 52%,
+    var(--sun-bloom-2, rgba(255, 232, 178, 0)) 78%);
   /* 混合模式在组这一层（见 .celestial），这里只负责形状。 */
   transform: scale(var(--sun-bloom-scale, 1)) scaleY(var(--sun-flatten, 1));
   pointer-events: none;

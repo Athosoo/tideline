@@ -269,7 +269,7 @@
   ];
 
   /* 月亮：视直径小、没有大气辉光，所以轮廓清楚、光晕很淡且偏冷。 */
-  var MOON_LOOK = { core: [0.96, 0.98, 0.95], a: 0.97, a1: 0.97, bloom: [0.72, 0.82, 0.92], ba: 0.14, spread: 1.12, flat: 1.00, hs: 16 };
+  var MOON_LOOK = { core: [0.97, 0.99, 1.00], a: 1.00, a1: 1.00, bloom: [0.80, 0.88, 1.00], ba: 0.42, spread: 1.18, flat: 1.00, hs: 26 };
 
   function lookFor(elev) {
     var L = SUN_LOOK;
@@ -332,8 +332,11 @@
       const moonIn = day ? 1 : clamp((-rawElev - 0.5) / 2.5, 0, 1);
       const discCore = day ? hot : mix([1.00, 0.74, 0.54], hot, moonIn);
       const discMid = day ? mix(core, bloom, 0.45) : mix([1.00, 0.70, 0.50], mix(core, bloom, 0.45), moonIn);
-      const discA = day ? look.a * dim : lerp(0.32, look.a * dim, moonIn);
-      const discA1 = day ? look.a1 * dim : lerp(0.16, look.a1 * dim, moonIn);
+      /* 月面不吃 dim：普通混合下 alpha < 1 等于把月面往夜空里掺，满月会显得
+         发灰发透，细节也跟着糊。夜间的 alpha 直接给满，深浅交给贴图本身；
+         刚入夜那 2.5° 的淡入仍由 moonIn 从 0.32 拉上来。 */
+      const discA = day ? look.a * dim : lerp(0.32, look.a, moonIn);
+      const discA1 = day ? look.a1 * dim : lerp(0.16, look.a1, moonIn);
       const sunColor = rgb(core);
       const sunGlow = rgb(bloom);
       setAtmo("--sun-x", x.toFixed(2) + "%");
@@ -346,11 +349,12 @@
       setAtmo("--sun-core-1", rgba(discMid, discA1));
       setAtmo("--sun-core-2", rgba(bloom, 0));
       /* 远处大范围眩光：逆光时整片天被洗亮一层，是「耀眼」最直接的证据。 */
-      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.04) * dim));
+      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.05) * dim));
       /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。 */
       const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon);
       setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim));
-      setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.32));
+      setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.52));
+      setAtmo("--sun-bloom-3", rgba(bloom, baUse * dim * 0.20));
       setAtmo("--sun-bloom-2", rgba(bloom, 0));
       setAtmo("--sun-bloom-scale", look.spread.toFixed(3));
       setAtmo("--sun-flatten", look.flat.toFixed(3));
@@ -361,14 +365,24 @@
          贴近地平线时散射铺满整片天，那才是落日的橙。 */
       /* 亮度上限必须留给日面：日晕一浓，太阳就变成同一片白里的一块，反而看不出亮。
          所以日晕只做到「把天洗亮一点」，越贴地平线越宽（散射铺得开）。 */
-      const haloA = (day ? 0.26 + 0.20 * (1 - clamp(state.sunElevation / 20, 0, 1)) : lerp(0.46, 0.18, belowHorizon)) * dim;
+      const haloA = (day ? 0.26 + 0.20 * (1 - clamp(state.sunElevation / 20, 0, 1)) : lerp(0.46, 0.34, belowHorizon)) * dim;
       /* 夜里的余晖还是暖的（被散射掉的落日），越接近深蓝调才越接近月色。 */
       /* 日晕画的是「被点亮的天」，不是光本身：直接用饱和的日色压上去会把天空的
          G/B 通道一起拉低，日落时那圈橙色就发闷发褐。先往白里提，才像光在扩散。 */
-      const haloColor = day ? mix(bloom, [1, 1, 1], 0.55) : mix(bloom, [1.00, 0.62, 0.42], 0.45);
+      /* 刚入夜时那圈光还是落日散射的暖色，等月亮真升起来（moonIn→1）就换成
+         银白的月色——两者都从同一个 bloom 出发，色相不会跳。 */
+      const nightHalo = mix(bloom, [1, 1, 1], 0.62);
+      const haloColor = day ? mix(bloom, [1, 1, 1], 0.55) : mix(mix(bloom, [1.00, 0.62, 0.42], 0.45), nightHalo, moonIn);
       setAtmo("--sun-halo", rgba(haloColor, haloA));
       setAtmo("--sun-halo-x", look.hs.toFixed(1) + "%");
       setAtmo("--sun-halo-y", (look.hs * (0.72 + 0.28 * look.flat)).toFixed(1) + "%");
+      /* 月光小路（.moon-path）的浓度：只有夜里才有。
+         注意这套模型里月亮的高度是太阳高度取反（见上面 visualElev：夜里
+         -sunElevationRaw），rawElev 本身在地平线以下一直是负数，直接拿它算会
+         恒得 0——光带永远不出现。所以要先取反，月亮爬高 6° 之后才拉满，
+         免得天刚擦黑就凭空出现一条亮带。 */
+      const pathA = day ? 0 : clamp(-rawElev / 6, 0, 1) * (0.55 + 0.45 * moonIn);
+      setAtmo("--moon-path", pathA.toFixed(3));
       /* 仍被 .light-glow（3D 海面取光方向）与天气条圆点消费的旧变量。 */
       setAtmo("--sun-color", sunColor);
       setAtmo("--sun-glow", sunGlow);
