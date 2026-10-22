@@ -256,21 +256,14 @@ if (DIAG.bench) {
         w.manualTime = true;
         w.timeOfDay = 12;
         w.timeTarget = 17.5;
-        w.cloudCover = 0.05;
-        w.cloudTarget = 0.9;
         w.wind = 0.05;
         w.windTarget = 0.75;
-        w.rain = 0;
-        w.rainTarget = 0.35;
-        w.storm = 0;
-        w.stormTarget = 0.35;
-        w.lightningTarget = 0;
       }
       if (options.jitter && window.Weather && Weather.state) {
         const w = Weather.state;
         w.manualTime = false;
         w.timeTarget = (w.timeTarget + 0.002) % 24;
-        w.cloudTarget = 0.5 + 0.3 * Math.sin(i * 0.12);
+        w.windTarget = 0.3 + 0.3 * Math.sin(i * 0.12);
       }
       if (options.sky !== false && window.Weather) Weather.update(0.0167, t);
       if (options.cards !== false) applyCardTransforms(t, 0.0167);
@@ -447,9 +440,9 @@ const QUALITY_PRESETS = {
   },
 };
 
-// Render budget every layer reads from. Weather layers added later (cloud fbm,
-// rain particles, lightning) must read this object instead of hard-coding
-// their own counts, so one switch downgrades the whole scene.
+// Render budget every layer reads from. Any layer added later must read this
+// object instead of hard-coding its own counts, so one switch downgrades the
+// whole scene.
 const quality = {
   mode: "auto",
   level: "full",
@@ -505,7 +498,6 @@ function applyQuality(mode = quality.mode) {
   if (waterPainter) waterPainter.resize();
   if (glOcean) glOcean.setQuality(quality);
   if (seaEngine) seaEngine.setQuality({ scale: quality.level === "lite" ? 0.75 : 1 });
-  if (window.Weather) Weather.resize();
   createParticles();
   writeQualityPreference();
 }
@@ -919,14 +911,11 @@ class WaterPainter {
     const w = weather || {};
     const sea = clamp(w.seaState == null ? 0.45 : w.seaState, 0, 1);
     const wind = clamp(w.wind == null ? 0.2 : w.wind, 0, 1);
-    const rain = clamp(w.rain == null ? 0 : w.rain, 0, 1);
-    const storm = clamp(w.storm == null ? 0 : w.storm, 0, 1);
-    const overcast = clamp(w.overcast == null ? 0 : w.overcast, 0, 1);
     const night = Boolean(w.isNight);
     const sunX = clamp(w.sunX == null ? 0.735 : w.sunX, 0.06, 0.94);
     const ambient = clamp(w.ambient == null ? 1 : w.ambient, 0.06, 1);
     const windRad = ((w.windDirection == null ? 240 : w.windDirection) * Math.PI) / 180;
-    const sparkle = Math.max(0.18, 1 - overcast * 0.5 - storm * 0.2);
+    const sparkle = 1;
     const far = (w.sky && w.sky.seaFar) || [0.45, 0.76, 0.75];
     const near = (w.sky && w.sky.seaNear) || [0.22, 0.61, 0.63];
     const deep = (w.sky && w.sky.seaDeep) || [0.1, 0.44, 0.48];
@@ -958,7 +947,7 @@ class WaterPainter {
     ctx.restore();
 
     // Sun / moon specular path.
-    const glint = sparkle * (night ? 0.5 : 1) * (1 - overcast * 0.35);
+    const glint = sparkle * (night ? 0.5 : 1);
     if (glint > 0.05) {
       const cx = sunX * width;
       const topW = width * 0.012;
@@ -987,13 +976,12 @@ class WaterPainter {
       { len: 1050, amp: 30 * (0.45 + sea), dir: 0.05, speed: 0.055 },
       { len: 620, amp: 17 * (0.45 + sea), dir: 0.32, speed: 0.08 },
       { len: 360, amp: 10 * (0.45 + sea), dir: -0.52, speed: 0.115 },
-      { len: 200, amp: 6 * (0.45 + sea) * (1 + storm * 0.7), dir: 0.62, speed: 0.17 },
-      { len: 110, amp: 3.6 * (0.45 + sea) * (1 + storm * 1.1), dir: -0.3, speed: 0.26 },
+      { len: 200, amp: 6 * (0.45 + sea), dir: 0.62, speed: 0.17 },
+      { len: 110, amp: 3.6 * (0.45 + sea), dir: -0.3, speed: 0.26 },
     ];
-    if (rain > 0.04) comps.push({ len: 46, amp: 1.8 * rain * (0.6 + storm), dir: 0.2, speed: 0.5 });
     const dirShift = wind * 0.45;
     const horizon = height * 0.012;
-    const lineCount = Math.min(88, Math.round((width < 700 ? quality.waterMobileLines : quality.waterLines) * (0.8 + sea * 0.5 + storm * 0.35)));
+    const lineCount = Math.min(88, Math.round((width < 700 ? quality.waterMobileLines : quality.waterLines) * (0.8 + sea * 0.5)));
     const highlight = quality.waterPasses >= 3;
 
     ctx.save();
@@ -1039,8 +1027,8 @@ class WaterPainter {
     }
     ctx.restore();
 
-    // Whitecaps and foam: driven by storm, wind and rain.
-    const foamAmount = clamp(storm * 0.85 + wind * 0.25 + rain * 0.2);
+    // Whitecaps and foam: driven by wind only (no rain / storm on this site).
+    const foamAmount = clamp(wind * 0.45);
     if (foamAmount > 0.08) {
       ctx.save();
       ctx.globalCompositeOperation = "screen";
@@ -1145,7 +1133,6 @@ const SEA_PALETTE = {
   day: { zenith: [0.07, 0.2, 0.42], horizon: [0.52, 0.68, 0.82], deep: [0.015, 0.09, 0.11], shallow: [0.06, 0.32, 0.36], sun: [1.0, 0.93, 0.8], sunI: 1.6 },
   dusk: { zenith: [0.03, 0.05, 0.16], horizon: [0.85, 0.36, 0.16], deep: [0.02, 0.045, 0.075], shallow: [0.09, 0.15, 0.2], sun: [1.0, 0.42, 0.14], sunI: 2.6 },
   night: { zenith: [0.012, 0.02, 0.05], horizon: [0.06, 0.09, 0.15], deep: [0.006, 0.014, 0.03], shallow: [0.03, 0.06, 0.1], sun: [0.75, 0.8, 0.9], sunI: 0.55 },
-  storm: { zenith: [0.08, 0.1, 0.12], horizon: [0.28, 0.32, 0.34], deep: [0.018, 0.038, 0.048], shallow: [0.085, 0.13, 0.145], sun: [0.58, 0.62, 0.64], sunI: 0.8 },
 };
 
 function mix3(a, b, t) {
@@ -1163,17 +1150,6 @@ function seaPaletteFor(weather) {
     sunI: 2.6 + (1.6 - 2.6) * elevation,
   };
   if (weather.isNight) p = SEA_PALETTE.night;
-  const gloom = clamp(Math.max((weather.overcast || 0) * 0.8, weather.storminess || 0), 0, 1);
-  if (gloom > 0.01) {
-    p = {
-      zenith: mix3(p.zenith, SEA_PALETTE.storm.zenith, gloom),
-      horizon: mix3(p.horizon, SEA_PALETTE.storm.horizon, gloom),
-      deep: mix3(p.deep, SEA_PALETTE.storm.deep, gloom),
-      shallow: mix3(p.shallow, SEA_PALETTE.storm.shallow, gloom),
-      sun: mix3(p.sun, SEA_PALETTE.storm.sun, gloom),
-      sunI: p.sunI + (SEA_PALETTE.storm.sunI - p.sunI) * gloom,
-    };
-  }
   return p;
 }
 
@@ -1216,15 +1192,13 @@ function applySeaFrame() {
        sea-entry.js 在 cloud<=0.001 时把 uSkyDeck 置 0，天空就干净裸着。
        云影响海面（压暗直射）不受影响 —— 那是下面独立的 shade 字段。 */
     cloud: 0,
-    stormy: clamp(weather.storminess || 0, 0, 1),
-    flash: clamp(weather.flash || 0, 0, 1),
+    stormy: 0,
+    flash: 0,
     // The second cloud layer is the expensive one; LITE keeps a single layer.
     cloudDetail: quality.level === "lite" ? 0 : 1,
-    /* 云的遮光率：天上有云就要压暗海面的直射（高光/次表面），否则"云在天上、
-       水面照样刺眼"，光影响不自然。注意它必须独立于上面那个 cloud 开关 ——
-       那个开关在体素云活着时恒为 0。 */
-    shade: clamp(1 - clamp(weather.cloudCover || 0, 0, 1) * 0.72
-                   - clamp(weather.storminess || 0, 0, 1) * 0.28, 0.15, 1),
+    /* 站点暂时没有云（FULL 无云设计）：不压暗海面直射。将来接上云板时，
+       这里改成由云的覆盖率算遮光即可。 */
+    shade: 1,
   });
 }
 
@@ -2133,7 +2107,6 @@ function handleResize() {
     }
 
     rebuildLayout(true);
-    if (window.Weather) Weather.resize();
     updateScrollMetrics();
 
     if (wasInCorridor && state.cards[activeBefore]) {

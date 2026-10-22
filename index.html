@@ -17,7 +17,7 @@
        读法：JS cb 只包住 animate()；gap = 帧间隔 − JS cb，是 animate 之外的主线程
        样式/布局 + 光栅/合成时间。LoAF 只有 ≥50 ms 的帧才有条目。
        per/s 是真实调用计数：attrCall 是尝试写 :root 的次数，attrReal 是缓存后
-       真正落到 DOM 的次数；cloud2d 是隐藏的 2D 云生成次数，rainClear 是雨层清屏次数。 -->
+       真正落到 DOM 的次数。 -->
   <script>
   (function () {
     if (!/[?&]bench=1/.test(location.search)) return; window.__loaf = []; try { new PerformanceObserver(function (list) { var items = list.getEntries(); for (var i = 0; i < items.length; i += 1) { var e = items[i]; window.__loaf.push({ t: e.startTime, dur: e.duration, style: e.styleAndLayoutStart || 0, render: e.renderStart || 0 }); } }).observe({ type: "long-animation-frame", buffered: true }); } catch (err) { /* no LoAF */ }
@@ -40,7 +40,6 @@
           var secs = Math.max(0.001, (t - t0) / 1000);
           function rate(k) { return (((wc1[k] || 0) - ((wc0 && wc0[k]) || 0)) / secs).toFixed(1); }
           function num(v, d) { return v === null || v === undefined || !isFinite(v) ? "n/a" : Number(v).toFixed(d === undefined ? 1 : d); }
-          var s = window.__tideStats ? window.__tideStats() : null;
           el.textContent =
             "BENCH " + (m && m.fps != null ? num(m.fps) : fps.toFixed(1)) + " fps   frame " + (m && m.intervalP50 != null ? num(m.intervalP50) : (1000 / fps).toFixed(1)) + " ms\n" +
             "rAF int  p50 " + (m && m.intervalP50 != null ? num(m.intervalP50) : (1000 / fps).toFixed(1)) + "  p95 " + (m && m.intervalP95 != null ? num(m.intervalP95) : "n/a") + "\n" +
@@ -48,10 +47,8 @@
             (m ? "gap      p50 " + num(m.gapP50, 2) + "  p95 " + num(m.gapP95, 2) + "  (outside animate)\n" : "") +
             (m ? "LoAF n " + m.loaf.count + "  mean " + num(m.loaf.mean) + "  p95 " + num(m.loaf.p95) + "  max " + num(m.loaf.max) + " ms\n" : "") +
             (m ? "  style+layout mean " + num(m.loaf.styleMean) + "  p95 " + num(m.loaf.styleP95) + "  max " + num(m.loaf.styleMax) + " ms\n" : "") +
-            "cloud " + (s ? (s.avgMs || 0).toFixed(2) + " ms  scale " + s.scale + "  steps " + s.steps : "n/a") + "\n" +
             "per/s  sun " + rate("applySun") + "  sky " + rate("applySky") + "  attrCall " + rate("rootWrites") + "  attrReal " + rate("rootApplied") + "\n" +
             "attr/frame " + (((wc1.rootApplied || 0) - ((wc0 && wc0.rootApplied) || 0)) / Math.max(1, n)).toFixed(2) + "   frames " + n + "\n" +
-            "per/s  cloud2d " + rate("cloudGenerated") + "  rainClear " + rate("rainCleared") + "\n" +
             "flags: " + (location.search || "(none)") + "\n" +
             "dpr " + (window.devicePixelRatio || 1) + "   viewport " + innerWidth + "x" + innerHeight;
         }
@@ -77,20 +74,17 @@
     <div class="atmosphere" aria-hidden="true">
       <div class="sky-wash"></div>
       <div class="light-glow" aria-hidden="true"></div>
-      <div class="celestial" id="celestial" role="button" tabindex="0" aria-label="太阳/月亮：拖动改变时间，单击切换昼夜，长按召云">
-        <span class="celestial-glow" aria-hidden="true"></span>
+      <div class="celestial" id="celestial" role="button" tabindex="0" aria-label="太阳/月亮：拖动改变时间，单击切换昼夜">
+        <span class="celestial-bloom" aria-hidden="true"></span>
         <span class="celestial-disc" aria-hidden="true"></span>
-        <span class="celestial-hint" aria-hidden="true">DRAG · TAP · HOLD</span>
+        <span class="celestial-hint" aria-hidden="true">DRAG · TAP</span>
       </div>
-      <canvas class="cloud-canvas" id="cloudCanvas" aria-hidden="true"></canvas>
       <div class="horizon-glow"></div>
       <canvas class="ocean-canvas" id="oceanCanvas" aria-hidden="true"></canvas>
       <canvas class="water-canvas" id="waterCanvas"></canvas>
       <div class="shore-glow"></div>
       <div class="atmo-grid"></div>
       <div class="weather-shade" id="weatherShade" aria-hidden="true"></div>
-      <canvas class="rain-canvas" id="rainCanvas" aria-hidden="true"></canvas>
-      <div class="lightning-flash" id="lightningFlash" aria-hidden="true"></div>
 
       <svg class="contour contour--left" viewBox="0 0 760 900" fill="none" preserveAspectRatio="xMinYMid slice">
         <g stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke">
@@ -126,20 +120,8 @@
       </button>
       <div class="weather-bar__panel" id="weatherPanel">
         <label class="weather-row">
-          <span class="weather-row__head"><span>CLOUD</span><span class="weather-row__value" id="cloudValue">25%</span></span>
-          <input id="cloudSlider" type="range" min="0" max="100" value="25" aria-label="云量" />
-        </label>
-        <label class="weather-row">
-          <span class="weather-row__head"><span>WIND · RAIN</span><span class="weather-row__value" id="weatherValue">20%</span></span>
-          <input id="weatherSlider" type="range" min="0" max="100" value="20" aria-label="风雨" />
-        </label>
-        <label class="weather-row">
           <span class="weather-row__head"><span>TIME</span><span class="weather-row__value" id="timeValue">12:00</span></span>
           <input id="timeSlider" type="range" min="0" max="100" value="50" aria-label="时间" />
-        </label>
-        <label class="weather-row">
-          <span class="weather-row__head"><span>LIGHTNING</span><span class="weather-row__value" id="lightningValue">0%</span></span>
-          <input id="lightningSlider" type="range" min="0" max="100" value="0" aria-label="雷电" />
         </label>
         <div class="weather-bar__actions">
           <button id="weatherAuto" type="button">AUTO</button>

@@ -1,8 +1,9 @@
 /* =========================================================
    TIDELINE · Weather & Time
-   A continuous weather field: time, sun/moon, cloud, wind,
-   rain, storm and lightning are all damped scalars, so any
-   value in between is a valid state (no preset textures).
+   站点上只剩「时刻 / 太阳 / 月亮 / 风」：云、雨、雷电已从 GIFT 移除
+   （2026-10-21 用户定位：送女友的生日礼物，只有海和云；FULL 暂时无云）。
+   风还在，因为它是海面涌浪（seaState）的唯一来源。
+   所有量仍是阻尼过的连续标量，没有预设贴图。
    ========================================================= */
 (function () {
   "use strict";
@@ -15,11 +16,9 @@
   const DEG = Math.PI / 180;
 
   /* 诊断开关（默认全关，行为与之前完全一致）：
-     ?norain=1     不画雨（含每帧全屏 clearRect）
-     ?noattr=1     不写 applySun/applySky/--flash 的任何 :root 自定义属性 */
+     ?noattr=1     不写 applySun/applySky 的任何自定义属性 */
   window.__tidelineDiag = window.__tidelineDiag || {};
   const DIAG = Object.assign(window.__tidelineDiag, {
-    norain: /[?&]norain=1/.test(window.location.search),
     noattr: /[?&]noattr=1/.test(window.location.search),
     /* 测量用：强制回到「每帧无条件写 :root」的旧行为，用来在同一次运行里
        对比缓存前后的样式重算成本。 */
@@ -29,13 +28,11 @@
   });
 
   /* 调用计数器：A/B 归一化用。整数自增，成本可忽略，默认也在跑，
-     方便把「重算时间」除到「到底发生了多少次 :root 写入 / 2D 云生成」上。 */
+     方便把「重算时间」除到「到底发生了多少次 :root 写入」上。 */
   const counters = {
     updates: 0,
     applySun: 0,
     applySky: 0,
-    updateRain: 0,
-    rainCleared: 0,
     rootWrites: 0,
     rootApplied: 0,
   };
@@ -46,7 +43,7 @@
        照样逐帧写，只是不再把同样的字符串重复 setProperty。
      ★ 修复 B（缩小失效范围，关键）：自定义属性会继承，写在 :root 上等于让整棵
        文档树样式失效（2936 行 CSS 全量重算）。而绝大多数天气变量只在
-       .atmosphere 里被消费（太阳/天空/海色/云量/雨/闪电），所以写到 .atmosphere
+       .atmosphere 里被消费（太阳/天空/海色/月相/阴影），所以写到 .atmosphere
        元素上，只让那 ~30 个节点失效；只有跨卡片与聚焦层的 --ambient /
        --light-angle / --light-strength 才写到 .gallery 与 #focus 两处。
      两个修复叠加后，每帧的样式重算从「全文档」降到「一个小子树」。 */
@@ -62,7 +59,7 @@
     counters.rootApplied += 1;
     el.style.setProperty(name, value);
   }
-  /* 只在 .atmosphere 子树里被消费的变量（太阳/天空/海色/云/雨/闪电）。 */
+  /* 只在 .atmosphere 子树里被消费的变量（太阳/天空/海色/月相/阴影）。 */
   function setAtmo(name, value) { setVar(env.atmo, name, value); }
   /* 跨卡片 / 聚焦层 / 地平线光晕的变量：只写三个真正消费它们的子树。 */
   function setLight(name, value) {
@@ -73,6 +70,7 @@
 
   const rgb = (c) => "rgb(" + Math.round(c[0] * 255) + ", " + Math.round(c[1] * 255) + ", " + Math.round(c[2] * 255) + ")";
   const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const rgba = (c, a) => "rgba(" + Math.round(c[0] * 255) + ", " + Math.round(c[1] * 255) + ", " + Math.round(c[2] * 255) + ", " + clamp(a).toFixed(3) + ")";
   const clone = (c) => [c[0], c[1], c[2]];
 
   const P = {
@@ -91,32 +89,18 @@
       seaFar: [0.078, 0.137, 0.216], seaNear: [0.035, 0.078, 0.137], seaDeep: [0.012, 0.039, 0.086],
       sun: [0.855, 0.898, 0.925], glow: [0.647, 0.769, 0.851],
     },
-    storm: {
-      top: [0.259, 0.298, 0.318], mid: [0.325, 0.365, 0.384], horizon: [0.412, 0.451, 0.463],
-      seaFar: [0.216, 0.286, 0.318], seaNear: [0.086, 0.157, 0.196], seaDeep: [0.039, 0.086, 0.118],
-      sun: [0.784, 0.816, 0.831], glow: [0.706, 0.749, 0.769],
-    },
   };
 
   const state = {
     timeTarget: 12,
-    cloudTarget: 0.25,
     windTarget: 0.22,
     windDirection: 240,
     windDirectionTarget: 240,
-    rainTarget: 0,
-    stormTarget: 0,
-    lightningTarget: 0,
     elevationOffset: 0,
     timeOfDay: 12,
-    cloudCover: 0.25,
     wind: 0.22,
-    rain: 0,
-    storm: 0,
-    lightning: 0,
     gust: 0,
     seaState: 0.2,
-    flash: 0,
     sunElevation: 12,
     sunAzimuth: 180,
     sunX: 0.74,
@@ -124,11 +108,8 @@
     latitude: 26.05,
     dayOfYear: 1,
     isNight: false,
-    overcast: 0.16,
-    storminess: 0.1,
     ambient: 1,
     manualTime: false,
-    manualWeather: false,
     autoTime: true,
     source: "climate",
     liveLabel: "CLIMATE",
@@ -142,13 +123,8 @@
   const env = {
     quality: null,
     reducedMotion: null,
-    storage: null,
     panel: null,
     celestial: null,
-    cloudCanvas: null,
-    rainCanvas: null,
-    rainDirty: false,
-    flashEl: null,
     lastSky: 0,
   };
 
@@ -171,21 +147,14 @@
     const elev = state.sunElevation;
     const dayness = smooth(clamp((elev + 6) / 26));
     const duskness = clamp(1 - Math.abs(elev - 3) / 13);
-    const storminess = state.storminess;
-    const overcast = state.overcast;
     const keys = ["top", "mid", "horizon", "seaFar", "seaNear", "seaDeep", "sun", "glow"];
     for (let i = 0; i < keys.length; i += 1) {
       const key = keys[i];
       let col = mix(P.night[key], P.day[key], dayness);
       col = mix(col, P.dusk[key], duskness * (1 - dayness * 0.35) * 0.8);
-      col = mix(col, P.storm[key], storminess * 0.8);
-      const overcastTone = mix([0.10, 0.12, 0.16], [0.62, 0.64, 0.64], dayness);
-      const overcastDeep = mix([0.05, 0.06, 0.09], [0.20, 0.22, 0.24], dayness);
-      if (key !== "seaNear" && key !== "seaDeep") col = mix(col, overcastTone, overcast * 0.42);
-      col = mix(col, overcastDeep, overcast * (key === "seaDeep" ? 0.3 : 0.12));
       state.sky[key] = col;
     }
-    state.ambient = clamp(0.24 + dayness * 0.76 - overcast * 0.26 - storminess * 0.2, 0.14, 1);
+    state.ambient = clamp(0.24 + dayness * 0.76, 0.14, 1);
   }
 
   function readSystemTime() {
@@ -200,102 +169,23 @@
     return (d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate()) % 997;
   }
 
+  /* 只剩风：云/雨/雷电都没有了。风决定 seaState → 海面涌浪幅度。 */
   function climateWeather() {
     const seed = climateSeed();
     const day = state.dayOfYear || 1;
-    const cloud = clamp(0.28 + 0.34 * Math.sin(day * 0.017 + seed * 0.013) + 0.12 * Math.sin(day * 0.11 + seed));
     const wind = clamp(0.18 + 0.4 * Math.abs(Math.sin(day * 0.023 + seed * 0.07)));
-    const rain = clamp((cloud - 0.62) * 1.6) * 0.7;
-    const storm = clamp((rain - 0.25) * 1.1);
-    return { cloud: cloud, wind: wind, rain: rain, storm: storm, lightning: clamp(storm * 0.7), windDirection: mod(200 + 140 * Math.sin(day * 0.05 + seed), 360) };
+    return { wind: wind, windDirection: mod(200 + 140 * Math.sin(day * 0.05 + seed), 360) };
   }
 
-  function applyWeatherTargets(w, source, label, force) {
+  function applyWeatherTargets(w, source, label) {
     state.source = source;
     state.liveLabel = label;
-    if (!force && state.manualWeather) return;
-    state.cloudTarget = clamp(w.cloud);
     state.windTarget = clamp(w.wind);
-    state.rainTarget = clamp(w.rain);
-    state.stormTarget = clamp(w.storm);
     if (Number.isFinite(Number(w.windDirection))) state.windDirectionTarget = Number(w.windDirection);
-    state.lightningTarget = clamp(w.lightning == null ? 0 : w.lightning);
   }
 
   function useClimate() {
     applyWeatherTargets(climateWeather(), "climate", "CLIMATE");
-  }
-
-  function readWeatherCache() {
-    if (!env.storage) return null;
-    try {
-      const raw = env.storage.getItem("tideline.weather.v1");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.data || !parsed.at) return null;
-      if (Date.now() - parsed.at > 15 * 60 * 1000) return null;
-      return parsed;
-    } catch (error) { return null; }
-  }
-
-  function writeWeatherCache(data) {
-    if (!env.storage) return;
-    try {
-      env.storage.setItem("tideline.weather.v1", JSON.stringify({ at: Date.now(), data: data }));
-    } catch (error) { /* no-op */ }
-  }
-
-  function fetchLiveWeather() {
-    const cached = readWeatherCache();
-    if (cached) { applyWeatherTargets(cached.data, "live", "LIVE"); return; }
-    if (!("fetch" in window)) { useClimate(); return; }
-    const controller = "AbortController" in window ? new AbortController() : null;
-    const timer = controller ? setTimeout(function () { controller.abort(); }, 6000) : 0;
-    const url = "https://api.open-meteo.com/v1/forecast?latitude=" + state.latitude +
-      "&longitude=120&current=temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m,precipitation,weather_code,is_day&timezone=auto";
-    let request;
-    try {
-      request = fetch(url, controller ? { signal: controller.signal } : {});
-    } catch (error) {
-      if (timer) clearTimeout(timer);
-      useClimate();
-      return;
-    }
-    request
-      .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error("http " + res.status)); })
-      .then(function (json) {
-        if (timer) clearTimeout(timer);
-        const cur = json && json.current;
-        if (!cur) throw new Error("no current");
-        const code = Number(cur.weather_code == null ? 0 : cur.weather_code);
-        const cloud = clamp(Number(cur.cloud_cover == null ? 40 : cur.cloud_cover) / 100);
-        const wind = clamp(Number(cur.wind_speed_10m == null ? 8 : cur.wind_speed_10m) / 34);
-        const precip = clamp(Number(cur.precipitation == null ? 0 : cur.precipitation) / 7);
-        let rain = precip;
-        let storm = 0;
-        let lightning = 0;
-        if (code >= 51 && code <= 57) rain = Math.max(rain, 0.22);
-        else if (code >= 61 && code <= 67) rain = Math.max(rain, 0.5);
-        else if (code >= 80 && code <= 82) { rain = Math.max(rain, 0.5); storm = 0.25; }
-        else if (code >= 95) { rain = Math.max(rain, 0.6); storm = 0.8; lightning = 0.75; }
-        const data = { cloud: cloud, wind: wind, rain: rain, storm: storm, lightning: lightning, windDirection: Number(cur.wind_direction_10m == null ? 240 : cur.wind_direction_10m) };
-        applyWeatherTargets(data, "live", "LIVE");
-        writeWeatherCache(data);
-      })
-      .catch(function () {
-        if (timer) clearTimeout(timer);
-        useClimate();
-      });
-  }
-
-  function safeStorage() {
-    try {
-      if (!("localStorage" in window)) return null;
-      const probe = "__tideline_probe__";
-      window.localStorage.setItem(probe, "1");
-      window.localStorage.removeItem(probe);
-      return window.localStorage;
-    } catch (error) { return null; }
   }
 
   window.Weather = {
@@ -308,23 +198,26 @@
     rgb: rgb,
     solarPosition: solarPosition,
     readSystemTime: readSystemTime,
-    climateWeather: climateWeather,
-    fetchLiveWeather: fetchLiveWeather,
-    useClimate: useClimate,
-    applyWeatherTargets: applyWeatherTargets,
     init: function (options) {
       env.quality = options && options.quality ? options.quality : null;
       env.reducedMotion = options && options.reducedMotion ? options.reducedMotion : null;
-      env.storage = safeStorage();
       readSystemTime();
+      /* ?t=17.6 直接跳到指定时刻（0..24），用来对照不同高度角的太阳外观。
+         面板上的「自动 / 重置」会清掉这个强制值。 */
+      var forced = /[?&]t=([0-9]*\.?[0-9]+)/.exec(window.location.search || "");
+      if (forced) {
+        var forcedHour = clamp(parseFloat(forced[1]), 0, 24);
+        state.manualTime = true;
+        state.autoTime = false;
+        state.timeTarget = forcedHour;
+        state.timeOfDay = forcedHour;
+      }
       useClimate();
       initDOM();
       initPanel();
       initCelestial();
-      fetchLiveWeather();
     },
     update: function (dt, now) { update(dt, now); },
-    resize: function () { resizeCanvases(); },
   };
 
   function update(dt, now) {
@@ -334,17 +227,8 @@
       state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / 3600), 24);
     }
     state.timeOfDay = state.manualTime ? damp(state.timeOfDay, state.timeTarget, 1.7, dt) : state.timeTarget;
-    /* 云量的阻尼过渡：0.22 的时间常数是 4.5 s，慢机上更久 —— 用户把滑杆拉到 0
-       之后十几秒天上还有云，看着像"关不掉"（实测 target=0 时 cover 仍 0.211）。
-       0.9 的过渡仍然平滑（≈1.1 s 时间常数），但能在 ~4 s 内真正到位；
-       再加一条吸附：差值小于 0.004 直接贴到目标值，保证 0 就是 0。 */
-    state.cloudCover = damp(state.cloudCover, state.cloudTarget, 0.9, dt);
-    if (Math.abs(state.cloudCover - state.cloudTarget) < 0.004) state.cloudCover = state.cloudTarget;
     state.wind = damp(state.wind, state.windTarget, 0.5, dt);
     state.windDirection = damp(state.windDirection, state.windDirectionTarget, 0.35, dt);
-    state.rain = damp(state.rain, state.rainTarget, 0.8, dt);
-    state.storm = damp(state.storm, state.stormTarget, 0.5, dt);
-    state.lightning = damp(state.lightning, state.lightningTarget, 2.0, dt);
     state.gust = 0.5 + 0.5 * Math.sin(now * 0.00013) * Math.sin(now * 0.00007 + 1.7);
 
     const solar = solarPosition(state.timeOfDay, state.dayOfYear, state.latitude);
@@ -352,28 +236,60 @@
     state.sunElevation = clamp(solar.elevation + state.elevationOffset, -18, 90);
     state.sunAzimuth = solar.azimuth;
     state.isNight = state.sunElevation < -0.5;
-    state.overcast = smooth(clamp((state.cloudCover - 0.12) / 0.82));
-    state.storminess = clamp(state.rain * 0.7 + state.wind * 0.45 + state.storm * 0.55);
-    state.seaState = damp(state.seaState, clamp(0.12 + state.wind * 0.68 + state.storm * 0.35 + state.rain * 0.15), 0.08, dt);
+    state.seaState = damp(state.seaState, clamp(0.12 + state.wind * 0.68), 0.08, dt);
 
     resolvePalette();
-    updateLightning(dt, now, reduced);
     applySun();
     if (now - env.lastSky > 90) { env.lastSky = now; applySky(); }
-    updateRain(dt, now, reduced);
   }
 
-  function updateLightning(dt, now, reduced) {
-    state.flash = Math.max(0, state.flash - dt * 2.8);
-    if (!DIAG.noattr) setAtmo("--flash", state.flash.toFixed(3));
-    if (reduced) return;
-    if (state.lightning < 0.02 || state.storminess < 0.25) return;
-    const chance = state.lightning * state.storminess * 0.055 * dt;
-    if (Math.random() < chance) {
-      state.flash = 1;
-      if (Math.random() < 0.7) setTimeout(function () { state.flash = Math.max(state.flash, 0.7); }, 90);
-      if (Math.random() < 0.4) setTimeout(function () { state.flash = Math.max(state.flash, 0.5); }, 210);
-    }
+  /* 太阳外观查表 —— 参考现实世界的两个物理事实：
+     1. 太阳的视直径恒定（约 0.53°），变大的是光晕，不是本体；
+     2. 高度角越低，光线穿过的空气越厚（地平线处约 38 倍大气质量），
+        短波被瑞利散射掉、只剩长波 —— 白热 → 金黄 → 橙红 → 暗红，
+        光晕同时张开，本体被大气折射压扁。
+     所以按下表用「高度角」插值而不是按时刻：同一高度角的日出与日落确实同色
+     （真实现象），但不同时刻的观感彼此不同。
+       e      太阳高度角（度）
+       core   光球颜色 sRGB 0..1
+       a/a1   光球中心 / 中段不透明度（越低越被大气吃掉）
+       bloom  光晕颜色
+       ba     光晕不透明度
+       spread 光晕张开倍数（越大越张开：路径更长、前向散射更强）
+       flat   竖直压扁（折射，真实约 0.85） */
+  var SUN_LOOK = [
+    { e: -4, core: [1.00, 0.42, 0.18], a: 0.00, a1: 0.00, bloom: [1.00, 0.40, 0.18], ba: 0.00, spread: 1.85, flat: 0.82 },
+    { e: -1, core: [1.00, 0.38, 0.14], a: 0.55, a1: 0.28, bloom: [1.00, 0.36, 0.14], ba: 0.20, spread: 1.75, flat: 0.85 },
+    { e: 2, core: [1.00, 0.52, 0.20], a: 0.80, a1: 0.40, bloom: [1.00, 0.48, 0.20], ba: 0.27, spread: 1.62, flat: 0.89 },
+    { e: 6, core: [1.00, 0.68, 0.36], a: 0.90, a1: 0.45, bloom: [1.00, 0.62, 0.30], ba: 0.30, spread: 1.45, flat: 0.92 },
+    { e: 14, core: [1.00, 0.86, 0.62], a: 0.93, a1: 0.44, bloom: [1.00, 0.82, 0.56], ba: 0.31, spread: 1.22, flat: 0.96 },
+    { e: 26, core: [1.00, 0.96, 0.86], a: 0.96, a1: 0.46, bloom: [1.00, 0.95, 0.82], ba: 0.32, spread: 1.05, flat: 0.99 },
+    { e: 45, core: [1.00, 0.99, 0.96], a: 0.97, a1: 0.48, bloom: [1.00, 0.99, 0.94], ba: 0.33, spread: 0.92, flat: 1.00 },
+    { e: 70, core: [1.00, 1.00, 1.00], a: 0.98, a1: 0.50, bloom: [1.00, 1.00, 0.98], ba: 0.34, spread: 0.86, flat: 1.00 },
+  ];
+
+  /* 月亮：视直径小、没有大气辉光，所以轮廓清楚、光晕很淡且偏冷。 */
+  var MOON_LOOK = { core: [0.96, 0.98, 0.95], a: 0.97, a1: 0.97, bloom: [0.72, 0.82, 0.92], ba: 0.10, spread: 1.15, flat: 1.00 };
+
+  function lookFor(elev) {
+    var L = SUN_LOOK;
+    if (elev <= L[0].e) return L[0];
+    var last = L[L.length - 1];
+    if (elev >= last.e) return last;
+    var i = 0;
+    while (i < L.length - 2 && elev > L[i + 1].e) i += 1;
+    var p = L[i];
+    var q = L[i + 1];
+    var t = smooth((elev - p.e) / (q.e - p.e));
+    return {
+      core: mix(p.core, q.core, t),
+      bloom: mix(p.bloom, q.bloom, t),
+      a: lerp(p.a, q.a, t),
+      a1: lerp(p.a1, q.a1, t),
+      ba: lerp(p.ba, q.ba, t),
+      spread: lerp(p.spread, q.spread, t),
+      flat: lerp(p.flat, q.flat, t),
+    };
   }
 
   function applySun() {
@@ -395,21 +311,56 @@
     // a light direction, and a linear ramp squashes every daylight hour into
     // the last few degrees above the horizon (one permanent sunset glitter).
     const y = clamp(horizonY - Math.pow(visualElev / 90, 0.62) * (horizonY - topY), topY, horizonY);
-    const size = day
-      ? clamp(120 + (1 - clamp(state.sunElevation / 60, 0, 1)) * 140, 120, 280)
-      : clamp(88 + (1 - visualElev / 60) * 60, 88, 158);
+    /* 视直径恒定：亮核尺寸不随时刻变化，变的是光晕（spread）。
+       具体像素宽度由 CSS 的 clamp() 负责（见 .celestial 的 --sun-size），
+       这样窗口大小变化时不用再进 JS 重算。 */
     state.sunX = x / 100;
     state.sunY = y / 100;
     if (!DIAG.noattr) {
-      const sunColor = rgb(state.sky.sun);
-      const sunGlow = rgb(state.sky.glow);
+      const look = day ? lookFor(state.sunElevation) : MOON_LOOK;
+      const dim = 0.72 + 0.28 * state.ambient;
+      const core = look.core;
+      const bloom = look.bloom;
+      /* 太阳沉到地平线以下的深度：0 = 刚落下，1 = 8 度以下，余晖已尽。 */
+      const rawElev = state.sunElevationRaw == null ? state.sunElevation : state.sunElevationRaw;
+      const belowHorizon = clamp((-rawElev - 0.5) / 7.5, 0, 1);
+      /* 光球中心过曝：往白里推一点，否则正午的太阳偏灰。 */
+      const hot = mix(core, [1, 1, 1], 0.35);
+      /* 「太阳换成月亮」是这套设计里唯一的硬切换（月亮只在夜里出现）。
+         用 2.5° 把月面从暖到冷、从淡到实地淡入，避免过地平线时瞬间跳色。 */
+      const moonIn = day ? 1 : clamp((-rawElev - 0.5) / 2.5, 0, 1);
+      const discCore = day ? hot : mix([1.00, 0.74, 0.54], hot, moonIn);
+      const discMid = day ? mix(core, bloom, 0.45) : mix([1.00, 0.70, 0.50], mix(core, bloom, 0.45), moonIn);
+      const discA = day ? look.a * dim : lerp(0.32, look.a * dim, moonIn);
+      const discA1 = day ? look.a1 * dim : lerp(0.16, look.a1 * dim, moonIn);
+      const sunColor = rgb(core);
+      const sunGlow = rgb(bloom);
       setAtmo("--sun-x", x.toFixed(2) + "%");
       setAtmo("--sun-y", y.toFixed(2) + "%");
-      setAtmo("--sun-size", size.toFixed(0) + "px");
+      setAtmo("--sun-core-0", rgba(discCore, discA));
+      setAtmo("--sun-core-1", rgba(discMid, discA1));
+      setAtmo("--sun-core-2", rgba(bloom, 0));
+      /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。 */
+      const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon);
+      setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim));
+      setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.32));
+      setAtmo("--sun-bloom-2", rgba(bloom, 0));
+      setAtmo("--sun-bloom-scale", look.spread.toFixed(3));
+      setAtmo("--sun-flatten", look.flat.toFixed(3));
+      /* 大气泛白（.atmosphere 第一层）负责整片天光；.celestial-bloom 只负责
+         太阳近处那一圈紧光，由 spread 控制张开。白天低角度收到 0.62，
+         与入夜那一刻接上，地平线两侧不跳。 */
+      const haloA = (day ? lerp(0.62, 0.74, clamp(state.sunElevation / 12, 0, 1)) : lerp(0.62, 0.22, belowHorizon)) * dim;
+      /* 夜里的余晖还是暖的（被散射掉的落日），越接近深蓝调才越接近月色。 */
+      const haloColor = day ? bloom : mix(bloom, [1.00, 0.52, 0.30], (1 - belowHorizon) * 0.55);
+      const haloScale = day ? clamp(0.86 + 0.30 * (look.spread - 0.86), 0.86, 1.40) : 1;
+      setAtmo("--sun-halo", rgba(haloColor, haloA));
+      setAtmo("--sun-halo-x", (47 * haloScale).toFixed(1) + "%");
+      setAtmo("--sun-halo-y", (42 * haloScale * (0.62 + 0.38 * look.flat)).toFixed(1) + "%");
+      /* 仍被 .light-glow（3D 海面取光方向）与天气条圆点消费的旧变量。 */
       setAtmo("--sun-color", sunColor);
       setAtmo("--sun-glow", sunGlow);
-      setAtmo("--sun-alpha", (state.ambient * (1 - state.overcast * 0.6) * (day ? 1 : 0.85)).toFixed(3));
-      setAtmo("--sun-glow-alpha", ((1 - state.overcast * 0.5) * (day ? 0.9 : 0.7)).toFixed(3));
+      setAtmo("--sun-glow-alpha", (0.7 * dim).toFixed(3));
       /* 顶部天气条的圆点也用 --sun-color/--sun-glow，单独写它自己那一小块。 */
       setVar(env.weatherBar, "--sun-color", sunColor);
       setVar(env.weatherBar, "--sun-glow", sunGlow);
@@ -417,131 +368,36 @@
       setVar(env.worldScope, "--shadow-shift", ((0.5 - x / 100) * 110).toFixed(1) + "px");
     }
     celestial.classList.toggle("is-moon", !day);
-    celestial.classList.toggle("is-overcast", state.overcast > 0.55);
   }
 
   function applySky() {
     counters.applySky += 1;
     if (DIAG.noattr) return;
-    /* 只在 .atmosphere 子树里被消费：天空、海色、云量、雨、霾、月相。 */
+    /* 只在 .atmosphere 子树里被消费：天空、海色、渲染阴影、月相。 */
     setAtmo("--sky-top", rgb(state.sky.top));
     setAtmo("--sky-mid", rgb(state.sky.mid));
     setAtmo("--sky-horizon", rgb(state.sky.horizon));
     setAtmo("--sea-far", rgb(state.sky.seaFar));
     setAtmo("--sea-near", rgb(state.sky.seaNear));
     setAtmo("--sea-deep", rgb(state.sky.seaDeep));
-    setAtmo("--shade", ((1 - state.ambient) * 0.42 + state.overcast * 0.06).toFixed(3));
-    setAtmo("--cloud-cover", state.cloudCover.toFixed(3));
-    setAtmo("--rain", state.rain.toFixed(3));
+    setAtmo("--shade", ((1 - state.ambient) * 0.42).toFixed(3));
     setAtmo("--moon-phase", mod(state.timeOfDay / 12, 1).toFixed(3));
     /* 卡片面与聚焦层都要用的光照参数：只写 .gallery 与 #focus 两处。 */
     setLight("--ambient", state.ambient.toFixed(3));
     setLight("--light-angle", (90 + (state.sunAzimuth - 180) * 0.5).toFixed(1) + "deg");
     setLight("--light-strength", (0.4 + state.ambient * 0.6).toFixed(3));
-    /* --cloud-dark / --wind / --storm 没有任何 CSS 消费，停止写入。 */
+    /* --cloud-dark / --wind / --storm / --cloud-cover / --rain 已无 CSS 消费，停止写入。 */
   }
 
   function initDOM() {
     env.panel = document.getElementById("weatherPanel");
     env.celestial = document.getElementById("celestial");
-    env.cloudCanvas = document.getElementById("cloudCanvas");
-    env.rainCanvas = document.getElementById("rainCanvas");
-    env.flashEl = document.getElementById("lightningFlash");
     /* 自定义属性的写入目标（见 setVar）：只让真正消费它们的子树失效。 */
     env.atmo = document.querySelector(".atmosphere");
     env.galleryScope = document.getElementById("gallery");
     env.worldScope = document.getElementById("world");
     env.focusScope = document.getElementById("focus");
     env.weatherBar = document.getElementById("weatherBar");
-    env.cloudCtx = env.cloudCanvas ? env.cloudCanvas.getContext("2d", { alpha: true }) : null;
-    env.rainCtx = env.rainCanvas ? env.rainCanvas.getContext("2d", { alpha: true }) : null;
-    resizeCanvases();
-  }
-
-  function updateRain(dt, now, reduced) {
-    counters.updateRain += 1;
-    if (DIAG.norain) return;
-    if (!env.rainCtx) return;
-    const intensity = state.rain;
-    /* 没雨的时候原来也会先全屏 clearRect 再 return —— 等于每帧把一个
-       1280×800 / 1920×1065 的透明 canvas 层重新脏化、重新上传合成。
-       现在：只清一次，然后把整块 canvas 从合成树里摘掉（display:none），
-       之后整帧跳过；雨回来时再挂回去。 */
-    if (intensity < 0.02) {
-      if (env.rainDirty) {
-        const idleCtx = env.rainCtx;
-        idleCtx.setTransform(1, 0, 0, 1, 0, 0);
-        idleCtx.clearRect(0, 0, env.rainCanvas.width, env.rainCanvas.height);
-        env.rainDirty = false;
-        counters.rainCleared += 1;
-      }
-      if (env.rainCanvas.style.display !== "none") env.rainCanvas.style.display = "none";
-      return;
-    }
-    if (env.rainCanvas.style.display === "none") env.rainCanvas.style.display = "";
-    env.rainDirty = true;
-    const q = env.quality || {};
-    const ctx = env.rainCtx;
-    const w = env.rainCanvas.width, h = env.rainCanvas.height;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    counters.rainCleared += 1;
-    const scale = w / Math.max(1, env.rainCanvas.clientWidth || w);
-    const count = Math.round(((window.innerWidth < 680 ? q.rainParticlesMobile : q.rainParticles) || 140) * intensity);
-    const wind = state.wind;
-    const len = (7 + state.storm * 20 + intensity * 9) * scale;
-    ctx.save();
-    ctx.strokeStyle = "rgba(222,238,246," + (0.16 + intensity * 0.3).toFixed(3) + ")";
-    ctx.lineWidth = Math.max(1, 0.7 * scale);
-    for (let i = 0; i < count; i += 1) {
-      const seed = i * 12.9898;
-      const x = mod(Math.sin(seed) * 43758.5453, 1) * w;
-      const y = mod(Math.sin(seed * 1.7) * 24634.6345 + now * (0.0009 + intensity * 0.0016), 1) * h;
-      const l = len * (0.6 + mod(Math.sin(seed * 3.1) * 12345.678, 1));
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + wind * l * 0.7, y + l);
-      ctx.stroke();
-    }
-    ctx.restore();
-    if (reduced) return;
-    const rings = Math.round(intensity * 14);
-    ctx.save();
-    ctx.strokeStyle = "rgba(236,245,240," + (0.06 + intensity * 0.13).toFixed(3) + ")";
-    ctx.lineWidth = Math.max(1, 0.6 * scale);
-    for (let i = 0; i < rings; i += 1) {
-      const seed = i * 7.13 + Math.floor(now / 850);
-      const x = mod(Math.sin(seed * 2.1) * 43758.5453, 1) * w;
-      const y = h * (0.48 + mod(Math.sin(seed * 1.3) * 24634.6345, 1) * 0.5);
-      const r = (2 + mod(Math.sin(seed * 4.7) * 12345.678, 1) * (6 + intensity * 10)) * scale;
-      ctx.globalAlpha = (1 - mod(now * 0.0005 + i * 0.17, 1)) * (0.25 + intensity * 0.35);
-      ctx.beginPath();
-      ctx.ellipse(x, y, r, r * 0.34, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function resizeCanvases() {
-    const cap = env.quality && env.quality.dprCap ? env.quality.dprCap : 2;
-    const dpr = Math.min(window.devicePixelRatio || 1, cap);
-    if (env.cloudCanvas && env.cloudCtx) {
-      const rect = env.cloudCanvas.getBoundingClientRect();
-      const cdpr = Math.min(window.devicePixelRatio || 1, env.quality && env.quality.level === "lite" ? 1 : 1.5);
-      env.cloudCanvas.width = Math.max(1, Math.round(rect.width * cdpr));
-      env.cloudCanvas.height = Math.max(1, Math.round(rect.height * cdpr));
-    }
-    if (env.rainCanvas && env.rainCtx) {
-      const rect = env.rainCanvas.getBoundingClientRect();
-      const rdpr = Math.min(dpr, 1.5);
-      const rw = Math.max(1, Math.round(rect.width * rdpr));
-      const rh = Math.max(1, Math.round(rect.height * rdpr));
-      /* 只在尺寸真的变了时才改 width/height：改这两个属性会重新分配并清空
-         整块 canvas 后备存储，是纯浪费。 */
-      if (env.rainCanvas.width !== rw) env.rainCanvas.width = rw;
-      if (env.rainCanvas.height !== rh) env.rainCanvas.height = rh;
-      env.rainDirty = false;
-    }
   }
 
   function timeLabel(hours) {
@@ -551,33 +407,15 @@
   }
 
   function conditionLabel() {
-    if (state.storm > 0.55) return "STORM";
-    if (state.rain > 0.45) return "RAIN";
-    if (state.rain > 0.08) return "DRIZZLE";
-    if (state.overcast > 0.7) return "OVERCAST";
-    if (state.cloudCover > 0.4) return "PARTLY";
-    if (state.isNight) return "CLEAR NIGHT";
-    return "CLEAR";
+    return state.isNight ? "CLEAR NIGHT" : "CLEAR";
   }
 
   function syncPanel() {
     const s = env.sliders;
     if (!s) return;
-    if (document.activeElement !== s.cloud) s.cloud.value = String(Math.round(state.cloudCover * 100));
-    if (document.activeElement !== s.weather) {
-      const mixed = clamp(state.rain * 0.7 + state.wind * 0.5 + state.storm * 0.35);
-      s.weather.value = String(Math.round(mixed * 100));
-    }
     if (document.activeElement !== s.time) s.time.value = String(Math.round(mod(state.timeOfDay, 24) / 24 * 100));
-    if (document.activeElement !== s.lightning) s.lightning.value = String(Math.round(state.lightningTarget * 100));
-    const cv = document.getElementById("cloudValue");
-    const wv = document.getElementById("weatherValue");
     const tv = document.getElementById("timeValue");
-    const lv = document.getElementById("lightningValue");
-    if (cv) cv.textContent = Math.round(state.cloudCover * 100) + "%";
-    if (wv) wv.textContent = Math.round(clamp(state.rain * 0.7 + state.wind * 0.5 + state.storm * 0.35) * 100) + "%";
     if (tv) tv.textContent = timeLabel(state.timeOfDay);
-    if (lv) lv.textContent = Math.round(state.lightningTarget * 100) + "%";
     const label = document.getElementById("weatherLabel");
     if (label) label.textContent = state.liveLabel + " · " + timeLabel(state.timeOfDay) + " · " + conditionLabel();
   }
@@ -585,10 +423,7 @@
   function initPanel() {
     const bar = document.getElementById("weatherBar");
     const toggle = document.getElementById("weatherToggle");
-    const cloud = document.getElementById("cloudSlider");
-    const weather = document.getElementById("weatherSlider");
     const time = document.getElementById("timeSlider");
-    const lightning = document.getElementById("lightningSlider");
     const auto = document.getElementById("weatherAuto");
     const reset = document.getElementById("weatherReset");
     if (!bar || !toggle) return;
@@ -600,40 +435,27 @@
     });
     bar.addEventListener("wheel", function (e) { e.stopPropagation(); }, { passive: false });
     bar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive: false });
-    if (cloud) cloud.addEventListener("input", function () { state.cloudTarget = clamp(Number(cloud.value) / 100); state.manualWeather = true; });
-    if (weather) weather.addEventListener("input", function () {
-      const v = clamp(Number(weather.value) / 100);
-      state.windTarget = clamp(0.12 + v * 0.88);
-      state.rainTarget = clamp((v - 0.22) / 0.78);
-      state.stormTarget = clamp((v - 0.58) / 0.42);
-      state.manualWeather = true;
-    });
     if (time) time.addEventListener("input", function () {
       state.timeTarget = Number(time.value) / 100 * 24;
       state.manualTime = true;
       state.autoTime = false;
     });
-    if (lightning) lightning.addEventListener("input", function () {
-      state.lightningTarget = clamp(Number(lightning.value) / 100);
-      state.manualWeather = true;
-    });
     if (auto) auto.addEventListener("click", function () {
       state.manualTime = false;
-      state.manualWeather = false;
       state.autoTime = true;
       state.elevationOffset = 0;
       readSystemTime();
-      fetchLiveWeather();
+      useClimate();
     });
     if (reset) reset.addEventListener("click", function () {
-      state.cloudTarget = 0.25; state.windTarget = 0.22; state.rainTarget = 0;
-      state.stormTarget = 0; state.lightningTarget = 0; state.elevationOffset = 0;
-      state.manualWeather = false; state.manualTime = false; state.autoTime = true;
+      state.elevationOffset = 0;
+      state.manualTime = false;
+      state.autoTime = true;
       readSystemTime();
       useClimate();
       syncPanel();
     });
-    env.sliders = { cloud: cloud, weather: weather, time: time, lightning: lightning, auto: auto, reset: reset };
+    env.sliders = { time: time, auto: auto, reset: reset };
     syncPanel();
     setInterval(syncPanel, 500);
   }
@@ -641,7 +463,7 @@
   function initCelestial() {
     const el = env.celestial;
     if (!el) return;
-    let dragging = false, moved = false, holdTimer = 0;
+    let dragging = false, moved = false;
     let startX = 0, startY = 0;
     function pos(e) {
       const g = document.getElementById("gallery");
@@ -661,39 +483,29 @@
       state.elevationOffset = clamp(wanted - solarNow.elevation, -25, 55);
     }
     el.addEventListener("pointerdown", function (e) {
-      dragging = true; moved = false; state.cloudRamp = false;
+      dragging = true; moved = false;
       startX = e.clientX; startY = e.clientY;
       el.classList.add("is-dragging");
       if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
       e.preventDefault();
-      holdTimer = window.setTimeout(function () {
-        holdTimer = 0;
-        state.cloudRamp = true;
-        state.manualWeather = true;
-        el.classList.add("is-summoning");
-      }, 520);
     });
     el.addEventListener("pointermove", function (e) {
       if (!dragging) return;
       if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 5) {
         moved = true;
-        if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
       }
-      if (state.cloudRamp) return;
       applyDrag(e);
     });
     function finish(e) {
       if (!dragging) return;
       dragging = false;
-      el.classList.remove("is-dragging", "is-summoning");
-      if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
-      if (!state.cloudRamp && !moved) {
+      el.classList.remove("is-dragging");
+      if (!moved) {
         state.manualTime = true;
         state.autoTime = false;
         state.timeTarget = state.isNight ? 12 : 0;
         state.elevationOffset = 0;
       }
-      state.cloudRamp = false;
       moved = false;
       if (el.releasePointerCapture) { try { el.releasePointerCapture(e.pointerId); } catch (err) {} }
     }
