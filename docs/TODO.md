@@ -791,3 +791,56 @@ CakeGate 发起的，而 `state.snapCamera` 要等下一次 `updateScrollState` 
 `platform_channel.cc:187 Check failed: 拒绝访问 (0x5)`），`clip-path: url(#…)` 在真机上的裁剪、
 以及「布裂开」读起来像不像一刀，都只有用户开页面才知道。对照用：
 `index.html?cake=cut&cutat=0.5`（停在让开的中段）、`?cake=cut&cutat=0.9`（下潜段）。
+
+### 7.22 第六轮：先把镜头压到正上方再落刀（用户 m00002，2026-10-23 · 代码已落地，待肉眼验收）
+
+用户原话：「修改开屏动画：
+一开始只有一个蛋糕在（现在的样子，没有刀）
+点一下，视角逼近，变成正上方俯视蛋糕，刀出现在视角中
+这样切蛋糕的动画就更合理（看看能不能提前渲染，避免进去那一瞬间卡顿）」
+
+**为什么**：3/4 视角下刀从盘外扫进来再穿过圆心，切口是一条斜线，但蛋糕的侧面和顶面不在
+一个平面上，刀看起来像从侧面「擦」过去。正上方俯视时顶面就是圆，刀在同一个平面里穿过
+圆心，切、两半让开、缝里露出海，才是同一件事。顺带把「进入长廊」那一下的滚动/相机/海的
+同帧重活从切开那一帧挪到第一次按下时。
+
+**怎么分两拍**：`idle`（只有斜看的蛋糕，无刀）→ 第一次点按 → `approach` 1.05s 把
+`--top` 从 0 推到 1、`--cam` 1→1.55，刀在 `--top >= 0.5` 时用 1.0s 飞入 → `aim`
+（刀跟随指针）→ 第二次点按/划/Enter → `cut` → `open`。回到封面后 `stitch()` 保留正俯视与
+`cam=1.55`，下一次点按直接切，不再推镜头。**「两拍」是这次唯一待用户确认的交互变化：
+老开屏是一点就切。**
+
+**连续投影，不是两张图交叉淡入**：`applyTilt(u)` 每帧改两个可见克隆的 SVG 几何 ——
+顶面 `cy 190→240`、`ry 60→164`（`cy(u)=190+50u`，`k=K+(1-K)u`）；盘面 `cy 283→240`、
+`ry 66→196`；盘沿 `cy 291→240`；投影 `cy 330→240`、`ry 60→228`；脚 `cy 292→240`、
+`ry 50→178`；侧壁高度 `78→0`；数字组 `translate(0 30.2) scale(1 .9)` →
+`translate(0 -44) scale(1 1)`（baseline 302→258，正好落到顶面中心）；糖珠 `r 108→124`、
+蜡烛 `r 104→96`（错开，不然顶视 19 颗珠全被 19 支蜡烛挡住）；扇贝/抹刀圈每帧重算成椭圆
+并保持屏幕描边宽度（整组 scaleY 会让 u=1 时上下描边厚成 41px）。源 `.cake` 仍是
+`visibility:hidden`，但它的 `.cake-number-group` 会被 SVG 的 visibility 漏出来，CSS 单独
+`display:none`。
+
+**蜡烛顶视**：`--ch 30px→3.6px`、`--flame-w 9→12px`、`--flame-h 19→8.55px`，焰与光晕贴在
+蜡顶；`--cam` 1.55 会把它们一起放大，最终屏幕尺寸按截图调。19 个光晕在顶视叠成一圈暖光。
+
+**提前渲染**：`prewarm()` 在第一次 `pointerdown` 就 `hooks.openArchive(true)`（同帧
+`updateScrollState(0)` 已是 §7.21 的修法），把滚动、相机、海的那一帧藏在指头底下；
+`cut()` 里只在没热过时兜底。`stitch()` 把 `warm` 置回 false（回封面时页面已在顶，下一次
+要重新预热）。
+
+**切口数学带上镜头**：`measure()` 改用 `cakeEl.offsetWidth`（不吃 stage 的 scale），
+`tipMin=max(150, cake*cam*.58)`；`sliceLen=dist*2+cake*cam*.16`；
+`gapMax=min(cakeSize*cam*.12,64)/cam`；
+`slitBase=(gapNow+dive*220)*cam*(1+dive*2.25)/(clothCam*(1+dive*.5))`，余量 `+12*cam`。
+u=0 时全部退化成旧公式。
+
+**验证（2026-10-23）**：沙箱无头 Chrome 这次起得来（`--use-angle=swiftshader
+--enable-unsafe-swiftshader`），已拍 `?top=0`（与旧斜视一致）、`.5`、`1`（正圆、19 在
+中心、蜡烛环）、`?cake=aim`（刀在盘外）、`?cake=cut&cutat=.05/.2/.5/.9`、390×844 两张；
+`node --check js/cakegate.js`、`node _wip/verify/cake_slit.mjs`（带 cam=1.55 /
+clothCam=1.06）通过：静置无缝、划完才裂、全程缝比两半宽。**真机仍未验**，用户开
+`index.html?top=1`、`?cake=aim`、`?cake=cut&cutat=0.5` 看。
+
+**已知待定**：① 第一次点按只推镜头、第二次才切，是否改成刀落稳后自动切；② 手机上
+`clampTip` 的 80px 边距会把刀尖从 `tipMin` 往里夹，刀会靠近盘沿（功能不受影响）；
+③ 顶视蜡烛/糖珠的最终尺寸与光晕强度还要肉眼定。

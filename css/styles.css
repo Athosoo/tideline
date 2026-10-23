@@ -2817,6 +2817,12 @@ html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
   opacity: 0;
 }
 
+/* 封面第一帧只有蛋糕：刀和罗盘虚线等第一次点按、镜头压下去之后才进场 */
+.cake-gate.is-idle .knife,
+.cake-gate.is-idle .knife-bearing {
+  opacity: 0;
+}
+
 /* 刀是真的从蛋糕上划过去的（js 的 SLICE 那一段），所以它不能一落刀就消失：
    is-cut 只撤掉罗盘虚线和那支胖指针，刀身要等刀尖越过盘沿（is-sliced）才淡出。 */
 .cake-gate.is-cut .knife-bearing {
@@ -3116,9 +3122,9 @@ body.is-cake-cursor .cursor {
 .candle {
   position: absolute;
   width: 7px;
-  height: 30px;
+  height: var(--ch, 30px);
   margin-left: -3.5px;
-  border-radius: 2px 2px 1px 1px;
+  border-radius: 3px 3px 2px 2px;
   background-image:
     linear-gradient(to right, transparent 0 calc(50% - 0.9px), rgba(56, 40, 22, 0.9) calc(50% - 0.9px) calc(50% + 0.9px), transparent calc(50% + 0.9px)),
     linear-gradient(90deg, #9A7343 0%, #C6A473 14%, #EFD9B4 34%, #FFF9EC 50%, #F0DBB6 68%, #BE9767 87%, #8A6538 100%);
@@ -3139,8 +3145,8 @@ body.is-cake-cursor .cursor {
   position: absolute;
   left: 50%;
   bottom: 100%;
-  width: 9px;
-  height: 19px;
+  width: var(--flame-w, 9px);
+  height: var(--flame-h, 19px);
   margin: 0 0 0 -4.5px;
   border-radius: 50% 50% 46% 46% / 74% 74% 26% 26%;
   background:
@@ -3269,6 +3275,8 @@ body.is-cake-cursor .cursor {
   inset: 0;
   pointer-events: auto;
   cursor: none;
+  /* 指头按下去就开始预热（会瞬移长廊）；别让浏览器把它读成滚动手势而取消 pointerup */
+  touch-action: none;
 }
 
 /* ── 小屏：竖屏没有鼠标，刀收到 0.72，蛋糕收到 62vw ─────────────────────── */
@@ -3436,6 +3444,11 @@ body.is-cake-cursor .cursor {
   --fade: 0;
   --cda: 0deg;
   --cs: clamp(320px, 34vw, 500px);
+  --cam: 1;          /* 镜头：第一次点击后推到 1.55（js 每帧写） */
+  --clothcam: 1;     /* 台布单独推近一点，纹理往外走 */
+  --ch: 30px;        /* 蜡烛实体高度：俯视时压到 3.6px（js 每帧写） */
+  --flame-w: 9px;    /* 焰在俯视时略微变宽变短，像从正上方看到的一粒火 */
+  --flame-h: 19px;
 }
 
 /* 洞开在整层上，不是开在布上：洞一合上，台布、蛋糕、暗角一起消失，
@@ -3458,7 +3471,7 @@ body.is-cake-cursor .cursor {
 .cake-stage {
   position: absolute;
   inset: 0;
-  transform: scale(calc(1 + var(--dive) * 2.25));
+  transform: scale(calc(var(--cam, 1) * (1 + var(--dive) * 2.25)));
   transform-origin: 50% 50%;
   filter: blur(calc(var(--fade) * 2.6px));
   opacity: calc(1 - var(--fade) * 0.92);
@@ -3467,6 +3480,12 @@ body.is-cake-cursor .cursor {
 
 .cake.is-source {
   visibility: hidden;
+}
+
+/* 侧壁上那个「19」只属于源蛋糕；可见的是两个克隆，各自带着抬到顶面正中的一份。
+   visibility 在 SVG 里会被子元素继承成一团雾，干脆把源的那份摘掉。 */
+.cake.is-source .cake-number-group {
+  display: none;
 }
 
 /* 光晕只属于整块蛋糕。跟着克隆进两半之后，两半一分开，各自那份
@@ -3523,7 +3542,7 @@ body.is-cake-cursor .cursor {
 /* 下潜时台布跟着放大一点（纹理往外走，画面才有推进感），
    再加 7% 对比把灰雾压掉 —— 整层压暗只会得到一张灰卡纸，拉对比才提得起明暗 */
 .cloth {
-  transform: scale(calc(1 + var(--dive) * 0.5));
+  transform: scale(calc(var(--clothcam, 1) * (1 + var(--dive) * 0.5)));
   transform-origin: 50% 50%;
   filter: contrast(1.07) saturate(1.05);
 }

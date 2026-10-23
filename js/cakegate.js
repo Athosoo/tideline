@@ -3,13 +3,13 @@
    台布上印着一张潮汐海图，蛋糕就是海图上那座岛；刀是罗盘指针 ——
    所以刀尖永远指着圆心，这是罗盘的规矩，不是动画的随手设定。
 
-   滚动（--gate）和这一刀（--cut）谁先到算谁的：--open = max(--gate, --cut)。
-   切开时刀真的从蛋糕上划过去（.cut-seam 跟着刀长），两半随即让开，
-   而缝里什么都没有 —— 布自己身上也开着同一条缝（.cloth 的 clip-path）：
-   不画剖面、不摆奶油果酱（2026-10-22 用户否掉了那五层夹层，之后又否掉了
-   那道用来遮丑的暗缝）。镜头随后钻进这道缝，最后一点残余的布由洞口吃掉。
+   2026-10-23 开场改成两步：一开始只有蛋糕（没有刀）。点一下，镜头压到正上方
+   俯视 —— 圆盘、圆蛋糕、蜡烛压成一圈火光；刀在镜头快到位时从画面下方飞进来。
+   再点一下才切。这样那一刀是「在蛋糕面上划过去」，不是斜着从旁边戳。
+   提前渲染：按下的那一刻就把长廊瞬移到布后面（布整块不透明），
+   等真正切的时候后面已经是热的，不会在缝开的第一帧卡一下。
 
-   ?cake=aim|cut 冻结/预演某个相位（截图对照用）。
+   ?cake=aim|cut 冻结/预演某个相位；?top=0..1 冻结镜头俯视进度（截图对照用）。
    两扇门已于 2026-10-22 删除，这一层就是封面本身，没有退路可退。 */
 (function () {
   "use strict";
@@ -21,8 +21,12 @@
 
   var TAU = Math.PI * 2;
   var DEG = 180 / Math.PI;
-  var CY_RATIO = 0.5;           // 蛋糕圆心 = 画面中心：题字退场之后，圆心就是视口中心
-  var FLY = 1.4;                // 刀入场 1400ms
+  var CY_RATIO = 0.5;           // 蛋糕圆心 = 画面中心
+  var APPROACH = 1.05;          // 第一次点击：镜头压到正上方 1050ms
+  var CAM_ADD = 0.55;           // 俯视到位时蛋糕整体再放大到 1.55
+  var CLOTH_ADD = 0.06;         // 台布同时推近一点，纹理往外走
+  var CAM_FINAL = 1 + CAM_ADD;
+  var FLY = 1.0;                // 刀入场 1000ms（从俯视镜头里飞进来）
   var FLY_A = 0.28;             // 加速段结束
   var FLY_B = 0.74;             // 匀速段结束
   var FLY_V = 2 / (1 + (FLY_B - FLY_A));   // 峰值 1.3699：由「三段位移和 = 1」解出
@@ -31,6 +35,15 @@
   var SLICE = 0.16;             // 划过：占 CUT 的前 16%（≈0.42s），刀尖从入口划出盘沿
   var SEAM_W = 1000;            // .cut-seam 的基准长度（CSS 里 width: 1000px）
   var STITCH = 1.6;             // 回封面：镜头从裂口里退出来 1600ms
+  // 俯视几何：斜看时顶面 cy=190/ry=60，正上方是 cy=240/ry=164（正圆）
+  var TOP0 = { cy: 190, ry: 60 };
+  var TOP1 = { cy: 240, ry: 164 };
+  var CANDLE_R = 104;           // 斜看时的蜡烛圈
+  var CANDLE_R_TOP = 96;        // 俯视时往内收，给糖珠让位
+  var BEAD_R = 108;
+  var BEAD_R_TOP = 124;
+  var SWIRL_R = [34, 62, 90, 118];
+  var DEFAULT_BEARING = -0.60;  // 第一次点在蛋糕中心时，刀从右上方入场
 
   var clothWrap = document.getElementById("clothWrap");
   var cakeStage = document.getElementById("cakeStage");
@@ -55,12 +68,24 @@
   // 沙箱里页面一滚动，position:fixed 的整层就会被画偏（见 TODO 抓图教训），
   // 所以验下潜构图时可以拿 ?nojump=1 把那次瞬移关掉。
   var NOJUMP = params.get("nojump") === "1";
+  // 截图用：?top=0.5 把镜头俯视进度钉住，看中间态
+  var TOPAT = params.has("top") ? clamp(parseFloat(params.get("top")) || 0, 0, 1) : null;
 
   var hooks = { openArchive: null, reduced: null };
 
   var S = {
     mounted: false,     // 层是否真的装上了（reduced motion 会把它摘掉）
-    phase: "idle",      // idle → fly → aim → cut → open → (缝合) aim
+    phase: "idle",      // idle（无刀）→ 点击推进 → fly → aim → cut → open →（缝合）aim
+    approachRaw: 0,     // 镜头推进的原始进度 0..1
+    morph: 0,           // 缓动后的俯视进度，几何都按它算
+    zooming: false,
+    cam: 1,
+    clothCam: 1,
+    warm: false,        // 长廊是否已经在布后面预热好
+    knifeStarted: false,
+    cutQueued: false,
+    candleAngles: [],
+    trees: [],
     t: 0,
     cut: 0,             // --cut 0..1
     cutTarget: 0,
@@ -113,21 +138,28 @@
 
   /* ---------- 几何 ---------- */
   function measure() {
-    var box = document.querySelector(".cake");
     S.geom.cx = window.innerWidth * 0.5;
     S.geom.cy = window.innerHeight * CY_RATIO;
-    S.geom.cake = box ? box.getBoundingClientRect().width : 336;
-    S.geom.tipMin = Math.max(150, S.geom.cake * 0.58);
+    // offsetWidth 是布局尺寸，不会被 .cake-stage 的镜头缩放算进去；
+    // 缩放单独记在 S.cam 里，不然每次 resize 都会把蛋糕量成两倍大。
+    S.geom.cake = cakeEl ? (cakeEl.offsetWidth || 336) : 336;
+    S.geom.tipMin = tipMinFor(S.cam);
   }
 
-  // 刀尖不许进到岛里，也不许出画：沿半径推到最小距离、再夹进视口
-  function clampTip(x, y) {
+  function tipMinFor(cam) {
+    return Math.max(150, S.geom.cake * (cam || 1) * 0.58);
+  }
+
+  // 刀尖不许进到岛里，也不许出画：沿半径推到最小距离、再夹进视口。
+  // cam 可以指定「按哪个镜头量」：刀飞进来时要按最终镜头量，否则落点会在
+  // 镜头继续推近时被 tipMin 突然往外顶一下。
+  function clampTip(x, y, cam) {
     var g = S.geom;
     var dx = x - g.cx;
     var dy = y - g.cy;
     var d = Math.sqrt(dx * dx + dy * dy);
     if (d < 0.001) { dx = 0; dy = 1; d = 1; }
-    var want = Math.max(d, g.tipMin);
+    var want = Math.max(d, tipMinFor(cam || S.cam));
     return {
       x: clamp(g.cx + (dx / d) * want, 80, window.innerWidth - 80),
       y: clamp(g.cy + (dy / d) * want, 80, window.innerHeight - 80),
@@ -323,14 +355,14 @@
     for (var b = 0; b < 19; b++) {
       var ab = (b / 19) * TAU - Math.PI / 2;
       beads.appendChild(ringPoint(112, ab, {
-        cx: (TOP.cx + Math.cos(ab) * 108).toFixed(1),
-        cy: (TOP.cy + Math.sin(ab) * 108 * K).toFixed(1),
+        cx: (TOP.cx + Math.cos(ab) * BEAD_R).toFixed(1),
+        cy: (TOP.cy + Math.sin(ab) * BEAD_R * K).toFixed(1),
         r: 2.2,
       }));
     }
 
     // 顶面抹刀留下的同心圈
-    [34, 62, 90, 118].forEach(function (r) {
+    SWIRL_R.forEach(function (r) {
       swirls.appendChild(svgEl("ellipse", {
         cx: TOP.cx, cy: TOP.cy,
         rx: r, ry: (r * K).toFixed(1),
@@ -373,13 +405,16 @@
     for (var c = 0; c < 19; c++) {
       var ang = (c / 19) * TAU - Math.PI / 2;
       ring.push({
-        x: TOP.cx + Math.cos(ang) * 104,
-        y: TOP.cy + Math.sin(ang) * 104 * K,
+        ang: ang,
+        x: TOP.cx + Math.cos(ang) * CANDLE_R,
+        y: TOP.cy + Math.sin(ang) * CANDLE_R * K,
         dur: (1.7 + rc() * 1.2).toFixed(2),
         delay: (-rc() * 2.6).toFixed(2),
       });
     }
     ring.sort(function (p, q) { return p.y - q.y; });
+    // 克隆出来的两半按同一顺序排蜡烛；俯视时按这个角度表重新摆位置
+    S.candleAngles = ring.map(function (p) { return p.ang; });
     ring.forEach(function (p) {
       var cd = document.createElement("span");
       cd.className = "candle";
@@ -464,7 +499,159 @@
     });
     cakeEl.classList.add("is-source");
     S.cakeSize = cakeEl.offsetWidth || 360;
+    S.trees = [makeTree(halfA), makeTree(halfB)];
     applyCutGeometry(S.cutAngle);
+    applyTilt(S.morph || 0);
+  }
+
+  /* ---------- 镜头：3/4 斜看 → 正上方俯视 ----------
+     不是两张图交叉淡入：顶面/盘子/糖珠/抹刀圈/蜡烛圈全部按同一个 u 重新
+     投到桌面上，K 从 0.366 连续走到 1。侧壁高度同时收到 0，奶油流和竖纹
+     留在原地被顶面盖住。走完时蛋糕是一张正圆，切口才是「在面上划过去」。 */
+  function setEllipse(el, cx, cy, rx, ry) {
+    if (!el) return;
+    el.setAttribute("cx", cx.toFixed(1));
+    el.setAttribute("cy", cy.toFixed(1));
+    el.setAttribute("rx", rx.toFixed(1));
+    el.setAttribute("ry", ry.toFixed(1));
+  }
+
+  function scallopPath(cy, k) {
+    var d = "";
+    for (var i = 0; i < 19; i++) {
+      var a0 = (i / 19) * TAU - Math.PI / 2;
+      var a1 = ((i + 1) / 19) * TAU - Math.PI / 2;
+      var am = (a0 + a1) / 2;
+      var p0x = TOP.cx + Math.cos(a0) * 156, p0y = cy + Math.sin(a0) * 156 * k;
+      var pmx = TOP.cx + Math.cos(am) * 172, pmy = cy + Math.sin(am) * 172 * k;
+      var p1x = TOP.cx + Math.cos(a1) * 156, p1y = cy + Math.sin(a1) * 156 * k;
+      d += (i === 0 ? "M" + p0x.toFixed(1) + " " + p0y.toFixed(1) : "") +
+        " Q" + pmx.toFixed(1) + " " + pmy.toFixed(1) +
+        " " + p1x.toFixed(1) + " " + p1y.toFixed(1);
+    }
+    return d + " Z";
+  }
+
+  function makeTree(root) {
+    if (!root) return null;
+    return {
+      root: root,
+      shadow: root.querySelector(".cake-plate-shadow"),
+      rim: root.querySelector(".cake-plate-rim"),
+      plate: root.querySelector(".cake-plate-top"),
+      plateShade: root.querySelector(".cake-plate-shade"),
+      plateEdge: root.querySelector(".cake-plate-edge"),
+      plateDash: root.querySelector(".cake-plate-dash"),
+      foot: root.querySelector(".cake-foot"),
+      wall: root.querySelector(".cake-wall"),
+      wallShade: root.querySelector(".cake-wall-shade"),
+      wallEdge: root.querySelector(".cake-wall-edge"),
+      top: root.querySelector(".cake-top"),
+      topEdge: root.querySelector(".cake-top-edge"),
+      number: root.querySelector(".cake-number-group"),
+      scallop: root.querySelector(".cake-scallop path"),
+      swirls: [].slice.call(root.querySelectorAll(".cake-swirls ellipse")),
+      beads: [].slice.call(root.querySelectorAll(".cake-beads circle")),
+      candles: [].slice.call(root.querySelectorAll(".candle")),
+    };
+  }
+
+  function applyTilt(u) {
+    u = clamp(u, 0, 1);
+    var k = K + (1 - K) * u;
+    var topY = TOP0.cy + (TOP1.cy - TOP0.cy) * u;
+    var topRy = TOP0.ry + (TOP1.ry - TOP0.ry) * u;
+    var wallH = 78 * (1 - u);
+    var wallD = "M76 " + topY.toFixed(1) + " v" + wallH.toFixed(1) +
+      " a164 " + topRy.toFixed(1) + " 0 0 0 328 0 v-" + wallH.toFixed(1) + " z";
+    var wallEdgeD = "M76 " + (topY + wallH).toFixed(1) +
+      " a164 " + topRy.toFixed(1) + " 0 0 0 328 0";
+    var numY = 30.2 - 74.2 * u;
+    var numS = 0.9 + 0.1 * u;
+    for (var t = 0; t < S.trees.length; t++) {
+      var tr = S.trees[t];
+      if (!tr) continue;
+      setEllipse(tr.shadow, 244, 330 - 90 * u, 228, 60 + 168 * u);
+      setEllipse(tr.rim, 240, 291 - 51 * u, 196, 66 + 130 * u);
+      setEllipse(tr.plate, 240, 283 - 43 * u, 196, 66 + 130 * u);
+      setEllipse(tr.plateShade, 240, 283 - 43 * u, 196, 66 + 130 * u);
+      setEllipse(tr.plateEdge, 240, 283 - 43 * u, 196, 66 + 130 * u);
+      setEllipse(tr.plateDash, 240, 283 - 43 * u, 182, 60 + 122 * u);
+      setEllipse(tr.foot, 240, 292 - 52 * u, 178, 50 + 128 * u);
+      if (tr.wall) tr.wall.setAttribute("d", wallD);
+      if (tr.wallShade) tr.wallShade.setAttribute("d", wallD);
+      if (tr.wallEdge) tr.wallEdge.setAttribute("d", wallEdgeD);
+      setEllipse(tr.top, 240, topY, 164, topRy);
+      setEllipse(tr.topEdge, 240, topY, 164, topRy);
+      if (tr.number) {
+        tr.number.setAttribute("transform", "translate(0 " + numY.toFixed(2) +
+          ") scale(1 " + numS.toFixed(3) + ")");
+      }
+      if (tr.scallop) tr.scallop.setAttribute("d", scallopPath(topY, k));
+      var i;
+      for (i = 0; i < tr.swirls.length; i++) {
+        setEllipse(tr.swirls[i], 240, topY, SWIRL_R[i], SWIRL_R[i] * k);
+      }
+      for (i = 0; i < tr.beads.length; i++) {
+        var ab = (i / 19) * TAU - Math.PI / 2;
+        var rb = BEAD_R + (BEAD_R_TOP - BEAD_R) * u;
+        tr.beads[i].setAttribute("cx", (TOP.cx + Math.cos(ab) * rb).toFixed(1));
+        tr.beads[i].setAttribute("cy", (topY + Math.sin(ab) * rb * k).toFixed(1));
+      }
+      for (i = 0; i < tr.candles.length && i < S.candleAngles.length; i++) {
+        var ac = S.candleAngles[i];
+        var rc = CANDLE_R + (CANDLE_R_TOP - CANDLE_R) * u;
+        tr.candles[i].style.left = (((TOP.cx + Math.cos(ac) * rc) / 480) * 100).toFixed(2) + "%";
+        tr.candles[i].style.top = (((topY + Math.sin(ac) * rc * k) / 480) * 100).toFixed(2) + "%";
+      }
+    }
+    S.morph = u;
+  }
+
+  function applyApproach(u) {
+    u = clamp(u, 0, 1);
+    S.cam = 1 + CAM_ADD * u;
+    S.clothCam = 1 + CLOTH_ADD * u;
+    S.geom.tipMin = tipMinFor(S.cam);
+    gateEl.style.setProperty("--top", u.toFixed(4));
+    gateEl.style.setProperty("--cam", S.cam.toFixed(4));
+    gateEl.style.setProperty("--clothcam", S.clothCam.toFixed(4));
+    gateEl.style.setProperty("--ch", (30 * (1 - 0.88 * u)).toFixed(2) + "px");
+    gateEl.style.setProperty("--flame-w", (9 + 3 * u).toFixed(2) + "px");
+    gateEl.style.setProperty("--flame-h", (19 * (1 - 0.55 * u)).toFixed(2) + "px");
+    applyTilt(u);
+  }
+
+  /* 提前渲染：第一次按下就把长廊瞬移到布后面。布整块不透明、缝宽还是 0，
+     这一下滚动 + 相机 + 海的重活都花在指头下面，等真正切时后面已经是热的。 */
+  function prewarm() {
+    if (S.warm || NOJUMP) return;
+    S.warm = true;
+    if (hooks.openArchive) hooks.openArchive(true);
+    if (gateEl) void gateEl.offsetWidth;
+  }
+
+  function beginApproach() {
+    if (TOPAT !== null) return;
+    if (S.phase !== "idle" || S.zooming || S.approachRaw > 0) return;
+    S.zooming = true;
+    prewarm();
+    // 镜头推进时刀还没出来，用站点自己的指针；刀飞进来时再藏指针
+    document.body.classList.remove("is-cake-cursor");
+  }
+
+  function requestCut() {
+    if (S.phase === "aim") { cut(); return; }
+    if (S.phase === "fly") { S.cutQueued = true; return; }
+    if (S.phase === "idle" && !S.zooming) beginApproach();
+  }
+
+  function defaultTip() {
+    var d = tipMinFor(CAM_FINAL);
+    return {
+      x: S.geom.cx + Math.cos(DEFAULT_BEARING) * d,
+      y: S.geom.cy + Math.sin(DEFAULT_BEARING) * d,
+    };
   }
 
   function applyCutGeometry(angle) {
@@ -496,13 +683,26 @@
     var dy = g.cy - S.tip.y;
     var dist = Math.sqrt(dx * dx + dy * dy);
     // 虚线只画到盘沿：越过盘沿就是在蛋糕身上划一道
-    var r0 = (S.cakeSize || 360) * 0.42;
+    var r0 = (S.cakeSize || 360) * S.cam * 0.42;
     bearingEl.style.transform = tf + " scaleX(" + (Math.max(0, dist - r0) / 100).toFixed(3) + ")";
-    bearingEl.style.opacity = clamp(1 - S.cut * 4, 0, 1).toFixed(2);
+    // 封面第一帧连罗盘虚线都不能有；它由 placeKnife 每帧写 inline，单靠 CSS 盖不住
+    bearingEl.style.opacity = (S.phase === "idle" ? 0 : clamp(1 - S.cut * 4, 0, 1)).toFixed(2);
   }
 
   function startFly() {
-    var t = clampTip(S.pointer.seen ? S.pointer.x : S.geom.cx, S.pointer.seen ? S.pointer.y : window.innerHeight * 0.97);
+    if (S.fly || S.knifeStarted) return;
+    // 第一次点在蛋糕正中时，刀从正下方飞上来会贴着蜡烛；改从右上角来。
+    var px = S.pointer.x - S.geom.cx;
+    var py = S.pointer.y - S.geom.cy;
+    if (!S.pointer.seen || Math.sqrt(px * px + py * py) < 40) {
+      var r0 = tipMinFor(CAM_FINAL);
+      S.pointer.x = S.geom.cx + Math.cos(DEFAULT_BEARING) * r0;
+      S.pointer.y = S.geom.cy + Math.sin(DEFAULT_BEARING) * r0;
+      S.pointer.seen = true;
+    }
+    // 落点按**最终**镜头量：镜头还在推，刀先站到它最后该在的位置，
+    // 否则落地那一帧会被 tipMin 往外顶七十像素。
+    var t = clampTip(S.pointer.x, S.pointer.y, CAM_FINAL);
     var p0 = { x: t.x + (S.geom.cx - t.x) * 0.45, y: window.innerHeight + 150 };
     var vx = t.x - p0.x;
     var vy = t.y - p0.y;
@@ -510,9 +710,12 @@
     var p1 = { x: (p0.x + t.x) * 0.5 - (vy / len) * 140, y: (p0.y + t.y) * 0.5 + (vx / len) * 140 };
     S.fly = { p0: p0, p1: p1, p2: t, t: 0 };
     S.phase = "fly";
+    S.knifeStarted = true;
     S.tip.x = p0.x;
     S.tip.y = p0.y;
     S.bearing = bearingTo(p0.x, p0.y);
+    gateEl.classList.remove("is-idle");
+    document.body.classList.add("is-cake-cursor");
     placeKnife();
   }
 
@@ -529,14 +732,19 @@
     S.bearing = bearingTo(S.tip.x, S.tip.y);
     if (u >= 1) {
       S.phase = "aim";
+      S.fly = null;
       S.tip.x = f.p2.x;
       S.tip.y = f.p2.y;
+      placeKnife();
+      // 刀还在飞的时候点的：等它落稳再切，免得从半空划出去
+      if (S.cutQueued) { S.cutQueued = false; cut(); }
+      return;
     }
     placeKnife();
   }
 
   function stepAim(dt) {
-    var target = clampTip(S.pointer.x, S.pointer.y);
+    var target = clampTip(S.pointer.x, S.pointer.y, S.cam);
     S.tip.x = damp(S.tip.x, target.x, 20, dt);
     S.tip.y = damp(S.tip.y, target.y, 20, dt);
     var held = clampTip(S.tip.x, S.tip.y);
@@ -592,7 +800,7 @@
     var dist = Math.sqrt(dx * dx + dy * dy) || 1;
     S.sliceFrom = { x: S.tip.x, y: S.tip.y };
     S.sliceDir = { x: dx / dist, y: dy / dist };
-    S.sliceLen = dist * 2 + (S.cakeSize || 360) * 0.16;
+    S.sliceLen = dist * 2 + (S.cakeSize || 360) * S.cam * 0.16;
     gateEl.classList.add("is-cut");
     // 一刀的力：画面抖 170ms，烛焰跟着顿一下。没有这一下，刀像是贴上去的。
     gateEl.classList.add("is-impact");
@@ -604,10 +812,9 @@
     // 长廊必须**现在**就在缝后面：这一版缝里什么都不放，缝一开后面直接是海。
     // 此刻布整块不动、缝宽还是 0，跳转本身看不见任何跳变；等分开了再跳，
     // 就会在缝里闪一帧空背景 —— 那正是「乱的帧」。
-    if (!S.archiveJump && !NOJUMP) {
-      S.archiveJump = true;
-      if (hooks.openArchive) hooks.openArchive(true);
-    }
+    // 长廊在指头按下的那一刻就预热好了；这里是兜底（调试直接 ?cake=cut 的路径）。
+    if (!S.warm) prewarm();
+    S.archiveJump = true;
     document.body.classList.remove("is-cake-cursor");
     // 布上的字和那道框跟着布一起走：它们印在布上，不是浮在海面上。
     document.body.classList.add("is-cutting");
@@ -624,6 +831,12 @@
     S.opened = false;
     S.finished = false;
     S.archiveJump = false;
+    // 回到封面后，下一次点按要重新把长廊预热到布后面（那时页面已经滚回顶了）
+    S.warm = false;
+    S.cutQueued = false;
+    S.fly = null;
+    S.zooming = false;
+    document.body.classList.add("is-cake-cursor");
     gateEl.classList.remove("is-cut");
     gateEl.classList.remove("is-sliced");
     S.sliceFrom = null;
@@ -663,6 +876,8 @@
         S.pointer.x = e.clientX;
         S.pointer.y = e.clientY;
         S.pointer.seen = true;
+        // 指头按下到抬起之间通常有 50-150ms：把长廊、相机、海的那一帧藏在这里
+        if (S.phase === "idle" && !S.zooming) prewarm();
       }, { passive: true });
 
       surface.addEventListener("pointermove", function (e) {
@@ -676,11 +891,12 @@
         S.pointer.x = e.clientX;
         S.pointer.y = e.clientY;
         S.pointer.seen = true;
-        // 划一刀：划的方向就是切口方向；轻点则沿眼下这条刀轴下去
-        if (drag.moved > 26) {
+        // 划一刀：划的方向就是切口方向；轻点则沿眼下这条刀轴下去。
+        // idle 的第一次点按只负责把镜头推下去，不设切口方向。
+        if (S.phase === "aim" && drag.moved > 26) {
           S.bearing = Math.atan2(e.clientY - drag.y, e.clientX - drag.x) + Math.PI;
         }
-        cut();
+        requestCut();
       }, { passive: true });
 
       surface.addEventListener("pointercancel", function () { drag.down = false; }, { passive: true });
@@ -689,12 +905,13 @@
     window.addEventListener("resize", function () {
       measure();
       applyCutGeometry(S.cutAngle);
+      applyTilt(S.morph || 0);
     }, { passive: true });
 
     window.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && (S.phase === "aim" || S.phase === "fly") && !e.metaKey && !e.ctrlKey) {
+      if (e.key === "Enter" && S.phase !== "open" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        cut();
+        requestCut();
       }
     });
   }
@@ -706,7 +923,14 @@
     if (!S.geom.cx) measure();
     var reduced = hooks.reduced && hooks.reduced.matches;
 
-    if (S.phase === "idle") startFly();
+    // 第一次点按不是切，是把镜头压到正上方；刀在后半段才飞进来。
+    if (TOPAT === null && S.zooming && S.approachRaw < 1) {
+      S.approachRaw = clamp(S.approachRaw + dt / APPROACH, 0, 1);
+      var ma = easeInOut(S.approachRaw);
+      applyApproach(ma);
+      if (!S.knifeStarted && ma >= 0.5) startFly();
+      if (S.approachRaw >= 1) S.zooming = false;
+    }
     if (S.phase === "fly") stepFly(dt);
     else if (S.phase === "aim") stepAim(dt);
 
@@ -721,7 +945,7 @@
           // 布全裂开了才算这一刀走完：这时候才把 --gate 交还给滚动，
           // 整层随之淡出，长廊满屏。此前一直锁在 0。
           S.phase = "open";
-          // 长廊早就在 dive 0.45 那次跳好了；这里只把 --gate 交还给滚动
+          // 长廊在指头按下时就预热好了；这里只把 --gate 交还给滚动
           if (hooks.setCoverLocked) hooks.setCoverLocked(false);
         }
       }
@@ -777,20 +1001,18 @@
     // 缝宽不是猜的：半块在 .cake-stage 里沿法线位移 (gap + dive*220)，而 .cake-stage
     // 自己放大 (1 + dive*2.25)，屏幕上就是 (gap + dive*220)*(1 + dive*2.25)；
     // 布只放大 (1 + dive*0.5)，折回布自己的坐标再挖洞，两条边才对得上。
-    var gapMax = Math.min((S.cakeSize || 360) * 0.12, 64);
+    // --gap 是 .cake-stage 里的本地像素；屏幕上的位移要再乘镜头和 dive 的缩放
+    var gapMax = Math.min((S.cakeSize || 360) * S.cam * 0.12, 64) / S.cam;
     gateEl.style.setProperty("--split", S.split.toFixed(4));
     gateEl.style.setProperty("--gap", (S.split * gapMax).toFixed(1));
     gateEl.style.setProperty("--gapb", (splitB * gapMax).toFixed(1));
     gateEl.style.setProperty("--dive", S.dive.toFixed(4));
     var gapNow = Math.max(S.split, splitB) * gapMax;
-    // 缝宽不是猜的：半块在 .cake-stage 里沿法线位移 (gap + dive*220)，而 .cake-stage
-    // 自己放大 (1 + dive*2.25)，屏幕上就是 (gap + dive*220)*(1 + dive*2.25)；
-    // 布只放大 (1 + dive*0.5)，折回布自己的坐标再挖洞，两条边才对得上。
     // 只有真让开了才有缝：base 为 0 就给 0，布上不多一条缝。
-    var slitBase = (gapNow + S.dive * 220) * (1 + S.dive * 2.25) / (1 + S.dive * 0.5);
+    var slitBase = (gapNow + S.dive * 220) * S.cam * (1 + S.dive * 2.25) / (S.clothCam * (1 + S.dive * 0.5));
     // +12：缝的边要压在蛋糕身下面 —— 两半各自还有 1.3°/1.8° 的歪，在盘沿能错开
     // 十来像素，正正好等宽会露出布丝。这个余量只在缝已经开了之后才加。
-    setSlit(slitBase > 0.5 ? slitBase + 12 : 0);
+    setSlit(slitBase > 0.5 ? slitBase + 12 * S.cam : 0);
     // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
     // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
     var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
@@ -829,6 +1051,8 @@
     buildChart();
     buildCake();
     buildCakeHalves();
+    // 初始就是斜看的那块蛋糕；第一次点按才往正上方推。
+    applyApproach(TOPAT !== null ? TOPAT : 0);
     S.tip.x = S.geom.cx;
     S.tip.y = window.innerHeight + 150;
     S.bearing = bearingTo(S.tip.x, S.tip.y);
@@ -836,13 +1060,18 @@
     initEvents();
     S.mounted = true;
     if (hooks.setCoverLocked) hooks.setCoverLocked(true);
-    document.body.classList.add("is-cake-cursor");
+    // 封面一开始只有蛋糕：刀和那条虚线都还没进场，站点自己的指针也还在
+    document.body.classList.remove("is-cake-cursor");
+    gateEl.classList.add("is-idle");
 
     if (FREEZE === "aim" || FREEZE === "cut") {
       S.pointer.seen = true;
+      applyApproach(1);
+      gateEl.classList.remove("is-idle");
+      document.body.classList.add("is-cake-cursor");
       S.pointer.x = S.geom.cx + window.innerWidth * 0.22;
       S.pointer.y = S.geom.cy + window.innerHeight * 0.3;
-      var t = clampTip(S.pointer.x, S.pointer.y);
+      var t = clampTip(S.pointer.x, S.pointer.y, CAM_FINAL);
       S.tip.x = t.x;
       S.tip.y = t.y;
       S.bearing = bearingTo(t.x, t.y);
@@ -856,10 +1085,8 @@
       if (!DBG) dbg.style.display = "none";
       document.body.appendChild(dbg);
       if (DBG) setInterval(function () {
-        var i = document.getElementById("intro");
-        var cloth = gateEl.querySelector(".cloth");
         dbg.textContent = "phase=" + S.phase + " cut=" + S.cut.toFixed(2) +
-          " intro=[" + (document.getElementById("intro") || {}).className + "]" +
+          " top=" + S.morph.toFixed(2) + " cam=" + S.cam.toFixed(2) +
           " gate=[" + gateEl.className + "]" +
           " body=[" + document.body.className + "]" +
           " sawGate=" + S.sawGate + " opened=" + S.opened +
@@ -869,15 +1096,7 @@
           " clip=" + [].map.call(gateEl.querySelectorAll(".cake--half"), function (h) {
             return (h.style.clipPath || "-").length;
           }).join("/") +
-          " scrollY=" + Math.round(window.scrollY) +
-          " stack=" + (function () {
-            var list = document.elementsFromPoint(window.innerWidth * 0.5, window.innerHeight * 0.3) || [];
-            return list.slice(0, 7).map(function (e) {
-              var cs = getComputedStyle(e);
-              return e.tagName + "." + (e.className || "").toString().split(" ")[0] +
-                "{" + cs.backgroundColor + "|op" + cs.opacity + "|vis" + cs.visibility + "}";
-            }).join(" > ");
-          })();
+          " scrollY=" + Math.round(window.scrollY);
       }, 120);
 
       if (FREEZE === "archive") {
@@ -909,6 +1128,10 @@
         bearing: +(S.bearing * DEG).toFixed(2),
         axisError: +Math.abs(shortest(S.bearing, bearingTo(S.tip.x, S.tip.y)) * DEG).toFixed(3),
         geom: S.geom,
+        top: +(S.morph || 0).toFixed(3),
+        cam: +S.cam.toFixed(3),
+        approachRaw: +S.approachRaw.toFixed(3),
+        warm: S.warm,
       };
     },
   };
