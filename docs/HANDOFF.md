@@ -31,7 +31,10 @@
    用户原话："我指的是抄那个海洋的渲染" / "需要包的话你给他打包不就行了吗" / "是啊，就是让你抄啊"。
    你如果又手写一版 Gerstner 波，方向就错了 —— **原版就在本地，去打包它**。
 3. **明信片横竖切换必须是刚体旋转**：容器与内容相对静止、一起旋转，**不形变、不拉伸**。
-4. **往回滚动永远不能关门**。关门只有一条路径：左上角 TIDELINE 品牌按钮 → `returnToCover()`。
+4. **门只开不关**。开屏是一道单向门：往回滚会被环形走廊夹住，也**没有任何按钮**可点 ——
+   2026-10-23 用户要求「进入海洋长廊后就不能返回」，左上角 TIDELINE 品牌按钮的返回行为已删除
+   （`returnToCover()` / `state.returningToCover` / 光标提示 `COVER` 一并拿掉，品牌只剩一个 `div`）。
+   `wrapCorridorScroll()` 因此只剩 `introHidden` 一道闸。
 5. **沉浸模式**：去掉周围交互提示，只保留作为内容的文字与画面。
 6. **LITE 模式**：给弱机用，保留光照与交互、降低精度与更新率。
    用户后来追加：**LITE 要回到最初那个"线条海面"**（Canvas-2D 手绘风）。
@@ -179,7 +182,8 @@ dispose()
   **双向环形包裹**在 `wrapCorridorScroll()`（1188）。往回滚靠它才不会误触关门。
 - 卡片渲染：`buildCards()`（517）、`applyCardTransforms()`（1331）、
   聚焦刚体旋转：`focusTiltTransform()`（1447）/ `readFocusSpin()`（1458）/ `syncCardAnglesToFocus()`（1487）。
-- 开门/关门：`openPostcard()`（1550）/ `closePostcard()`（1693）/ `returnToCover()`（1421，**唯一关门路径**）。
+- 开门/关门：`openPostcard()`（1726）/ `closePostcard()`（1865）。**没有关门路径** —— 开屏是单向门，
+  台布不会再缝上；`stitch()`（`js/cakegate.js:866`）留着当状态机兜底，界面已无入口。
 - 主循环：`animate()`（2123）——先画 `seaEngine`，再画卡片。
 - 缩放/尺寸：`handleResize()`（1947）负责把引擎一起 `resize()`。
 - 沉浸模式：`setImmersive()`（2218）。

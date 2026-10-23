@@ -362,7 +362,6 @@ img {
 
 .scroll-cue:focus-visible,
 .shuffle-button:focus-visible,
-.brand:focus-visible,
 .focus-close:focus-visible,
 .focus-card:focus-visible {
   outline: 1px solid currentColor;
@@ -3756,9 +3755,9 @@ body.is-cake-cursor .cursor {
      织纹、褶子、海图都还在，只是没光了 —— 那才是「屋里暗下来」。 */
   background:
     radial-gradient(ellipse farthest-side at 50% 46%,
-      rgb(106, 110, 110) 0%,
-      rgb(92, 98, 102) 46%,
-      rgb(76, 84, 92) 100%);
+      rgb(70, 76, 80) 0%,
+      rgb(58, 64, 70) 46%,
+      rgb(44, 50, 60) 100%);
   mix-blend-mode: multiply;
   opacity: 0;
   transition: opacity 1.15s cubic-bezier(0.33, 0, 0.36, 1);
@@ -3793,8 +3792,8 @@ body.is-cake-cursor .cursor {
      这里用 closest-side，让 100% 正好落在元素的边（默认 farthest-corner 会让
      整条渐变只有七成铺得开，边上的淡出永远到不了 0）。 */
   background: radial-gradient(circle closest-side at 50% 50%,
-    rgba(8, 10, 14, 0.62) 0%,
-    rgba(8, 10, 14, 0.6) 97%,
+    rgba(8, 10, 14, 0.82) 0%,
+    rgba(8, 10, 14, 0.8) 97%,
     rgba(8, 10, 14, 0) 100%);
   opacity: 0;
   transition: opacity 1.25s ease-out;

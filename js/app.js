@@ -302,7 +302,6 @@ const dom = {
   railFrom: $("#railFrom"),
   railTo: $("#railTo"),
   scrollHint: $("#scrollHint"),
-  brandHome: $("#brandHome"),
   shuffleButton: $("#shuffleButton"),
   qualityToggle: $("#qualityToggle"),
   immersiveToggle: $("#immersiveToggle"),
@@ -376,8 +375,6 @@ const state = {
   // 布后面那套长廊管线这一帧要不要跑（true = 跑一次，跑完自己清零）
   corridorDirty: true,
   corridorFloor: 0,
-  lastScrollY: 0,
-  returningToCover: false,
   immersive: false,
   immersiveIdleTimer: 0,
   immersiveFullscreen: false,
@@ -1300,10 +1297,6 @@ function initCursor() {
       setCursor(true, "SHUFFLE");
       return;
     }
-    if (target.closest(".brand")) {
-      setCursor(true, "COVER");
-      return;
-    }
     setCursor(false);
   });
 }
@@ -1317,9 +1310,9 @@ function updateScrollMetrics() {
   const count = Math.max(1, state.cards.length);
   const height = Math.max(1, window.innerHeight);
   state.introPx = Math.max(420, height * 0.92);
-  // The cover is a one-way door. Once it has been pushed open the promenade
-  // never scrolls back over it: the ring re-anchors the walk here, and the
-  // only way back to the doors is the TIDELINE brand button (returnToCover).
+  // The cover is a one-way door, and now literally one: nothing in the UI walks
+  // back to it. Once it has been pushed open the promenade never scrolls back
+  // over it — the ring re-anchors the walk here.
   //
   // This sits exactly where the door gate saturates (gate === 1), so inside
   // the ring the cover is always fully gone — the doors never even flicker.
@@ -1339,14 +1332,13 @@ function updateScrollMetrics() {
 // so the sea, the cards and the light are pixel-identical on the other side
 // and the wrap is invisible in either direction.
 //
-// The doors are the one exception: before they are open (and while the brand
-// button is gliding back to them) the walk is allowed to retreat below the
-// corridor floor. That keeps the cover a one-way door — it can be opened by
-// scrolling, but only the brand button ever closes it again.
+// The doors are the one exception: before they are open the walk is allowed to
+// retreat below the corridor floor. Once the cloth has parted, nothing closes
+// it again — there is no way back to the cover, by scroll or by button.
 function wrapCorridorScroll() {
   const cycle = state.loopPx;
   if (!cycle) return;
-  if (state.returningToCover || !state.introHidden) return;
+  if (!state.introHidden) return;
   const lower = state.corridorFloor;
   const upper = state.introPx + cycle * 1.75;
   let y = window.scrollY;
@@ -1419,16 +1411,6 @@ function updateScrollState(dt) {
   if (state.focusOpen) return;
 
   wrapCorridorScroll();
-
-  // The door pass ends when the cover is reached — or the moment the viewer
-  // takes the walk back over, whichever comes first. Until then the ring above
-  // stands down, so the walk is free to retreat past the corridor floor.
-  if (state.returningToCover) {
-    if (window.scrollY <= state.introPx * 0.3 || window.scrollY > state.lastScrollY + 4) {
-      state.returningToCover = false;
-    }
-  }
-  state.lastScrollY = window.scrollY;
 
   // 切开那一刀是「啪」一下就到长廊的：相机必须同一帧就位，
   // 否则滚动瞬间会有一张放大到铺满屏的明信片飞过（那正是「切完还剩一帧」）。
@@ -1618,12 +1600,6 @@ function openArchive(instant) {
   if (instant) updateScrollState(0);
 }
 
-function returnToCover() {
-  if (state.focusOpen) return;
-  state.returningToCover = true;
-  window.scrollTo({ top: 0, behavior: REDUCED_MOTION.matches ? "auto" : "smooth" });
-}
-
 function setFocusContent(card) {
   const data = card.data;
   if (dom.focusFront.getAttribute("src") !== data.front) dom.focusFront.src = data.front;
@@ -1760,10 +1736,6 @@ function openPostcard(index, source) {
   state.lastFocused = source;
   state.lastCard = card;
   state.scrollRestore = window.scrollY;
-  // Picking a card up is a vote for the gallery: it cancels a door pass that
-  // happened to still be gliding towards the cover.
-  state.returningToCover = false;
-
   document.documentElement.classList.add("is-locked");
   document.body.classList.add("is-holding");
   dom.gallery.inert = true;
@@ -2313,7 +2285,6 @@ function initEvents() {
     if (window.CakeGate && CakeGate.isActive()) CakeGate.cut();
     else openArchive(true);
   });
-  dom.brandHome.addEventListener("click", returnToCover);
   dom.shuffleButton.addEventListener("click", randomizeCards);
   dom.skipLink.addEventListener("click", (event) => {
     event.preventDefault();
