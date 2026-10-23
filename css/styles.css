@@ -2893,6 +2893,21 @@ body.is-cake-cursor .cursor {
   clip-path: none;
 }
 
+/* 开屏的每一帧里动的只有布自己：transform 跟着镜头压下去，clip-path 跟着
+   刀口张开。可布底下压着十几层静态内容（亚麻经纬、麻纤、浆痕、五道褶、
+   海图、边注、光斑、桌沿），clip 一变，Chrome 就把整棵子树重新栅格化一遍，
+   一层层的渐变按像素重算 —— 实测 fly 段因此每帧 43ms。
+   把这些子层各自提成合成层，clip 就变成合成期的一道掩膜，内容栅格缓存住：
+   fly 43→31ms、cut 30→23ms，cut 的 p90 从 50 降到 33。 */
+.cloth > * {
+  will-change: transform;
+}
+
+/* 布退场之后这十几层就没有再提着的理由了，把显存还给长廊。 */
+.cake-gate.is-gone .cloth > * {
+  will-change: auto;
+}
+
 .cloth.is-source {
   visibility: hidden;
 }
