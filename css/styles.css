@@ -3025,8 +3025,14 @@ body.is-cake-cursor .cursor {
 
 .candle {
   position: absolute;
+  /* 位置由 js 每帧写成 transform: translate3d(...)：写 left/top 会让蜡烛反复
+     重新布局，整块蛋糕跟着判脏。这里固定成原点，只留 margin-left 当横向基准。 */
+  left: 0;
+  top: 0;
   width: 7px;
-  height: var(--ch, 30px);
+  /* 高度固定 30px：俯视时的压扁是 js 写在 transform 里的 scaleY，
+     不写 height（写 height 会让 38 支蜡烛每帧重排 + 重画 76 个火焰伪元素）。 */
+  height: 30px;
   margin-left: -3.5px;
   border-radius: 3px 3px 2px 2px;
   background-image:
@@ -3049,8 +3055,11 @@ body.is-cake-cursor .cursor {
   position: absolute;
   left: 50%;
   bottom: 100%;
-  width: var(--flame-w, 9px);
-  height: var(--flame-h, 19px);
+  /* 尺寸固定，屏幕上的收缩交给下面的 scale（合成器属性）：
+     以前每帧改 width/height，76 个带双 blur 阴影的伪元素每帧重新栅格化，
+     fly 相位因此多花约 10ms/帧。 */
+  width: 9px;
+  height: 19px;
   margin: 0 0 0 -4.5px;
   border-radius: 50% 50% 46% 46% / 74% 74% 26% 26%;
   background:
@@ -3058,6 +3067,9 @@ body.is-cake-cursor .cursor {
     radial-gradient(ellipse 74% 60% at 50% 66%, #FFFDF4 0%, #FFF1C0 24%, #FFCB6C 54%, #FF9B3A 79%, rgba(255, 130, 44, 0.26) 100%);
   box-shadow: 0 0 8px rgba(255, 186, 96, 0.7), 0 0 18px rgba(255, 150, 60, 0.26);
   transform-origin: 50% 92%;
+  /* 父级 .candle 用 scaleY 压扁烛身时火焰会被连坐，所以这里的纵向比例要乘回 1/chs；
+     与父级矩阵相乘后净效果是缩小，栅格不重做。 */
+  scale: var(--flame-sx, 1) var(--flame-sy, 1);
   animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate;
   will-change: transform, opacity;
 }
@@ -3073,6 +3085,8 @@ body.is-cake-cursor .cursor {
   margin: 0 0 -16px -23px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 232, 180, 0.34) 0%, rgba(255, 206, 140, 0.14) 42%, rgba(255, 190, 120, 0) 74%);
+  /* 光晕在屏幕上始终是 46px 的圆：只抵消父级的纵向压扁（单值会连 X 一起放大） */
+  scale: 1 var(--glow-s, 1);
   animation: cakeFlame var(--dur, 2.2s) ease-in-out var(--delay, 0s) infinite alternate-reverse;
   will-change: transform, opacity;
 }
@@ -3350,9 +3364,8 @@ body.is-cake-cursor .cursor {
   --cs: clamp(320px, 34vw, 500px);
   --cam: 1;          /* 镜头：第一次点击后推到 1.55（js 每帧写） */
   --clothcam: 1;     /* 台布单独推近一点，纹理往外走 */
-  --ch: 30px;        /* 蜡烛实体高度：俯视时压到 3.6px（js 每帧写） */
-  --flame-w: 9px;    /* 焰在俯视时略微变宽变短，像从正上方看到的一粒火 */
-  --flame-h: 19px;
+  /* 蜡烛的尺寸不再走变量：烛身固定 30px 高、焰固定 9x19px，
+     俯视时由 js 每帧写 scaleY / scale（合成器属性，不触发重排与重栅格）。 */
 }
 
 /* 洞开在整层上，不是开在布上：洞一合上，台布、蛋糕、暗角一起消失，

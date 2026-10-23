@@ -430,8 +430,8 @@
     ring.forEach(function (p) {
       var cd = document.createElement("span");
       cd.className = "candle";
-      cd.style.left = ((p.x / 480) * 100).toFixed(2) + "%";
-      cd.style.top = ((p.y / 480) * 100).toFixed(2) + "%";
+      // 先不写 left/top：位置一律由 applyTilt 用 transform 摆（见那里的注释）。
+      // CSS 里 .candle 是 left:0; top:0，所以建出来的第一帧就在原点，applyTilt(0) 立刻接手。
       cd.style.setProperty("--dur", p.dur + "s");
       cd.style.setProperty("--delay", p.delay + "s");
       // 靠后的蜡烛缩一点，纵深感就是这么来的
@@ -581,6 +581,11 @@
       " a164 " + topRy.toFixed(1) + " 0 0 0 328 0";
     var numY = 30.2 - 74.2 * u;
     var numS = 0.9 + 0.1 * u;
+    // 480 是蛋糕自己的坐标系，落到像素要乘上盒子的布局宽度（不含镜头缩放）
+    var box = S.geom.cake || 336;
+    // 俯视时蜡烛的「高度」要压扁：以前写 height（--ch）来压，38 支蜡烛每帧重新排版
+    // 并重画 76 个火焰伪元素；改成 scaleY，只动合成器。
+    var chs = 1 - 0.88 * u;
     for (var t = 0; t < S.trees.length; t++) {
       var tr = S.trees[t];
       if (!tr) continue;
@@ -615,8 +620,17 @@
       for (i = 0; i < tr.candles.length && i < S.candleAngles.length; i++) {
         var ac = S.candleAngles[i];
         var rc = CANDLE_R + (CANDLE_R_TOP - CANDLE_R) * u;
-        tr.candles[i].style.left = (((TOP.cx + Math.cos(ac) * rc) / 480) * 100).toFixed(2) + "%";
-        tr.candles[i].style.top = (((topY + Math.sin(ac) * rc * k) / 480) * 100).toFixed(2) + "%";
+        var cxp = ((TOP.cx + Math.cos(ac) * rc) / 480) * box;
+        var cyp = ((topY + Math.sin(ac) * rc * k) / 480) * box;
+        // 位置走合成器的 translate3d，不写 left/top：写 left/top 会让 38 支蜡烛
+        // 每帧重新布局，一次 layout 失效就把整块蛋糕判脏（invalidation trace 里
+        // 「Style changed @SPAN.candle」1938 次，是开屏期间第二大的失效来源）。
+        // 尾巴上那个 -3.5px 是 .candle 的 margin-left：translateY(-100%) 与
+        // scale 都以 50% 100% 为原点，横向的 margin 必须在缩放后补回去。
+        tr.candles[i].style.transform =
+          "translate3d(calc(" + cxp.toFixed(2) + "px - 3.5px * (1 - var(--s, 1))), " +
+          cyp.toFixed(2) + "px, 0) translateY(-100%) scale(var(--s, 1)) scaleY(" +
+          chs.toFixed(4) + ")";
       }
     }
     S.morph = u;
@@ -630,9 +644,13 @@
     gateEl.style.setProperty("--top", u.toFixed(4));
     gateEl.style.setProperty("--cam", S.cam.toFixed(4));
     gateEl.style.setProperty("--clothcam", S.clothCam.toFixed(4));
-    gateEl.style.setProperty("--ch", (30 * (1 - 0.88 * u)).toFixed(2) + "px");
-    gateEl.style.setProperty("--flame-w", (9 + 3 * u).toFixed(2) + "px");
-    gateEl.style.setProperty("--flame-h", (19 * (1 - 0.55 * u)).toFixed(2) + "px");
+    // 蜡烛高度固定 30px、火焰固定 9x19px：俯视时的收缩全部写成 scale。
+    // 每帧改 width/height 会让 38 支蜡烛重排、76 个带 blur 阴影的伪元素重新栅格化；
+    // scale 是合成器属性，只更新矩阵。伪元素被父级 scaleY(chs) 连坐，所以纵向要乘 1/chs。
+    var chs = 1 - 0.88 * u;
+    gateEl.style.setProperty("--flame-sx", ((9 + 3 * u) / 9).toFixed(4));
+    gateEl.style.setProperty("--flame-sy", ((1 - 0.55 * u) / chs).toFixed(4));
+    gateEl.style.setProperty("--glow-s", (1 / chs).toFixed(4));
     applyTilt(u);
   }
 
