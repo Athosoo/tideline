@@ -193,6 +193,14 @@ dispose()
   同时把 CSS 那个 2D 云画布重新锚到 26% 地平线，之前它覆盖到视口 58%，**压在海面上**，
   就是你当时看到的那条"突兀的硬边"。
   验证：云量 8% / 50% / 95% → 天空亮度均值 **192 / 189 / 165**。
+- **开屏掉帧（`bcae247` / `3c2ba98` / `5f6a444` / `358c61d`）**：台布不透明地盖着时，
+  海面和长廊都在画看不见的像素。四处改动：① 海面 canvas 的 rect 每个视口只量一次，
+  不再每帧 `getBoundingClientRect`（那是采样剖析的第一名，自耗时 1441.8ms）；
+  ② 布缝还闭着时跳过长廊的 `updateScrollState` / `applyCardTransforms`
+   （`CakeGate.isSealed()` 判定，`?noparkcorr=1` 可关）；③ 缝闭着时摘掉
+   `.cloth` 的 `clip-path`（`.is-whole`）；④ 把布的十几个静态子层各自提成合成层
+   （`.cloth > * { will-change: transform }`），clip 变成合成期掩膜而不是每帧重栅格化。
+  cut 相位 38.2 → 27.1ms/帧、p90 66.8 → 34、fly 46.8 → 41.1、封面静置 60fps 不掉帧。
 
 ---
 
@@ -284,6 +292,30 @@ rm -rf ./js/vendor
 - **每完成一步就提交一次**，提交信息写清"改了什么 + 为什么"（看 `7edd107`、`806de56` 的风格）。
 - `.gitignore` 已经处理：系统/编辑器垃圾、`_qa*/`、`*.log`。
 - `.gitattributes`：`* text=auto eol=lf`、二进制标记、`sea.bundle.js -diff linguist-generated`。
+
+### 6.3 测开屏帧率（2026-10 那轮的做法，可复用）
+
+`_wip/perf/` 下的探针（gitignore 区，删了不影响站点）：`phase.mjs`（按
+`CakeGate.debug().phase` 分组统计帧时长，`PATCH=<js>` 注入任意表达式做 A/B）、
+`steady.mjs`（静置后采 4s，附带 `Performance.getMetrics` 的 layout/style/script）、
+`snap.mjs`（`SECOND=<ms>` 支持二次点击后定时截图）、`sharp.mjs`（同一帧里运行时
+加/删一条 CSS 再比高通 std，用来判"画质有没有变糊"）、`trace.mjs` / `loaf.mjs` /
+`rectprobe.mjs`。
+
+- **测帧率绝对不能带 swiftshader**。`--use-angle=swiftshader` 让这个页面退化成 0.1fps
+  （WebGL 全软件光栅、一个 53s 长任务），rAF 几乎不触发。测截图才需要它。
+  默认真实 GPU 下同一页面 42fps。
+- **噪声极大**：同一份代码 cut 的 avg 在 22.7–45.9 之间跳，fly 在 30.9–66.1。
+  一个配置至少配对/交错跑 2 轮，只信方向一致的差值，别信单次数字。
+- **`idle` 相位 100–300ms 是加载瞬态**（WebGPU 编译、贴图上传），不是封面动画慢；
+  静置后单独量封面是稳定 16.7ms、slow25=0。
+- 判断"是不是 GPU 拖的"看 `loaf.mjs`：`scripts` 为空、`style` 只有几 ms 而帧 dur 400ms+，
+  就是纯渲染/合成侧。
+- 想知道"这一层值多少钱"就用 `PATCH` 当场删掉它（`remove()` 元素 / 塞 `<style>`），
+  别改代码再来回 stash —— 这轮就是靠这个定位到 `.cloth` 子层的。
+- **`git stash pop` 报 "No stash entries found" 不一定是灾难**：如果改动已经提交，
+  `git stash push <file>` 本来就没东西可存（老版本 git 退出码仍是 0），
+  pop 自然找不到。先 `git status` 确认，别急着修。
 
 ---
 
