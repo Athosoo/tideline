@@ -643,7 +643,9 @@
   function requestCut() {
     if (S.phase === "aim") { cut(); return; }
     if (S.phase === "fly") { S.cutQueued = true; return; }
-    if (S.phase === "idle" && !S.zooming) beginApproach();
+    // 镜头还在推的时候再点一下：算「落刀」，等刀落稳就切，别把这一下吞掉
+    if (S.phase === "idle" && S.zooming) { S.cutQueued = true; return; }
+    if (S.phase === "idle") beginApproach();
   }
 
   function defaultTip() {
