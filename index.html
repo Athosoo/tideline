@@ -309,29 +309,42 @@
             </svg>
           </div>
 
-          <div class="prop prop--fork">
-            <svg viewBox="0 0 360 72" aria-hidden="true">
+          <div class="prop prop--spoon">
+            <svg viewBox="0 0 368 76" aria-hidden="true">
               <defs>
-                <linearGradient id="forkSteel" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#E4E0D2"/><stop offset="28%" stop-color="#C2C7BC"/>
-                  <stop offset="58%" stop-color="#92998F"/><stop offset="82%" stop-color="#B4BAAF"/>
-                  <stop offset="100%" stop-color="#757C74"/>
+                <!-- 一块钢的横截面不是「亮到下」的一条渐变，而是一条圆柱剖面：
+                     亮边 → 暗带（映着布的影）→ 反射光 → 暗轮廓。柄和斗各有各的厚度，
+                     梯度必须按各自的 y 范围铺（userSpaceOnUse），摊到整个 viewBox 上就平了。 -->
+                <linearGradient id="spoonHandle" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="48">
+                  <stop offset="0%" stop-color="#F2EFE4"/><stop offset="12%" stop-color="#D0D6D0"/>
+                  <stop offset="30%" stop-color="#8F9891"/><stop offset="46%" stop-color="#767F78"/>
+                  <stop offset="64%" stop-color="#A5ADA6"/><stop offset="82%" stop-color="#C6CCC4"/>
+                  <stop offset="100%" stop-color="#5B625C"/>
                 </linearGradient>
-                <mask id="forkSlits" maskUnits="userSpaceOnUse" x="240" y="0" width="120" height="72">
-                  <rect x="240" y="0" width="120" height="72" fill="#fff"/>
-                  <path d="M295 29H354M295 36H354M295 43H354" stroke="#000" stroke-width="4.5"/>
-                </mask>
+                <linearGradient id="spoonRim" gradientUnits="userSpaceOnUse" x1="0" y1="14" x2="0" y2="62">
+                  <stop offset="0%" stop-color="#F2EFE4"/><stop offset="10%" stop-color="#CDD3CD"/>
+                  <stop offset="34%" stop-color="#8B948D"/><stop offset="52%" stop-color="#79827B"/>
+                  <stop offset="72%" stop-color="#AEB6AF"/><stop offset="88%" stop-color="#CBD1C9"/>
+                  <stop offset="100%" stop-color="#565D58"/>
+                </linearGradient>
+                <linearGradient id="spoonHollow" gradientUnits="userSpaceOnUse" x1="0" y1="16" x2="0" y2="60">
+                  <stop offset="0%" stop-color="#656C65"/><stop offset="22%" stop-color="#7E867F"/>
+                  <stop offset="50%" stop-color="#AEB6AE"/><stop offset="74%" stop-color="#D6DAD1"/>
+                  <stop offset="100%" stop-color="#EFEEE3"/>
+                </linearGradient>
               </defs>
-              <!-- 柄：尾端略粗，向叉头收；和叉头是一整块钢，不靠箍分开 -->
-              <path d="M8 29Q8 23 16 23L206 21L222 24L222 48L206 51L16 49Q8 49 8 43Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9"/>
-              <path d="M8 29Q8 23 16 23L24 23L24 49L16 49Q8 49 8 43Z" fill="#B9BFB5" stroke="#565C55" stroke-width=".8"/>
-              <rect x="204" y="21" width="4" height="30" rx="2" fill="#A7AEA5" opacity=".45"/>
-              <rect x="212" y="21" width="3" height="30" rx="1.5" fill="#C6CCC2" opacity=".4"/>
-              <path d="M222 24L246 22L252 28L252 44L246 50L222 48Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9"/>
-              <path d="M250 18Q250 14 257 14L345 22Q351 23 351 28L351 44Q351 49 345 50L257 58Q250 58 250 54Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9" mask="url(#forkSlits)"/>
-              <path d="M256 19L342 26" stroke="#FFFFFF" stroke-width=".8" opacity=".42" mask="url(#forkSlits)"/>
-              <path d="M22 30L202 28" stroke="#FFFFFF" stroke-width="1" opacity=".5"/>
-              <path d="M20 43L204 45" stroke="#6B726A" stroke-width=".5" opacity=".38"/>
+              <!-- 柄：圆头，向匙颈收细。厚度约占全长 3.5%（做粗了像一把塑料刀） -->
+              <path d="M18 33L236 35.5Q244 36 244 40Q244 44 236 44.5L18 47Q12 45 12 40Q12 35 18 33Z" fill="url(#spoonHandle)" stroke="#4A514D" stroke-width=".8"/>
+              <path d="M24 34.7L232 37" stroke="#FFFFFF" stroke-width=".9" opacity=".5"/>
+              <path d="M23 44.6L234 42.6" stroke="#3F4642" stroke-width=".7" opacity=".45"/>
+              <!-- 匙颈：柄与斗之间收一道 -->
+              <path d="M234 34.5L258 31L258 49L234 45.5Z" fill="url(#spoonHandle)" stroke="#4A514D" stroke-width=".8"/>
+              <!-- 匙斗：钢圈 + 内凹。内凹（远侧暗、近侧亮）是缩略时唯一能认出「勺」的线索 -->
+              <path d="M252 33C266 21 305 15 334 22C354 27 362 35 358 42C353 50 334 60 303 61C272 62 252 54 247 47C244 42 248 36 252 33Z" fill="url(#spoonHollow)" stroke="url(#spoonRim)" stroke-width="4.6"/>
+              <path d="M252 33C266 21 305 15 334 22C354 27 362 35 358 42C353 50 334 60 303 61C272 62 252 54 247 47C244 42 248 36 252 33Z" fill="none" stroke="#4A514D" stroke-width=".8"/>
+              <path d="M272 28C306 19 340 25 351 34" stroke="#FFFFFF" stroke-width="1.4" opacity=".5" fill="none"/>
+              <path d="M266 33C301 25 336 31 348 40" stroke="#3F4642" stroke-width="2.8" opacity=".34" fill="none"/>
+              <path d="M284 56C308 59 333 52 345 45" stroke="#FFFFFF" stroke-width="1" opacity=".3" fill="none"/>
             </svg>
           </div>
 

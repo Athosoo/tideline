@@ -855,18 +855,18 @@ clothCam=1.06）通过：静置无缝、划完才裂、全程缝比两半宽。*
 
 **为什么**：前六轮把蛋糕、布、刀、海都做对了，但斜看的第一帧只有「一块蛋糕放在一块布上」，
 桌面像空舞台 —— 布上的海图是印刷，不是被人用过的东西。加的不是特效，是「这场生日宴刚刚
-被人摆过」的证据：一张写了一半的明信片、一把吃甜点的小叉、几枝海石竹、几粒糖、盘沿一圈
+被人摆过」的证据：一张写了一半的明信片、一把吃甜点的小勺、几枝海石竹、几粒糖、盘沿一圈
 旧金、布边一道压线和针脚、一根线头。它们都在蛋糕的半径之外，中心仍然只留给蜡烛和「19」。
 
 **落在哪**（`GIFT@54667a6`，3 文件）：
 - `GIFT/index.html`：`#clothWrap` 内加 `.cloth-marginalia`（罗盘、虚线航线、小船、比例尺，
   单独一层不吃主海图的中心遮罩）、`.cloth-hem`、`.cloth-thread`、`.table-props`
-  （`.prop--botanical` 海石竹、`.prop--fork` 银叉、`.prop--postcard` 明信片：邮票/邮戳/
+  （`.prop--botanical` 海石竹、`.prop--spoon` 银勺、`.prop--postcard` 明信片：邮票/邮戳/
   地址线/火漆印、`.prop--sugar` 11 粒糖）；蛋糕盘加 `.cake-plate-gold` 旧金细圈；刀加
   `knifeSteel` 渐变、黄铜箍和刃口刻线；`#cakeGate` 末尾加 `.air` 8 粒尘埃。
-- `GIFT/css/styles.css`：道具的摆位/角度/投影（叉 6.5%/65%、15°；明信片右 5%/61%、-7°；
+- `GIFT/css/styles.css`：道具的摆位/角度/投影（勺 6.5%/65%、15°；明信片右 5%/61%、-7°；
   海石竹左 3.5%/12%、-16°），四角压冷、布光收到 0.86、`airFloat` 20–29s 极慢上浮；
-  `@media (max-width:680px)` 隐藏叉与明信片、海石竹 44vw，给手机留出蛋糕。
+  `@media (max-width:680px)` 隐藏勺与明信片、海石竹 44vw，给手机留出蛋糕。
 - `GIFT/js/cakegate.js`：`makeTree()` 找 `.cake-plate-gold`，`applyTilt()` 用
   `setEllipse(tr.plateGold, 240, 283-43u, 190, 63+127u)` 让它跟着盘面一起压成正圆。
 
@@ -878,13 +878,37 @@ clothCam=1.06）通过：静置无缝、划完才裂、全程缝比两半宽。*
 `?cake=cut&cutat=.2/.5/.9`、390×844 的 idle/top/aim（`GIFT/_wip/shots/life_*`，不入库）；
 `node --check js/cakegate.js`；`node _wip/verify/cake_slit.mjs` 仍通过（静置无缝、划完才裂、
 缝始终比两半宽）；所有截图 `ERRORS []`。中途修掉两个自己造的 bug：叉的 SVG `mask` 区域只盖住
-叉齿、把叉颈裁没了（已把 mask 扩到整个叉头），以及替换叉子时多留了一个 `</div>` 把
+叉齿、把叉颈裁没了（已把 mask 扩到整个叉头；这把叉随后整体换成勺，mask 一并删掉），
+以及替换叉子时多留了一个 `</div>` 把
 `#cakeStage` 挤到 `#cakeGate` 外面、被布盖住（已删重复闭合、并用解析器确认
 `cakeStage` 的父级是 `cakeGate`）。**真机仍未验**。
 
-**已知待定**：① 叉子在 1280 下约 230px 长，放大看是四齿叉，缩略看像一支银笔；要不要再放大、
-或换成小勺，等用户肉眼定；② 手机隐藏叉/明信片是刻意的（390px 宽放不下），如果希望手机也
-保留，需要重排到蛋糕下方；③ 尘埃是常驻 CSS 动画，`prefers-reduced-motion` 下隐藏。
+**已知待定**：① ~~叉子在 1280 下约 230px 长，放大看是四齿叉，缩略看像一支银笔；要不要再放大、
+或换成小勺，等用户肉眼定~~ → **已决（2026-10-23）**：用户拍板「换小勺子」，见下节；
+② 手机隐藏勺/明信片是刻意的（390px 宽放不下），如果希望手机也保留，
+需要重排到蛋糕下方；③ 尘埃是常驻 CSS 动画，`prefers-reduced-motion` 下隐藏。
+
+### 已改 · 小叉换成小甜点勺（2026-10-23）
+
+**为什么**：上一轮的叉在 1280 下约 230px 长，四齿在缩略尺寸里糊成一条线，看着像一支银笔
+（原「已知待定①」）。用户拍板「换小勺子」。
+
+**落在哪**：`GIFT/index.html` 里 `.prop--fork` 整块换成 `.prop--spoon`（`viewBox 0 0 368 76`，
+`spoonHandle` / `spoonRim` / `spoonHollow` 三条梯度）；`GIFT/css/styles.css:3664` 换成
+`.prop--spoon`（left 6.5% / top 65%、rotate 15°、`clamp(158px, 15.5vw, 212px)` → 1280 下 198px），
+`@media (max-width: 680px)` 里的 `.prop--fork` 一并改名。叉的 `forkSlits` 遮罩随叉删掉，
+开屏序列、几何、`js/cakegate.js` 一行未动。
+
+**画法上两条要紧的**：① 柄的厚度只占全长 3.8%（14 / 368 用户单位）—— 做粗到 8% 就像一把塑料
+刀；② 梯度必须 `gradientUnits="userSpaceOnUse"` 并按每一件自己的 y 范围铺：默认的
+`objectBoundingBox` 是把 0→100% 摊在整个元素盒子上，柄只取到中间那一档，钢就发平、像磨砂塑料。
+钢的剖面要「亮边 → 暗带（映着布的影）→ 反射光 → 暗轮廓」四段，一档渐变不够。**内凹比柄暗**
+是缩略尺寸下唯一能认出「勺」而不是「笔」的线索，别把它画成一只白瓷碟。
+
+**验法（可复跑）**：无头 Chrome + swiftshader，1280×800 / 1440×900 / 1024×768 / 390×844 各拍一张
+（`GIFT/_wip/shots/diag/spoon3_*.png`、`vp_*.png`，不入库）；CDP 读 `.prop--spoon` 矩形 =
+`202×91` @1280、匙斗 65×38、`querySelectorAll('.prop--fork').length === 0`、`ERRORS []`；
+390 宽下道具仍被媒体查询隐藏；加 `is-cut` 后 `.table-props` 仍按 250ms 淡出。
 
 ### 已修 · 长廊明信片被封面道具的类名打穿（2026-10-23）
 

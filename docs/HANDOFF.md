@@ -273,6 +273,7 @@ rm -rf ./js/vendor
 | 月亮高度 | 是太阳高度取反再减 0.5（`isNight` 阈值）。夜里直接拿 `sunElevationRaw` 算会恒得负值 |
 | 抓图 | 用 `_wip/verify/shoot.sh`（每次新建 profile、绝对 Windows 路径）；沿用旧 profile 会撞锁静默失败 |
 | 类名复用打穿长廊 | 静物那轮（`GIFT@54667a6`）给封面道具写的是**裸选择器** `.postcard` / `.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` / `.postcard-postmark` / `.postcard-seal`，而长廊卡片自己也挂 `.postcard`。它们在文件末尾、特异性相同，于是把长廊的 `position: absolute; inset: 0` 盖成 `position: relative; aspect-ratio: 1.55` —— 七张竖版卡（槽位 238×357）塌成 238×153 的纸背，还叠上封面的米色渐变与横纹。修法：这 12 条全部前缀 `.prop--postcard`（`css/styles.css:3692-3756`）。**新增任何道具/组件样式前，先 `Select-String '^\.类名'` 看这个类名是否已被别处占用**；共用类名必须靠父级作用域隔离 |
+| 银器画成磨砂塑料 | SVG 渐变默认 `objectBoundingBox`，0→100% 是摊在整个元素盒子上的：细长柄只吃到中间一档，钢就发平。金属件必须 `gradientUnits="userSpaceOnUse"` 并按每一件自己的 y 范围铺，且剖面要有四段（亮边 → 暗带 → 反射光 → 暗轮廓）；匙/叉的「内凹」要明显比柄暗，否则缩略时认不出是餐具（小叉曾因此像一支银笔，2026-10-23 换成勺时一并改掉） |
 
 ### 6.2 git 习惯
 
