@@ -139,6 +139,8 @@
   /* ---------- 台布上那道缝 ----------
      不是往缝里放东西：缝是台布自己身上开的一个洞。clipPath 用 evenodd 挖，
      外圈是整块布、内圈是一条沿切口方向的带子，宽度 = 两半让开的距离。
+     **宽度为 0 时一律不挖**：没动刀之前布上不能有缝 —— 这条带子曾经带一个
+     固定的 +12 余量，于是封面还没切就先裂了一条蓝缝，站在那儿自己出戏。
      坐标是视口 CSS 像素（clipPathUnits=userSpaceOnUse），中心就是布的圆心
      —— 也就是 transform-origin，布放大时缝跟着一起放大，两条边才对得上。 */
   var slitKey = "";
@@ -781,9 +783,14 @@
     gateEl.style.setProperty("--gapb", (splitB * gapMax).toFixed(1));
     gateEl.style.setProperty("--dive", S.dive.toFixed(4));
     var gapNow = Math.max(S.split, splitB) * gapMax;
-    // +6：缝要比两半让开的距离再宽一点点，它的边才压在蛋糕身下面 ——
-    // 两半各自还有 1.3°/1.8° 的歪，正正好等宽会在盘沿露出布丝。
-    setSlit(((gapNow + S.dive * 220) * (1 + S.dive * 2.25)) / (1 + S.dive * 0.5) + 6);
+    // 缝宽不是猜的：半块在 .cake-stage 里沿法线位移 (gap + dive*220)，而 .cake-stage
+    // 自己放大 (1 + dive*2.25)，屏幕上就是 (gap + dive*220)*(1 + dive*2.25)；
+    // 布只放大 (1 + dive*0.5)，折回布自己的坐标再挖洞，两条边才对得上。
+    // 只有真让开了才有缝：base 为 0 就给 0，布上不多一条缝。
+    var slitBase = (gapNow + S.dive * 220) * (1 + S.dive * 2.25) / (1 + S.dive * 0.5);
+    // +12：缝的边要压在蛋糕身下面 —— 两半各自还有 1.3°/1.8° 的歪，在盘沿能错开
+    // 十来像素，正正好等宽会露出布丝。这个余量只在缝已经开了之后才加。
+    setSlit(slitBase > 0.5 ? slitBase + 12 : 0);
     // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
     // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
     var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
