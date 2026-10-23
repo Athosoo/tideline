@@ -39,6 +39,10 @@
    用户专门提醒过："你自己验证的时候不要自我怀疑……因为延迟的问题而钻牛角尖觉得修改没生效。"
    → 验证时**直接置位状态**，不要盯着滑杆等它自己爬。
 8. 用户的中文反馈往往很短且口语化，但每句都是需求。别过度解释，直接改、直接给证据。
+9. **长廊本身（明信片卡片）不许被打穿**：`.postcard` 是长廊卡片的类名（`css/styles.css:955`，
+   `position: absolute; inset: 0` 撑满 `.postcard-slot`）。封面 / 开屏 / 任何新道具若要复用这个
+   类名，样式必须收在自己的作用域里（现例：`.prop--postcard .postcard …`）。用户为这条发过火：
+   「你把里面的这个长廊的明信片展示搞坏了」。
 
 ---
 
@@ -268,6 +272,7 @@ rm -rf ./js/vendor
 | 日月交接 | 日月共用同一个 DOM 元素，`rawElev = -0.5` 那一帧 x 从 88% 跳到 12%（太阳西沉、月亮东升，天文事实不是 bug）。要看不见就得让两侧都淡到 0：光球 `sunDisc`/`moonIn` 用 2° / 2.5° 窗口，天光 `skyVis` 用 6° 窗口（窗口太陡会像「啪」地关灯，`sun_smoke.mjs` 会报 0.5° 跳变）。月面淡入淡出靠 `--sun-disc-opacity`（贴图不透明，`--sun-core-*` 的 alpha 管不到它） |
 | 月亮高度 | 是太阳高度取反再减 0.5（`isNight` 阈值）。夜里直接拿 `sunElevationRaw` 算会恒得负值 |
 | 抓图 | 用 `_wip/verify/shoot.sh`（每次新建 profile、绝对 Windows 路径）；沿用旧 profile 会撞锁静默失败 |
+| 类名复用打穿长廊 | 静物那轮（`GIFT@54667a6`）给封面道具写的是**裸选择器** `.postcard` / `.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` / `.postcard-postmark` / `.postcard-seal`，而长廊卡片自己也挂 `.postcard`。它们在文件末尾、特异性相同，于是把长廊的 `position: absolute; inset: 0` 盖成 `position: relative; aspect-ratio: 1.55` —— 七张竖版卡（槽位 238×357）塌成 238×153 的纸背，还叠上封面的米色渐变与横纹。修法：这 12 条全部前缀 `.prop--postcard`（`css/styles.css:3692-3756`）。**新增任何道具/组件样式前，先 `Select-String '^\.类名'` 看这个类名是否已被别处占用**；共用类名必须靠父级作用域隔离 |
 
 ### 6.2 git 习惯
 

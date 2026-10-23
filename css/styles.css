@@ -3689,7 +3689,7 @@ body.is-cake-cursor .cursor {
 .prop--sugar i:nth-child(4n) { background: #FFFDF4; }
 
 /* 明信片：背面朝上，邮票、邮戳、横线、火漆都在 */
-.postcard {
+.prop--postcard .postcard {
   position: relative;
   width: 100%;
   aspect-ratio: 1.55;
@@ -3701,7 +3701,7 @@ body.is-cake-cursor .cursor {
     inset 0 0 0 3px rgba(255, 255, 255, 0.2),
     inset 0 0 26px rgba(140, 110, 70, 0.16);
 }
-.postcard::after {
+.prop--postcard .postcard::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -3709,7 +3709,7 @@ body.is-cake-cursor .cursor {
   background-image: repeating-linear-gradient(0deg, rgba(120, 95, 60, 0.035) 0 1px, transparent 1px 3px);
   mix-blend-mode: multiply;
 }
-.postcard-divider {
+.prop--postcard .postcard-divider {
   position: absolute;
   left: 46%;
   top: 8%;
@@ -3717,20 +3717,20 @@ body.is-cake-cursor .cursor {
   width: 1px;
   background: rgba(120, 95, 60, 0.24);
 }
-.postcard-line {
+.prop--postcard .postcard-line {
   position: absolute;
   left: 8%;
   height: 1px;
   background: rgba(90, 75, 55, 0.26);
   transform: rotate(-1deg);
 }
-.postcard-line--a { top: 56%; width: 33%; }
-.postcard-line--b { top: 64%; width: 36%; }
-.postcard-line--c { top: 72%; width: 32%; }
-.postcard-line--d { top: 80%; width: 35%; }
-.postcard-line--e { top: 88%; width: 27%; }
+.prop--postcard .postcard-line--a { top: 56%; width: 33%; }
+.prop--postcard .postcard-line--b { top: 64%; width: 36%; }
+.prop--postcard .postcard-line--c { top: 72%; width: 32%; }
+.prop--postcard .postcard-line--d { top: 80%; width: 35%; }
+.prop--postcard .postcard-line--e { top: 88%; width: 27%; }
 
-.postcard-stamp {
+.prop--postcard .postcard-stamp {
   position: absolute;
   right: 7%;
   top: 7%;
@@ -3738,7 +3738,7 @@ body.is-cake-cursor .cursor {
   transform: rotate(1.5deg);
   filter: drop-shadow(0 1px 1px rgba(90, 60, 35, 0.18));
 }
-.postcard-postmark {
+.prop--postcard .postcard-postmark {
   position: absolute;
   right: 18%;
   top: 9%;
@@ -3746,7 +3746,7 @@ body.is-cake-cursor .cursor {
   transform: rotate(-12deg);
   opacity: 0.72;
 }
-.postcard-seal {
+.prop--postcard .postcard-seal {
   position: absolute;
   left: 9%;
   bottom: 10%;

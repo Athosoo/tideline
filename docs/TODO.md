@@ -886,3 +886,23 @@ clothCam=1.06）通过：静置无缝、划完才裂、全程缝比两半宽。*
 或换成小勺，等用户肉眼定；② 手机隐藏叉/明信片是刻意的（390px 宽放不下），如果希望手机也
 保留，需要重排到蛋糕下方；③ 尘埃是常驻 CSS 动画，`prefers-reduced-motion` 下隐藏。
 
+### 已修 · 长廊明信片被封面道具的类名打穿（2026-10-23）
+
+**症状（用户报的）**：长廊里七张明信片从竖版整张变成「矮而宽的纸背」—— 卡片 238×153、
+槽位 238×357，卡片填不满槽位、正面图被裁，还多了封面的米色纸底和横纹。
+
+**根因**：`GIFT@54667a6` 给封面静物写的明信片道具样式是裸选择器（`.postcard` /
+`.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` /
+`.postcard-postmark` / `.postcard-seal`），与长廊卡片共用 `.postcard` 这个类名。那批规则在
+`css/styles.css` 末尾、特异性相同 → 覆盖长廊卡片（`css/styles.css:955`）的
+`position: absolute; inset: 0`，并塞进封面那张纸的 `aspect-ratio: 1.55` 与米色渐变。
+
+**修法**：12 条全部前缀 `.prop--postcard`（现位于 `css/styles.css:3692-3756`）。封面那张道具
+外观不变（219×156、1.55、纸底 + 横纹）；开屏几何与 JS 一行未动。
+
+**验法（可复跑）**：无头 Chrome + CDP，注入 `#intro,#cake-gate{display:none}` 后读长廊卡片的
+computed style 并与槽位矩形对比 —— 修前 `238×153 / position:relative`，修后 `238×357 /
+absolute` 与槽位一致。截图 `GIFT/_wip/shots/diag/corridor_BEFORE.png`、`corridor_AFTER.png`
+（不入库）。
+
+**教训**：道具样式一律挂在道具自己的作用域下；新增选择器前先确认类名没被别处占用。
