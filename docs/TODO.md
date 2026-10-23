@@ -14,9 +14,10 @@
 **这是送女友的生日礼物。站点只该有海和天。**
 
 - FULL：**没有云**。没有云、没有雨、没有雷电。
-- 界面上**不允许**出现「云量 / 雨 / 雷电」这类滑块。**TIME 滑杆也已在 2026-10-23 按用户要求
-  删除**，面板只剩 **AUTO / RESET**（`GIFT/index.html:123-128`，静态断言见
-  `_wip/verify/panel_dom.mjs`）；改时间只剩「拖日月 / 双击日月」。
+- 界面上**不允许**出现「云量 / 雨 / 雷电」这类滑块。TIME 滑杆与**整块顶部 WEATHER 控件**
+  也已在 2026-10-23 按用户要求删除（静态断言 `_wip/verify/ui_static.mjs`：`#weatherBar` /
+  `#weatherToggle` / `#weatherPanel` / `#weatherAuto` / `#weatherReset` / `#weatherLabel` 与
+  `.weather-bar` 在 html、css、js 里一个都不剩）；改时间只剩「拖日月 / 双击日月」。
 - 两档**同级**，不是「主力 + 降级版」：FULL 是一套完整的光，LITE 是另一套完整的画。
 
 ---
@@ -38,7 +39,8 @@
 ### 2.1 已达成（已提交：`04e9495`，`main` 与 `feat/soft-clouds` 均已推送）
 
 - 雨 / 雷 / 云量 / 风 四类滑块、`#rainCanvas`、`#lightningFlash`、`#cloudCanvas`
-  全部从 `GIFT/index.html` 删除；天气面板只剩 TIME + AUTO/RESET。
+  全部从 `GIFT/index.html` 删除；天气面板只剩 TIME + AUTO/RESET（2026-10-23 之后连面板本身
+  也删了，见 §2；这里保留当时的记录）。
 - `GIFT/js/weather.js` 收缩为「时刻 / 日 / 月 / 风」共 429 行；调色板 `P` 去掉 `storm`；
   `counters` 去掉 `updateRain` / `rainCleared`；`weather.js:294` 注明
   `--cloud-dark / --wind / --storm / --cloud-cover / --rain` 已无 CSS 消费。
@@ -115,15 +117,26 @@
       交接瞬间日盘凭空上跳半个度（约 4px）。
   - 交互（2026-10-23 用户重新定稿，覆盖上面这版的旧描述）：拖动日月 = 改时间，跟手 1:1，
     **右缘升起、左缘落下**；**双击日月 = 切换昼夜**（白天→午夜、夜里→正午），单击什么都不做；
-    松手/切换之后时间**必须继续自动流动**（`manualTime` 不再残留 —— 这是用户报的 bug）；
-    `AUTO` = 恢复流动（不再偷偷跳回真实时钟，那是 `RESET` 的活）；`RESET` = 回到此刻真实时间并继续流。
+    松手/切换之后时间**必须继续自动流动**（`manualTime` 不再残留 —— 这是用户报的 bug）。
     `?t=17.6` 仍然强制冻结在该时刻（截图对照用）。详细规则写进 `SITE-RULES.md` §3。
+  - 同日第三轮（用户看了之后的三条新意见，全部落在这条线里）：
+    ①**切换昼夜改成快进**：`toggleDayNight()` 只攒 `state.warpHours += 12`，`update()` 里
+    按 `Math.min(warpHours, clockDt * 12)` 推进 —— 12 小时摊进 1 秒，日月沿弧线走完全程、
+    停在对方的位置上，不再原地换图；
+    ②**整块顶部 WEATHER 控件删除**（药丸 + AUTO / RESET），`initPanel()` / `syncPanel()` /
+    `timeLabel()` / `conditionLabel()` / `env.sliders` / `env.weatherBar` 一并消失，
+    `js/weather.js` 少 60 行、CSS 少 98 行；
+    ③**治「一下一下往前跳」**：时针改用真实经过时间 `clockDt`（不吃 `app.js` 夹在 0.05 s 的
+    `dt`），`.celestial` 加 `left/top 0.28s linear` 过渡，拖动/快进时关掉。
   - 数值证据：`_wip/verify/time_smoke.mjs`（60fps 推演 135 秒）——单帧最大横移 0.036%、纵移
     0.093%（≈0.7px），日夜交接处横移 0.002%、拖动反解误差 0.0000 小时，全部通过。
     2026-10-23 追加方向断言：6.5 时 `sunX=0.88`、12 时 `0.50`、17.5 时 `0.12`（右升左落）；
     交接点从 12% 跳到 88%（`dx=0.76`），两侧不透明度仍是 0 / 0.001，看不见换位。
     交互行为另测 `_wip/verify/celestial_flow.mjs`：向右拖 → 时刻变早、松手后 5 秒仍走 1.003 小时、
-    单击不跳时刻、双击（120 ms 内两次）落到 00:00 且随后 `isNight=true`。
+    单击不跳时刻。2026-10-23 第三轮换成快进后：双击（120 ms 内两次）只攒 12 小时快进，
+    第一帧只走 0.2 小时（不是瞬移），0.5 秒走 6.20 小时、1 秒走完 12.02 小时、`warpHours` 归 0，
+    `isNight` 翻转，日月停在原位置附近（`sunX 0.829 → 0.734`），之后 5 秒仍恢复 1 小时/5 秒。
+    静态结构改由 `_wip/verify/ui_static.mjs` 断言（WEATHER 控件全无、天光层与光标没被误删）。
   - 抓图：`?t=17.5 / 18.2 / 0 / 5.6 / 6.5` 五张（`_wip/shots/arc/`）确认日落点与月升点重合、
     月光路随月亮左右移动。
 
@@ -216,7 +229,7 @@
 > 加 `--no-sandbox --disable-breakpad --disable-crash-reporter` 会从「秒退」变成「挂死」。机器上
 > Chrome 已升到 156.0.8078.47、Edge 155.0.4283.62，但两份都同样报错，像是这台机器的沙箱策略收紧，
 > 不是某个版本的问题。**因此交互类改动只能给脚本证据**（`time_smoke.mjs` / `celestial_flow.mjs` /
-> `panel_dom.mjs`），观感要用户自己开页面看。碰运气之前先跑一次上面的命令，别把时间花在换参数上。
+> `ui_static.mjs`），观感要用户自己开页面看。碰运气之前先跑一次上面的命令，别把时间花在换参数上。
 
 ---
 

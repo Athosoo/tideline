@@ -181,9 +181,10 @@ dispose()
 - **横竖刚体旋转**：聚焦时 `-90°` 旋转整个容器（`.focus-spin`），不做宽高形变，
   背面 `rotateX(180deg)`（验证过矩阵 `matrix(0,-1,1,0,0,0)`）。
 - **天气/时间系统**：系统时间 + 实时天气、动画化变化、**可拖动的日月**（水平拖动即改时刻，
-  跟手 1:1，右缘 = 东、左缘 = 西）、**双击日月切昼夜**、面板只剩 `AUTO` / `RESET`。
-  （2026-10-23 按用户要求删掉 TIME 滑杆；云量/风雨/雷电滑杆本来就在 `SITE-RULES.md` §2 里禁止，
-  「长按日/月召云」那条路径也早已不存在 —— 这段旧描述一并更正。）
+  跟手 1:1，右缘 = 东、左缘 = 西）、**双击日月切昼夜 = 1 秒快进半天**（不是原地换图）。
+  **顶部 WEATHER 控件已整块删除**（2026-10-23 用户两次要求：先删 TIME 滑杆，再删那条
+  WEATHER 药丸和它展开的 AUTO / RESET 面板）—— 页面右上角现在没有任何时间控件。
+  云量/风雨/雷电滑杆本来就在 `SITE-RULES.md` §2 里禁止，「长按日/月召云」那条路径也早已不存在。
 - **LITE 开关**（弱机模式）。
 - **关门途径收敛**：只有品牌按钮能关门；往回滚不再触发。
 - **沉浸模式**。
@@ -283,6 +284,9 @@ rm -rf ./js/vendor
 | 月亮高度 | 是太阳高度取反再减 0.5（`isNight` 阈值）。夜里直接拿 `sunElevationRaw` 算会恒得负值 |
 | 拖完时间不走 | `initCelestial` 的 `finish()` 末尾必须**无条件**写回 `state.manualTime = false; state.autoTime = true;`（拖动过程中才允许 `manualTime = true`）。2026-10-23 的 bug 就是 `applyDrag` 把 `manualTime` 置真之后再没人收回，表冻住了 —— `_wip/verify/celestial_flow.mjs` 专测这条 |
 | 双击/单击判定 | 不用 `dblclick`（触屏不可靠），在 `pointerup` 里自己数：`DBL_TAP_MS = 350` / `DBL_TAP_PX = 28`。**单击必须什么都不做**，否则误触就把表挪走 |
+| 切昼夜必须「走」过去 | 用户 2026-10-23：转换昼夜不能原地变，要在 1 秒内让日/月来到对方的位置。所以 `toggleDayNight()` 只写 `state.warpHours = Math.min(24, state.warpHours + 12)` + `env.lastNow = 0`，真正的推进在 `update()`：`const step = Math.min(state.warpHours, clockDt * WARP_HOURS_PER_SEC)`（= 12 小时/秒），递减到 0 为止，期间**跳过**常规自动流逝、`applySky()` 每帧都跑（90 ms 节流会让天色跳）。**别改回「直接把 timeTarget 设成 0 / 12」** —— 那就是用户否掉的原地换图。`env.lastNow = 0` 不能省：双击两次点击之间隔了 100~350 ms，会被乘以 12 变成第一帧窜出 1~4 小时 |
+| 日月抖动 / 一顿一顿 | 两个成因都治了（2026-10-23 第三条反馈）：①`js/app.js:2313` 把 `dt` 夹在 0.05 s，帧一长就丢时间、时针速度抖，所以 `update()` 里另算 `clockDt = clamp((now - env.lastNow)/1000, 0, 0.25)`；②`5 秒 = 1 小时`时日月一秒只挪 1~2 px，光栅化会吸到整像素上，所以 `.celestial` 带 `left/top 0.28s linear` 过渡（拖动 `.is-dragging`、快进 `.is-warping` 时置 `transition: opacity 0.6s ease` 关掉）。改这两处要同步跑 `celestial_flow.mjs` |
+| 顶部 WEATHER 控件已删 | 2026-10-23 用户第二次要求：「我说的删掉的按钮是 weather 那一个控件」。`#weatherBar` 的 HTML、`.weather-bar*` 的全部 CSS、`initPanel()` / `syncPanel()` / `timeLabel()` / `conditionLabel()` / `env.sliders` / `env.weatherBar` 两处 `setVar` 全删了。**别再把它加回来**（连 AUTO / RESET 都不要），也没了「回真实时间」的入口。右上角那个小圆圈是自定义光标 `.cursor-ring`，不是按钮，别删 |
 | 抓图 | 用 `_wip/verify/shoot.sh`（每次新建 profile、绝对 Windows 路径）；沿用旧 profile 会撞锁静默失败。**但本沙箱根本起不了浏览器**：headless Chrome 报 crashpad `crash server failed to launch` 后自杀、headless Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，所以这里的交互改动只能给脚本证据（见 `WORKLOG.md` 2026-10-22 那两条的「未验」说明） |
 | 类名复用打穿长廊 | 静物那轮（`GIFT@54667a6`）给封面道具写的是**裸选择器** `.postcard` / `.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` / `.postcard-postmark` / `.postcard-seal`，而长廊卡片自己也挂 `.postcard`。它们在文件末尾、特异性相同，于是把长廊的 `position: absolute; inset: 0` 盖成 `position: relative; aspect-ratio: 1.55` —— 七张竖版卡（槽位 238×357）塌成 238×153 的纸背，还叠上封面的米色渐变与横纹。修法：这 12 条全部前缀 `.prop--postcard`（`css/styles.css:3692-3756`）。**新增任何道具/组件样式前，先 `Select-String '^\.类名'` 看这个类名是否已被别处占用**；共用类名必须靠父级作用域隔离 |
 | 银器画成磨砂塑料 | SVG 渐变默认 `objectBoundingBox`，0→100% 是摊在整个元素盒子上的：细长柄只吃到中间一档，钢就发平。金属件必须 `gradientUnits="userSpaceOnUse"` 并按每一件自己的 y 范围铺，且剖面要有四段（亮边 → 暗带 → 反射光 → 暗轮廓）；匙/叉的「内凹」要明显比柄暗，否则缩略时认不出是餐具（小叉曾因此像一支银笔，2026-10-23 换成勺时一并改掉） |

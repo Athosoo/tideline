@@ -18,6 +18,10 @@
      dt 的单位是秒（app.js 把每帧的毫秒差除以 1000 并夹在 0.001~0.05），
      所以这里就是「1 小时需要多少秒」这个除数。 */
   const SECONDS_PER_HOUR = 5;
+  /* 双击日月切换昼夜时的快进速度：12 小时（半天）摊在 1 秒里走完。
+     用户 2026-10-23 的原话是「在一秒内让日/月来到原来的月/日所在地方」——
+     所以不是原地换一张图，而是让时针真的把日月沿弧线送过去。 */
+  const WARP_HOURS_PER_SEC = 12;
 
   /* 诊断开关（默认全关，行为与之前完全一致）：
      ?noattr=1     不写 applySun/applySky 的任何自定义属性 */
@@ -115,6 +119,9 @@
     ambient: 1,
     manualTime: false,
     autoTime: true,
+    /* 双击切换昼夜后还剩多少小时没快进完（12 = 半天）。> 0 时 update 会加
+       速推进时针，并跳过常规的自动流逝，见 update 顶部。 */
+    warpHours: 0,
     source: "climate",
     liveLabel: "CLIMATE",
     sky: {
@@ -127,9 +134,10 @@
   const env = {
     quality: null,
     reducedMotion: null,
-    panel: null,
     celestial: null,
     lastSky: 0,
+    /* 上一帧的 now（毫秒）。update 用它算「真实经过的时间」，见 clockDt。 */
+    lastNow: 0,
   };
 
   function solarPosition(hours, doy, latitude) {
@@ -217,7 +225,8 @@
       env.reducedMotion = options && options.reducedMotion ? options.reducedMotion : null;
       readSystemTime();
       /* ?t=17.6 直接跳到指定时刻（0..24），用来对照不同高度角的太阳外观。
-         面板上的「自动 / 重置」会清掉这个强制值。 */
+         它会停在那一刻（manualTime=true）不动；顶上那块 AUTO / RESET 面板
+         已于 2026-10-23 整块删除，要恢复流动就重开一个不带 ?t= 的地址。 */
       var forced = /[?&]t=([0-9]*\.?[0-9]+)/.exec(window.location.search || "");
       if (forced) {
         var forcedHour = clamp(parseFloat(forced[1]), 0, 24);
@@ -228,7 +237,6 @@
       }
       useClimate();
       initDOM();
-      initPanel();
       initCelestial();
     },
     update: function (dt, now) { update(dt, now); },
@@ -237,8 +245,21 @@
   function update(dt, now) {
     counters.updates += 1;
     const reduced = env.reducedMotion && env.reducedMotion.matches;
-    if (state.autoTime && !state.manualTime) {
-      state.timeTarget = mod(state.timeTarget + (reduced ? 0 : dt / SECONDS_PER_HOUR), 24);
+    /* 时针按「真实经过的时间」走，不用上游的 dt：app.js 把 dt 夹在 0.05 s
+       以内，只要有一帧超过 50 ms，那段时间就被悄悄扔掉，时针一慢一快，日月
+       看着就是一顿一顿往前跳（用户 2026-10-23 的第三条反馈）。这里按 now 自己
+       算，只对「切走标签页再回来」这种超长空档设 0.25 s 上限，免得回来一下午。 */
+    const clockDt = env.lastNow ? clamp((now - env.lastNow) / 1000, 0, 0.25) : dt;
+    env.lastNow = now;
+    /* 双击切换昼夜 = 快进半天：12 小时摊进 1 秒，太阳沿弧线滑到左边落下、
+       月亮从右边升起，最后停在另一个天体刚才所在的位置上。快进期间不再叠加
+       常规的自动流逝，否则会多走出半分钟。 */
+    if (state.warpHours > 0) {
+      const step = Math.min(state.warpHours, clockDt * WARP_HOURS_PER_SEC);
+      state.timeTarget = mod(state.timeTarget + step, 24);
+      state.warpHours = state.warpHours - step > 1e-6 ? state.warpHours - step : 0;
+    } else if (state.autoTime && !state.manualTime) {
+      state.timeTarget = mod(state.timeTarget + (reduced ? 0 : clockDt / SECONDS_PER_HOUR), 24);
     }
     state.timeOfDay = state.manualTime ? damp(state.timeOfDay, state.timeTarget, 1.7, dt) : state.timeTarget;
     state.wind = damp(state.wind, state.windTarget, 0.5, dt);
@@ -254,7 +275,8 @@
 
     resolvePalette();
     applySun();
-    if (now - env.lastSky > 90) { env.lastSky = now; applySky(); }
+    /* 快进那 1 秒里天色要连续变化，90 ms 的节流会看出跳色，所以整段放行。 */
+    if (state.warpHours > 0 || now - env.lastSky > 90) { env.lastSky = now; applySky(); }
   }
 
   /* 太阳外观查表 —— 参考现实世界的两个物理事实：
@@ -433,13 +455,11 @@
       setAtmo("--sun-color", sunColor);
       setAtmo("--sun-glow", sunGlow);
       setAtmo("--sun-glow-alpha", (clamp((0.72 + 0.30 * state.ambient) * dim, 0, 1)).toFixed(3));
-      /* 顶部天气条的圆点也用 --sun-color/--sun-glow，单独写它自己那一小块。 */
-      setVar(env.weatherBar, "--sun-color", sunColor);
-      setVar(env.weatherBar, "--sun-glow", sunGlow);
       /* 卡片水影只在自己卡片里用 --shadow-shift。 */
       setVar(env.worldScope, "--shadow-shift", ((0.5 - x / 100) * 110).toFixed(1) + "px");
     }
     celestial.classList.toggle("is-moon", !day);
+    celestial.classList.toggle("is-warping", state.warpHours > 0);
   }
 
   function applySky() {
@@ -461,69 +481,12 @@
   }
 
   function initDOM() {
-    env.panel = document.getElementById("weatherPanel");
     env.celestial = document.getElementById("celestial");
     /* 自定义属性的写入目标（见 setVar）：只让真正消费它们的子树失效。 */
     env.atmo = document.querySelector(".atmosphere");
     env.galleryScope = document.getElementById("gallery");
     env.worldScope = document.getElementById("world");
     env.focusScope = document.getElementById("focus");
-    env.weatherBar = document.getElementById("weatherBar");
-  }
-
-  function timeLabel(hours) {
-    const h = Math.floor(mod(hours, 24));
-    const m = Math.floor((mod(hours, 24) - h) * 60);
-    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-  }
-
-  function conditionLabel() {
-    return state.isNight ? "CLEAR NIGHT" : "CLEAR";
-  }
-
-  function syncPanel() {
-    const s = env.sliders;
-    if (!s) return;
-    const label = document.getElementById("weatherLabel");
-    if (label) label.textContent = state.liveLabel + " · " + timeLabel(state.timeOfDay) + " · " + conditionLabel();
-  }
-
-  function initPanel() {
-    const bar = document.getElementById("weatherBar");
-    const toggle = document.getElementById("weatherToggle");
-    const auto = document.getElementById("weatherAuto");
-    const reset = document.getElementById("weatherReset");
-    if (!bar || !toggle) return;
-    env.bar = bar;
-    env.toggle = toggle;
-    toggle.addEventListener("click", function () {
-      const open = bar.classList.toggle("is-open");
-      toggle.setAttribute("aria-expanded", String(open));
-    });
-    bar.addEventListener("wheel", function (e) { e.stopPropagation(); }, { passive: false });
-    bar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive: false });
-    /* TIME 滑杆已按用户要求移除（2026-10-23）：改时刻只剩「拖动日月 /
-       双击日月切昼夜」两条路径，面板上保留 AUTO / RESET。 */
-    if (auto) auto.addEventListener("click", function () {
-      /* 只是「恢复流动」，从当前这一刻继续 —— 跳回真实时钟是 RESET 的事。
-         以前时间按真实速度走，AUTO 顺带对表没有代价；现在一按就跨出几小时，
-         必须分开。 */
-      state.manualTime = false;
-      state.autoTime = true;
-      state.elevationOffset = 0;
-      useClimate();
-    });
-    if (reset) reset.addEventListener("click", function () {
-      state.elevationOffset = 0;
-      state.manualTime = false;
-      state.autoTime = true;
-      readSystemTime();
-      useClimate();
-      syncPanel();
-    });
-    env.sliders = { auto: auto, reset: reset };
-    syncPanel();
-    setInterval(syncPanel, 500);
   }
 
   function initCelestial() {
@@ -546,10 +509,18 @@
       return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
     }
     function toggleDayNight() {
-      /* 白天 → 午夜，夜里 → 正午。manualTime 保持假：时刻立刻落到目标，
-         随后由 autoTime 接着往前走 —— 切完必须是「活的」表。 */
-      state.timeTarget = state.isNight ? 12 : 0;
+      /* 白天 → 午夜、夜里 → 正午，但**不是原地换一张图**：把时针拨快，12 小时
+         摊在 1 秒里走完（WARP_HOURS_PER_SEC），日月于是真的沿弧线走完全程 ——
+         太阳在左边落下、月亮从右边升起，最后停在上一个天体原来的位置上。
+         连按两次就攒成 24 小时，转一整天回到原处，仍然只往前、不倒退。 */
+      /* 双击之间那 100~350 ms 是「点两下」的手速，不是要走的时间：把时钟
+         基准清掉，下一帧退回上游 dt，否则这点间隔会被乘上 12 倍，第一帧
+         就窜出去一两个小时。 */
+      env.lastNow = 0;
+      state.warpHours = Math.min(24, state.warpHours + 12);
       state.elevationOffset = 0;
+      /* 快进期间不许有 manualTime 抖动，否则 timeOfDay 会被 damp 拖成一条慢吞
+         吞的曲线；切完必须是「活的」表，所以 autoTime 保持真。 */
       state.manualTime = false;
       state.autoTime = true;
     }
