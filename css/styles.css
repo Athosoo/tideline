@@ -530,8 +530,10 @@ img {
       rgba(214, 233, 255, 0.16) 0%,
       rgba(198, 222, 252, 0.06) 55%,
       transparent 84%),
-    /* 最近处：光带摊成一片躺在画面底部中央（人站在滩上往下看，反光总收在脚前）。 */
-    radial-gradient(ellipse 34% 16% at 50% 101%,
+    /* 最近处：光带摊成一片躺在画面底部（人站在滩上往下看，反光总收在脚前）。
+       锚点跟着月盘走（--moon-path-near-x，由 weather.js 的 applySun 写入）：
+       盘在左缘时它偏左、在右缘时偏右，但只走 45%，始终收在视点附近。 */
+    radial-gradient(ellipse 34% 16% at var(--moon-path-near-x, 50%) 101%,
       rgba(232, 243, 255, 0.24) 0%,
       rgba(204, 226, 255, 0.10) 50%,
       transparent 82%);

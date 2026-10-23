@@ -1059,12 +1059,21 @@ class WaterPainter {
     this.shimmers.forEach((shimmer, index) => {
       const pulse = (Math.sin(time * shimmer.speed + shimmer.delay) + 1) * 0.5;
       if (pulse < 0.3) return;
-      const x = (((shimmer.x + scene * 0.015) % 1) + 1) % 1 * width;
+      /* 亮点必须长在光路里。原来 x 是 (随机 + 场景漂移) 铺满整个画面宽度，
+         日月挪到哪儿这 52 个亮点都在原地闪，海面于是像在自顾自地亮。现在以
+         光盘的屏幕横坐标为中心散成一条带 —— 越近越宽，真实高光带就是这个形状
+         —— 并按离带心的横向偏移给每道亮纹一点倾角，带子因此斜着指向光源。 */
+      const bandCx = sunX * width;
+      const bandW = width * (0.03 + shimmer.y * 0.13 + wind * 0.04);
+      const off = shimmer.x * 2 - 1;
+      const x = bandCx + off * bandW + Math.sin(time * 0.15 + shimmer.delay) * 3;
+      if (x < -12 || x > width + 12) return;
       const y = shimmer.y * height + Math.sin(time * 0.25 + index) * 3;
       const l = shimmer.length * (0.6 + pulse) * (width < 700 ? 1.3 : 1);
+      const tilt = off * l * 0.28;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      ctx.quadraticCurveTo(x + l * 0.5, y - 1.6, x + l, y);
+      ctx.quadraticCurveTo(x + l * 0.5, y - 1.6 + tilt, x + l, y + tilt * 0.35);
       ctx.strokeStyle = rgba(sunCol, (0.05 + pulse * 0.3) * shimmer.weight * sparkle * (night ? 0.6 : 1));
       ctx.lineWidth = 0.6 + shimmer.weight * 0.8;
       ctx.stroke();

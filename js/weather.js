@@ -451,6 +451,14 @@
          免得天刚擦黑就凭空出现一条亮带。 */
       const pathA = day ? 0 : clamp(-rawElev / 6, 0, 1) * (0.55 + 0.45 * moonIn);
       setAtmo("--moon-path", pathA.toFixed(3));
+      /* 月光小路近处那团反光。CSS 原来把它写死在 at 50% 101%：月亮无论挪到
+         左右哪儿，整条带子最亮的那块都钉在画面正中，看上去波光根本不跟月亮走。
+         真实成因是海面把月光反射进眼睛，越靠近视点越往脚前收 —— 所以取「盘」
+         与「中央」之间的一段：盘偏到边缘时这团跟着偏，光带因此斜着指向月亮，
+         而不再是一根立在下巴底下的竖柱子。0.45 是取舍：给到 1 就完全跟着盘跑，
+         近处反光会离开视点脚下、穿到画面一侧去。 */
+      const pathNearX = 50 + (x - 50) * 0.45;
+      setAtmo("--moon-path-near-x", pathNearX.toFixed(2) + "%");
       /* 仍被 .light-glow（3D 海面取光方向）与天气条圆点消费的旧变量。 */
       setAtmo("--sun-color", sunColor);
       setAtmo("--sun-glow", sunGlow);

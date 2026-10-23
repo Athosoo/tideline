@@ -148,6 +148,20 @@ dispose()
 > CSS 静态层 `.moon-path`（`css/styles.css`）补形状与浓度。只画引擎一层会灰、只画 CSS 一层会假。
 > 水体颜色（`deep` / `shallow`）不要跟着提亮，否则整片海会变成黄昏色。
 
+> ⚠️ **「波光跟不跟日月走」要分三层看**（2026-10-23 用户追问「是否是技术做不到」——
+> **做得到，而且引擎层一直跟着**，卡住观感的是另外两层）：
+> ① 引擎层：`js/app.js` 的 `applySeaFrame()` 把 `weather.sunX/sunY` 换算成光方向交给
+>    `setLight`，再进 `js/sea-entry.js` 的 `uSunDir`；平水面高光点的横坐标恒等于 `2*sunX-1`，
+>    也就是永远落在盘的正下方。这条线不要动。
+> ② CSS 静态层 `.moon-path`：主锥顶点本来就跟着 `--sun-x`，但**贴底那团反光原来写死
+>    `at 50% 101%`** —— 全带最亮的一块钉在画面正中，月亮挪到哪儿它都不动，用户看到的就是它。
+>    现在锚点是 `--moon-path-near-x`，由 `applySun` 写 `50 + (x - 50) * 0.45`：盘到左右缘时
+>    这团各偏 20.8%，整条带因此斜着指向月亮（左右反号）。给到 1.0 会让近处反光离开视点脚下。
+> ③ Canvas-2D 后备层：`WaterPainter.draw` 的 `shimmers` 横坐标原来只由随机数与场景漂移决定，
+>    与光方向完全无关；现在以 `sunX * width` 为带心散开，并按横向偏移给每道亮纹倾角。
+> 改动后跑 `node _wip/verify/moon_path.mjs`：它把 `applySun` 搬进沙箱逐半小时扫一整夜，
+> 断言近处锚点与公式一致、随盘单调、左右反号，并静态检查三层接线。
+
 ### 3.3 质量档：`QUALITY_PRESETS`（js/app.js:265）
 
 `full` / `lite` 两套，含 `dprCap`、`waterFps`、`cloudFps`、`fbmOctaves`，
