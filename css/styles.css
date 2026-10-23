@@ -3737,3 +3737,107 @@ body.is-cake-cursor .cursor {
 
 /* 烛光收一点，布纹才不会被洗白；中心留给蛋糕，不留给一块过曝的白 */
 .cloth-light { opacity: 0.86; }
+
+/* ── 熄灭：一刀落下，烛火跟着灭，桌面沉进冷暗里（2026-10-23 用户要求）───────
+   「刀一划那一下的震动，那一瞬间烛光熄灭，画面慢慢变暗，然后缝拉开就是海。」
+   三件事同时起步，全部只动合成器属性，一行布局都不碰：
+     1. 焰被那一刀的气流吹歪、抽长、灭掉（flameOut）。灭了以后 cakeFlame 一起停，
+        切蛋糕这几秒里反而少了 76 个一直在动的层 —— 顺手把切的成本降下来。
+     2. 那圈暖光收掉：布上的光池（.cloth-light）、蛋糕底下的光晕（.cake-halo）。
+     3. 一层冷暗从布上压下来（.cloth-dark）。它在 .cloth 里面，因此天生被
+        #clothSlit 裁掉：缝里透进来的海还是亮的，桌面是暗的 —— 那道光就是这一刀给的。
+   缝还闭着时 .cloth.is-whole 把 clip 摘了，暗层盖满整张桌；缝一开，暗层中
+   间自动裂出缺口，海从缺口里进来。顺序正是用户说的「先暗，再开缝」。      */
+.cloth-dark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 乘上去而不是蒙一层灰：alpha 合成会把布纹拉平，multiply 只按比例压暗，
+     织纹、褶子、海图都还在，只是没光了 —— 那才是「屋里暗下来」。 */
+  background:
+    radial-gradient(ellipse farthest-side at 50% 46%,
+      rgb(106, 110, 110) 0%,
+      rgb(92, 98, 102) 46%,
+      rgb(76, 84, 92) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 1.15s cubic-bezier(0.33, 0, 0.36, 1);
+}
+
+.cake-gate.is-dark .cloth-dark { opacity: 1; }
+
+/* 暖光收得比暗层快一点：光先走，暗才显得是「灭」而不是「蒙上一层灰」 */
+.cake-gate.is-dark .cloth-light {
+  opacity: 0;
+  transition: opacity 1s ease-out;
+}
+
+.cake-gate.is-dark .cake-halo {
+  opacity: 0;
+  transition: opacity 0.62s ease-out;
+}
+
+/* 蛋糕自己也退 —— 一层纯黑的 alpha，不是灰，也不用 multiply。
+   黑的 alpha 合成就是 C x (1 - a)：按比例压暗，织纹和糖霜描边都留着；换成
+   灰色会把暗部抬平（试过，整块蛋糕变成一张灰卡纸）。multiply 在这儿还有第二个
+   坑：.cake 带 transform、自成合成组，这层的 multiply 只能和组内的蛋糕像素相乘，
+   落到盘沿外没有背景可乘，就露出标称色 —— 盘子外面一圈灰饼（截图量到 #707270）。
+   纯黑 alpha 没这毛病：盘沿外就是正常压暗身后的布，像蛋糕自己的一道影。
+   （也不能用 .cake 的 opacity：半透明的蛋糕会把缝里那片海蒙成奶白色。） */
+.cake-dark {
+  position: absolute;
+  inset: 7.5%;
+  border-radius: 50%;
+  pointer-events: none;
+  /* 盘子（.cake-art 里画的）屏幕半径量出来 266px，.cake 盒子半宽 353px。
+     这里用 closest-side，让 100% 正好落在元素的边（默认 farthest-corner 会让
+     整条渐变只有七成铺得开，边上的淡出永远到不了 0）。 */
+  background: radial-gradient(circle closest-side at 50% 50%,
+    rgba(8, 10, 14, 0.62) 0%,
+    rgba(8, 10, 14, 0.6) 97%,
+    rgba(8, 10, 14, 0) 100%);
+  opacity: 0;
+  transition: opacity 1.25s ease-out;
+}
+
+.cake-gate.is-dark .cake-dark { opacity: 1; }
+
+/* 焰：被气流吹歪 → 抽长 → 灭。十九支不同相，灭起来是一阵风扫过去，
+   不是一起关灯。--delay 是建蜡烛时给的负值（-2.6s..0），乘 -0.09 翻成
+   0..0.23s 的错峰。 */
+.cake-gate.is-dark .candle::before {
+  animation: flameOut 0.46s cubic-bezier(0.4, 0, 0.6, 1) calc(var(--delay, 0s) * -0.09) forwards;
+}
+
+.cake-gate.is-dark .candle::after {
+  animation: glowOut 0.75s ease-out calc(var(--delay, 0s) * -0.09) forwards;
+}
+
+@keyframes flameOut {
+  0%   { opacity: 1; transform: scale(1.02, 1.06) rotate(-1deg); }
+  14%  { opacity: 1; transform: scale(0.74, 1.32) translateX(-0.8px) rotate(-7deg); }
+  32%  { opacity: 0.92; transform: scale(1.14, 0.84) translateX(0.9px) rotate(5deg); }
+  54%  { opacity: 0.66; transform: scale(0.6, 1.46) translateX(-0.5px) rotate(-4deg); }
+  78%  { opacity: 0.22; transform: scale(0.32, 1.68) translateY(-1.6px) rotate(2deg); }
+  100% { opacity: 0; transform: scale(0.1, 1.86) translateY(-3px) rotate(0deg); }
+}
+
+@keyframes glowOut {
+  0%   { opacity: 1; transform: scale(1); }
+  24%  { opacity: 0.84; transform: scale(1.16); }
+  56%  { opacity: 0.4; transform: scale(1.3); }
+  100% { opacity: 0; transform: scale(1.54); }
+}
+
+/* 缝回去（回到封面）时重新点上：不点灯直接跳回常亮太硬，
+   先一缩一涨再交回 cakeFlame。 */
+.cake-gate.is-relight .candle::before {
+  animation: flameIn 0.62s ease-out calc(var(--delay, 0s) * -0.05);
+}
+
+@keyframes flameIn {
+  0%   { opacity: 0; transform: scale(0.12, 1.5); }
+  34%  { opacity: 0.9; transform: scale(0.62, 0.86); }
+  62%  { opacity: 0.55; transform: scale(1.12, 1.02); }
+  100% { opacity: 1; transform: scale(1, 1); }
+}

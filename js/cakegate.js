@@ -86,6 +86,7 @@
     warm: false,        // 长廊是否已经在布后面预热好
     knifeStarted: false,
     cutQueued: false,
+    relightTimer: 0,    // 缝回去时「重新点灯」那个短暂动画的计时器
     candleAngles: [],
     trees: [],
     t: 0,
@@ -838,6 +839,11 @@
     gateEl.classList.add("is-cut");
     // 一刀的力：画面抖 170ms，烛焰跟着顿一下。没有这一下，刀像是贴上去的。
     gateEl.classList.add("is-impact");
+    // 就是这一下，十九支烛火被吹灭，桌面沉进冷暗里（css 的 .is-dark 那一节）。
+    // 放在 HOLD 之前：缝亮起来之前那 0.28s 里，画面已经在变暗了。
+    gateEl.classList.remove("is-relight");
+    clearTimeout(S.relightTimer);
+    gateEl.classList.add("is-dark");
     setTimeout(function () { gateEl.classList.remove("is-impact"); }, 180);
     if (seamEl) {
       seamEl.classList.add("is-live");
@@ -859,6 +865,14 @@
   /* ---------- 缝合：回封面时台布从切口缝回去 ---------- */
   function stitch() {
     document.body.classList.remove("is-cutting");
+    // 缝回去＝回到那间还亮着的屋子：灭掉的烛火重新点上，暗层退掉。
+    gateEl.classList.remove("is-dark");
+    if (S.relightTimer) clearTimeout(S.relightTimer);
+    gateEl.classList.add("is-relight");
+    S.relightTimer = setTimeout(function () {
+      S.relightTimer = 0;
+      gateEl.classList.remove("is-relight");
+    }, 760);
     if (hooks.setCutting) hooks.setCutting(false);
     if (hooks.setCoverLocked) hooks.setCoverLocked(true);
     S.cutTarget = 0;

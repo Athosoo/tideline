@@ -373,6 +373,10 @@
           </div>
         </div>
 
+        <!-- 熄灭的暗层：烛火灭了以后桌面压下去的那层冷光。做在 .cloth 里面，
+             所以天生被 #clothSlit 裁掉 —— 缝里透进来的海是亮的，桌面是暗的。 -->
+        <div class="cloth-dark" aria-hidden="true"></div>
+
       </div>
       <div class="cake-stage" id="cakeStage">
         <div class="cake">
@@ -447,6 +451,9 @@
             </g>
           </svg>
           <div class="cake-candles" id="candles"></div>
+          <!-- 熄灭时压在蛋糕上的暗：烛火没了，奶油不该还亮着。
+               做在 .cake 里面，劈开时跟着自己那一半被 clip 掉，缝里不漏。 -->
+          <span class="cake-dark" aria-hidden="true"></span>
         </div>
       </div>
 
