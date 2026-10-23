@@ -218,6 +218,16 @@ dispose()
    `.cloth` 的 `clip-path`（`.is-whole`）；④ 把布的十几个静态子层各自提成合成层
    （`.cloth > * { will-change: transform }`），clip 变成合成期掩膜而不是每帧重栅格化。
   cut 相位 38.2 → 27.1ms/帧、p90 66.8 → 34、fly 46.8 → 41.1、封面静置 60fps 不掉帧。
+- **蜡烛别每帧改尺寸（`a5fdac4`）**：推近那一秒原来每帧写 38 支蜡烛的 `left/top/height`
+  和两个火焰尺寸，`invalidationTracking` 里 `Style changed @SPAN.candle` 1938 次。
+  每写一次就重排蜡烛行、并重栅格化 76 个带两层 blur 阴影的伪元素。现在位置/压扁/火焰收缩
+  全部走合成器：位置 = 一个 `translate3d`，烛身压扁 = 同一条 transform 里的 `scaleY(chs)`，
+  火焰 = 伪元素的 `scale: var(--flame-sx) var(--flame-sy)`（父级 `scaleY` 会连坐伪元素，
+  纵向因此要乘 `1/chs`；与父矩阵相乘后净效果是缩小，栅格不用重做），光晕只抵消纵向压扁
+  以保持屏幕上 46px。fly 36–44 → 23–25ms/帧、p90 83 → 33–50，aim 稳定 16.7ms 零掉帧。
+  **教训**：`width/height/left/top` 每帧写一次就是一次布局 + 一次重栅格；
+  能用 `transform`/`scale`/`translate` 表达的动画，就永远不要碰几何属性。
+  `?cake=aim` 可把镜头冻结在俯视姿态，截静态帧做像素比对最省事。
 
 ---
 
