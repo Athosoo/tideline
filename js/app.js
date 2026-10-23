@@ -1097,13 +1097,36 @@ function useFallbackSea() {
   useCanvasSea();
 }
 
+/* `.gallery` 是 position:fixed 铺满视口的，`.ocean-canvas` 又 absolute inset:0
+   铺满它 —— 这块画布的盒子只在视口尺寸变化时才会变。可它原来是每帧量一次：
+   而这一帧之前蛋糕门刚写过几百个 SVG 属性，这一次量测就是一次强制同步布局，
+   把整页重新排一遍。开屏那 9 秒里 getBoundingClientRect 自身耗时 1441ms，
+   排第一。实测整段开屏（fly/aim/cut/open 加滚动、加切片）里这个 rect 一直是
+   0,0,vw,vh，只有改视口尺寸时才变过 —— 所以改成跟视口一起量。 */
+const oceanBox = { left: 0, top: 0, width: 0, height: 0, bottom: 0 };
+let oceanBoxStale = true;
+
+function oceanRect() {
+  if (oceanBoxStale) {
+    const rect = dom.ocean.getBoundingClientRect();
+    oceanBox.left = rect.left;
+    oceanBox.top = rect.top;
+    oceanBox.width = rect.width;
+    oceanBox.height = rect.height;
+    oceanBox.bottom = rect.bottom;
+    oceanBoxStale = false;
+  }
+  return oceanBox;
+}
+
 function startSea() {
   if (window.OpenSea && window.OpenSea.createSea && !/[?&]nogl=1/.test(window.location.search)) {
     // Show the cheap canvas sea immediately and upgrade to the 3D renderer when
     // its device is ready: the engine takes a moment to initialise, and an
     // empty horizon in the meantime looks like a bug.
     useCanvasSea();
-    const rect = dom.ocean.getBoundingClientRect();
+    oceanBoxStale = true;
+    const rect = oceanRect();
     const width = Math.max(2, Math.round(rect.width || window.innerWidth));
     const height = Math.max(2, Math.round(rect.height || window.innerHeight));
     window.OpenSea.createSea({
@@ -1171,7 +1194,7 @@ function applySeaFrame() {
   // Light direction follows the sun/moon disc that the viewer can drag: the
   // azimuth is the disc's screen x, the elevation is lifted so the glitter
   // reads as a path rather than as one permanent sunset.
-  const rect = dom.ocean.getBoundingClientRect();
+  const rect = oceanRect();
   const vh = Math.max(1, window.innerHeight);
   const topF = rect.top / vh;
   const heightF = Math.max(0.0001, (rect.bottom - rect.top) / vh);
@@ -2141,8 +2164,9 @@ function handleResize() {
       window.scrollTo(0, 0);
     }
 
+    oceanBoxStale = true;
     if (seaEngine) {
-      const rect = dom.ocean.getBoundingClientRect();
+      const rect = oceanRect();
       seaEngine.resize(Math.round(rect.width || window.innerWidth), Math.round(rect.height || window.innerHeight));
     } else if (glOcean) {
       glOcean.resize();
