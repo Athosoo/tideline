@@ -76,11 +76,11 @@
       <div class="sky-wash"></div>
       <div class="light-glow" aria-hidden="true"></div>
       <div class="moon-path" aria-hidden="true"></div>
-      <div class="celestial" id="celestial" role="button" tabindex="0" aria-label="太阳/月亮：拖动改变时间，单击切换昼夜">
+      <div class="celestial" id="celestial" role="button" tabindex="0" aria-label="太阳/月亮：拖动改变时间，双击切换昼夜">
         <span class="celestial-bloom" aria-hidden="true"></span>
         <span class="celestial-disc" aria-hidden="true"></span>
       </div>
-      <span class="celestial-hint" aria-hidden="true">DRAG · TAP</span>
+      <span class="celestial-hint" aria-hidden="true">DRAG · 2×TAP</span>
       <div class="horizon-glow"></div>
       <canvas class="ocean-canvas" id="oceanCanvas" aria-hidden="true"></canvas>
       <canvas class="water-canvas" id="waterCanvas"></canvas>
@@ -121,10 +121,6 @@
         <span class="weather-bar__label" id="weatherLabel">CLIMATE · 12:00 · CLEAR</span>
       </button>
       <div class="weather-bar__panel" id="weatherPanel">
-        <label class="weather-row">
-          <span class="weather-row__head"><span>TIME</span><span class="weather-row__value" id="timeValue">12:00</span></span>
-          <input id="timeSlider" type="range" min="0" max="100" value="50" aria-label="时间" />
-        </label>
         <div class="weather-bar__actions">
           <button id="weatherAuto" type="button" title="时间继续自动流动：5 秒 = 1 小时">AUTO</button>
           <button id="weatherReset" type="button" title="回到此刻的真实时间，并继续自动流动">RESET</button>

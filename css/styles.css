@@ -2555,39 +2555,9 @@ body.is-holding .weather-bar { opacity: 0 !important; pointer-events: none; }
 
 .weather-bar.is-open .weather-bar__panel { display: block; }
 
-.weather-row { display: block; margin-top: 12px; }
-.weather-row:first-child { margin-top: 0; }
-
-.weather-row__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
-  color: rgba(247, 242, 230, 0.7);
-  font-size: 8px;
-  letter-spacing: 0.16em;
-}
-
-.weather-row__value { color: var(--aqua, #9ed6d0); font-variant-numeric: tabular-nums; }
-
-.weather-bar input[type="range"] {
-  appearance: none;
-  -webkit-appearance: none;
-  display: block;
-  width: 100%;
-  height: 14px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.weather-bar input[type="range"]::-webkit-slider-runnable-track { height: 2px; border-radius: 2px; background: rgba(247, 242, 230, 0.22); }
-.weather-bar input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; margin-top: -5.5px; border: 0; border-radius: 50%; background: #9ed6d0; box-shadow: 0 0 9px rgba(158, 214, 208, 0.7); }
-.weather-bar input[type="range"]::-moz-range-track { height: 2px; border-radius: 2px; background: rgba(247, 242, 230, 0.22); }
-.weather-bar input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border: 0; border-radius: 50%; background: #9ed6d0; box-shadow: 0 0 9px rgba(158, 214, 208, 0.7); }
-
-.weather-bar__actions { display: flex; gap: 8px; margin-top: 14px; }
+/* TIME 滑杆已移除（2026-10-23，用户要求：「去除右上角的滑块调整时间」）。
+   面板里只剩 AUTO / RESET，所以这是第一个也是唯一一行，不再需要上边距。 */
+.weather-bar__actions { display: flex; gap: 8px; margin-top: 0; }
 
 .weather-bar__actions button {
   flex: 1;

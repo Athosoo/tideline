@@ -313,7 +313,7 @@
     if (!celestial) return;
     const day = !state.isNight;
     /* 弧线进度按真实的日出/日落时刻归一化，而不是写死 6..18：太阳在日出那一刻
-       正好从画面左缘出现、日落那一刻正好从右缘消失（左 = 东，右 = 西）。写死
+       正好从画面右缘出现、日落那一刻正好从左缘消失（右 = 东，左 = 西）。写死
        6..18 的话，本纬度 10 月会多出 0.36 小时的空档 —— 日盘/月盘卡在边缘不动
        将近 2 秒，2 分钟一天的时候看得出一次「停顿」。 */
     const win = dayWindow(state.dayOfYear, state.latitude);
@@ -325,10 +325,12 @@
     const theta = clamp(u, 0, 1) * Math.PI;
     // Polar-light framing: the disc travels a short, low arc and never leaves
     // the frame, so it stays draggable and the sea always keeps a grazing sun.
-    /* 日月同向：左缘是东、右缘是西，两个天体都东升西落。月亮不因为「反日」就
-       倒着走 —— 满月只是与太阳相隔 12 小时，太阳在西边落下时它才刚从东边升起，
-       然后和太阳一样从左往右走完自己的那半圈。所以两段用同一个符号。 */
-    const x = 50 - 38 * Math.cos(theta);
+    /* 日月同向：右缘是东、左缘是西，两个天体都「从右边升起、往左边落下」
+       （2026-10-23 用户定稿；此前的实现是相反方向）。月亮不因为「反日」就倒着走
+       —— 满月只是与太阳相隔 12 小时，太阳在西边（左缘）落下时它才刚从东边
+       （右缘）升起，然后和太阳一样从右往左走完自己的那半圈。两段用同一个符号：
+       theta=0（各自弧线的起点）在 x=88%，theta=π（终点）在 x=12%。 */
+    const x = 50 + 38 * Math.cos(theta);
     // Keep the sun and the moon above the shoreline. The CSS horizon sits at
     // about 47.8% of the viewport, so elevation 0 maps just above it.
     const horizonY = 25.2;
@@ -359,9 +361,9 @@
       /* 光球中心过曝：往白里推一点，否则正午的太阳偏灰。 */
       const hot = mix(core, [1, 1, 1], 0.35);
       /* 交接（rawElev = -0.5）两侧都必须收到 0：日月共用同一个元素，那一刻它的
-         位置要从右缘跳到左缘（太阳在西边落下、月亮在东边升起）—— 这是天文事实，
+         位置要从左缘跳到右缘（太阳在左缘落下、月亮在右缘升起）—— 这是天文事实，
          不是 bug，但只要还亮着就会看见一次「闪」。所以日面在最后 2° 里淡出、
-         月面在最初 4° 里淡入，交接点两边都是 0，换位藏在「谁都还没亮」的瞬间。 */
+         月面在最初 2.5° 里淡入，交接点两边都是 0，换位藏在「谁都还没亮」的瞬间。 */
       const sunDisc = smooth(clamp((rawElev + 0.5) / 2.0, 0, 1));
       const moonIn = day ? 0 : smooth(clamp((-rawElev - 0.5) / 2.5, 0, 1));
       /* 天光（日晕/炫光/月晕）用长得多的 6° 窗口：那是一片大面积柔光，跟着光球
@@ -482,9 +484,6 @@
   function syncPanel() {
     const s = env.sliders;
     if (!s) return;
-    if (document.activeElement !== s.time) s.time.value = String(Math.round(mod(state.timeOfDay, 24) / 24 * 100));
-    const tv = document.getElementById("timeValue");
-    if (tv) tv.textContent = timeLabel(state.timeOfDay);
     const label = document.getElementById("weatherLabel");
     if (label) label.textContent = state.liveLabel + " · " + timeLabel(state.timeOfDay) + " · " + conditionLabel();
   }
@@ -492,7 +491,6 @@
   function initPanel() {
     const bar = document.getElementById("weatherBar");
     const toggle = document.getElementById("weatherToggle");
-    const time = document.getElementById("timeSlider");
     const auto = document.getElementById("weatherAuto");
     const reset = document.getElementById("weatherReset");
     if (!bar || !toggle) return;
@@ -504,11 +502,8 @@
     });
     bar.addEventListener("wheel", function (e) { e.stopPropagation(); }, { passive: false });
     bar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive: false });
-    if (time) time.addEventListener("input", function () {
-      state.timeTarget = Number(time.value) / 100 * 24;
-      state.manualTime = true;
-      state.autoTime = false;
-    });
+    /* TIME 滑杆已按用户要求移除（2026-10-23）：改时刻只剩「拖动日月 /
+       双击日月切昼夜」两条路径，面板上保留 AUTO / RESET。 */
     if (auto) auto.addEventListener("click", function () {
       /* 只是「恢复流动」，从当前这一刻继续 —— 跳回真实时钟是 RESET 的事。
          以前时间按真实速度走，AUTO 顺带对表没有代价；现在一按就跨出几小时，
@@ -526,7 +521,7 @@
       useClimate();
       syncPanel();
     });
-    env.sliders = { time: time, auto: auto, reset: reset };
+    env.sliders = { auto: auto, reset: reset };
     syncPanel();
     setInterval(syncPanel, 500);
   }
@@ -536,6 +531,12 @@
     if (!el) return;
     let dragging = false, moved = false;
     let startX = 0, startY = 0;
+    /* 双击 / 双击（触屏上的双点）切换昼夜。判定放在 pointerup 里自己做，不挂
+       dblclick —— 触屏上 dblclick 不可靠，而两次 pointerup 是同一套事件。
+       DBL_TAP_MS 是两次点击的最大间隔，DBL_TAP_PX 是位移容差。 */
+    const DBL_TAP_MS = 350;
+    const DBL_TAP_PX = 28;
+    let lastTapAt = 0, lastTapX = 0, lastTapY = 0;
     /* 拖的是太阳还是月亮，按「按下那一刻是白天还是夜里」判断。不能用指针高度
        猜：月亮夜里也在天顶，p.y < 0.6 会把深夜的拖动误判成白天弧。 */
     let nightDrag = false;
@@ -544,24 +545,35 @@
       const r = g ? g.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
       return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
     }
+    function toggleDayNight() {
+      /* 白天 → 午夜，夜里 → 正午。manualTime 保持假：时刻立刻落到目标，
+         随后由 autoTime 接着往前走 —— 切完必须是「活的」表。 */
+      state.timeTarget = state.isNight ? 12 : 0;
+      state.elevationOffset = 0;
+      state.manualTime = false;
+      state.autoTime = true;
+    }
     function applyDrag(e) {
       const p = pos(e);
       const dayArc = !nightDrag;
-      /* 反解 applySun 的弧线：两段都是 x = 50 - 38·cos(theta)（日月同向，左 = 东、
-         右 = 西），只是走的是各自的时间区间 —— 白天 [rise, set]，夜里 [set, 24+rise]。
-         振幅必须和 applySun 里的 38 一致，否则拖到画面边缘时刻会差几十分钟。 */
+      /* 反解 applySun 的弧线：两段都是 x = 50 + 38·cos(theta)（右 = 东、左 = 西，
+         各自从右缘升起、向左缘落下），只是走各自的时间区间 —— 白天 [rise, set]，
+         夜里 [set, 24+rise]。振幅必须和 applySun 里的 38 一致，否则拖到画面边缘
+         时刻会差几十分钟。 */
       const win = dayWindow(state.dayOfYear, state.latitude);
       const daySpan = Math.max(0.5, win.set - win.rise);
       const nightSpan = Math.max(0.5, 24 - daySpan);
       const cx = clamp((p.x * 100 - 50) / 38, -1, 1);
-      const u = Math.acos(-cx) / Math.PI;
+      const u = Math.acos(cx) / Math.PI;
       const t = dayArc ? win.rise + u * daySpan : win.set + u * nightSpan;
+      /* 手指和时刻 1:1：直接置 timeOfDay，不让 update() 里的 damp 把日盘拖在
+         手指后面 0.6 秒。垂直方向不参与 —— 时刻定了，高度就定了，日盘永远在
+         这条弧线上（此前按 y 改 elevationOffset 会让它离开弧线，松手时再跳回来）。 */
       state.timeTarget = mod(t, 24);
+      state.timeOfDay = state.timeTarget;
+      state.elevationOffset = 0;
       state.manualTime = true;
       state.autoTime = false;
-      const solarNow = solarPosition(state.timeTarget, state.dayOfYear, state.latitude);
-      const wanted = clamp((0.62 - p.y) * 40, -18, 55);
-      state.elevationOffset = clamp(wanted - solarNow.elevation, -25, 55);
     }
     el.addEventListener("pointerdown", function (e) {
       dragging = true; moved = false;
@@ -573,21 +585,35 @@
     });
     el.addEventListener("pointermove", function (e) {
       if (!dragging) return;
-      if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 5) {
+      if (!moved && Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 5) {
         moved = true;
       }
-      applyDrag(e);
+      /* 只有真的拖动了才改时刻：否则一次手抖的点击会把表挪走几十分钟。 */
+      if (moved) applyDrag(e);
     });
     function finish(e) {
       if (!dragging) return;
       dragging = false;
       el.classList.remove("is-dragging");
-      if (!moved) {
-        /* 轻点 = 跳到正午/午夜，然后继续流动。这里不能把 manualTime 置真：
-           时间本来就在走，一次误触就把表停住，会让人以为页面坏了。 */
-        state.timeTarget = state.isNight ? 12 : 0;
-        state.elevationOffset = 0;
+      if (moved) {
+        /* 只借走时间，不关机：松手立刻把表交还给自动流动。原 bug（2026-10-23
+           「拖完日月后时间就不走了」）就是 manualTime 在拖动结束后一直挂着。 */
+        lastTapAt = 0;
+      } else {
+        const now = performance.now();
+        const near = Math.abs(e.clientX - lastTapX) < DBL_TAP_PX && Math.abs(e.clientY - lastTapY) < DBL_TAP_PX;
+        if (lastTapAt && now - lastTapAt < DBL_TAP_MS && near) {
+          toggleDayNight();
+          lastTapAt = 0;
+        } else {
+          lastTapAt = now;
+          lastTapX = e.clientX;
+          lastTapY = e.clientY;
+        }
       }
+      /* 无论拖动还是点击，指针离开时表都必须是走的。 */
+      state.manualTime = false;
+      state.autoTime = true;
       moved = false;
       if (el.releasePointerCapture) { try { el.releasePointerCapture(e.pointerId); } catch (err) {} }
     }
@@ -596,9 +622,8 @@
     el.addEventListener("keydown", function (e) {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
-      /* 同轻点：跳过去，时间继续流。 */
-      state.timeTarget = state.isNight ? 12 : 0;
-      state.elevationOffset = 0;
+      /* 键盘等价于双击：切昼夜，时间继续流。 */
+      toggleDayNight();
     });
   }
 
