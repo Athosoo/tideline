@@ -695,7 +695,10 @@ scale(calc(1 + var(--dive) * 2.25))` + `--fade` 的近景模糊/淡出）→ 镜
 ry 26%` 覆盖蛋糕体（y 27%–68%）与盘沿。**观感要用户开页面看**：`?cake=cut&cutat=0.5`
 停在最看得出缝的中段。
 
-### 7.21 待办（用户 m00183，2026-10-22 深夜 · 未开工）
+### 7.21 第五轮：缝里什么都不放，切开直接是海（用户 m00183，2026-10-22 深夜 · 已落地）
+
+> 三条待办都在同一次改动里做完了，落点见本节末尾的「落地」。下面的计划原文留着，
+> 因为它是判断「做没做到」的尺子 —— 尤其第 ② 条那个同帧问题，计划里先猜对了病因。
 
 用户原话：「记一下待办：切开蛋糕里面不要有东西，直接进入到海洋长廊，就是不要加缝带。然后衔接要自然，
 现在是切开后有一帧不知道啥，才进入长廊，很丑。还有切蛋糕的时候要有刀划过切蛋糕的动作呀」
@@ -739,3 +742,45 @@ ry 26%` 覆盖蛋糕体（y 27%–68%）与盘沿。**观感要用户开页面�
   刀已经走过的距离，刀走到哪缝开到哪。刀走完这一段才开始 `S.split`（把 `--split` 的起点从
   p 0.02 推到刀程之后），这样「划开」和「裂开」是先后两件事，不再同时发生。
 - 顺带：`CUT = 2.6s` 要重排成「划 0.45s + 裂 1.6s + 下潜」，总时长不要比现在长。
+
+**落地（2026-10-22 深夜，`GIFT@HEAD`）**
+
+**① 缝里不放东西 → 缝成了布自己身上的洞。** 删掉 `.cut-gap`（`index.html` 的元素、
+`css/styles.css` 的整块、`js/cakegate.js` 的 `cutGap` 与 `insertBefore`）之后，两半之间确实
+只剩台布了；所以不是「换个带子」，是**让布自己裂**：
+
+- `index.html:206-217` 新增 `<svg class="gate-clip">` + `<clipPath id="clothSlit"
+  clipPathUnits="userSpaceOnUse" clip-rule="evenodd">`，里面只有一条 `<path id="clothSlitPath">`；
+- `css/styles.css:2876` 给 `.cloth` 挂 `clip-path: url(#clothSlit)` —— 裁在布自己的坐标系里，
+  布整体放大时缝跟着放大；
+- `js/cakegate.js` 的 `setSlit(halfLocal)` 每帧把 `#clothSlitPath` 的 `d` 写成「整块布 − 一条
+  沿切口方向的带子」（evenodd 挖洞）。宽度不是拍脑袋：半块在 `.cake-stage` 里位移
+  `(gap + dive*220)`，而 `.cake-stage` 自己放大 `(1 + dive*2.25)`，屏幕上就是
+  `(gap + dive*220)*(1 + dive*2.25)`；布只放大 `(1 + dive*0.5)`，折回布坐标再 +6px 余量。
+
+数值桩（1440×900、`--cs = 34vw = 489.6`、`gapMax = 58.8`）：p 从 0 到 1，缝的半宽始终比两半
+让开的半距宽 6–9px（最紧 6px，缝的边压在蛋糕身下面）；`dive = 1` 时缝半宽 906px > 屏幕对角
+半长 849px，布在这一刻已经被缝整个吃掉 —— 那个径向 `--hole` mask 只剩兜底，不再是主力。
+
+**② 切开 → 长廊那一帧：`openArchive(true)` 之后同帧补夺一次相机。** 病因与计划里写的一致：
+`js/app.js` 的 `animate()` 先 `updateScrollState(dt)`、后 `CakeGate.update(dt, gate)`，瞬移是
+CakeGate 发起的，而 `state.snapCamera` 要等下一次 `updateScrollState` 才被消费 → 海拿旧相机
+画了一帧。改法取计划里的 a：`openArchive()` 末尾 `if (instant) updateScrollState(0);`
+（`js/app.js:1567` 起）—— `dt = 0` 只做对齐，不推阻尼。
+
+瞬移时机也挪了：原来在 `S.dive > 0.45`（那时缝里还垫着暗缝，晚跳看不出来），现在改在 `cut()`
+里、缝宽还是 0 的那一帧 —— 缝一睁眼后面就是海，不可能闪出「空背景」那一帧。
+
+**③ 刀真的从蛋糕上划过去。** `js/cakegate.js` 新增 `SLICE = 0.16`（= 0.42s）：`cut()` 记下刀尖
+的出发点与「刀尖→圆心」的方向，`update()` 里按 `easeInOut(p / SLICE)` 把刀尖推过圆心、一直推
+到盘沿外（刀程 = 2×入口距圆心 + `size*0.16` ≈ 646px）；`#cutSeam` 从「提前画好的一整条」改成
+**跟着刀长**：元素左端钉在入口，`scaleX = 已划过长度 / 1000`；`S.split` 的起手从 p 0.02 推到
+`SLICE`，划完才裂。刀的淡出也从 `is-cut` 挪到 `is-sliced`（刀尖越过盘沿才淡），碎屑改在刀尖
+穿过圆心（`stroke >= 0.5`）那一刻才崩。
+
+新时间轴：`HOLD 0.28s`（只有一道亮缝）→ 划过 0.42s → 让开 1.09s → 下潜，全长 2.88s。
+
+**仍未验证**：沙箱里 Chrome / Edge 都起不来（`crash server failed to launch` /
+`platform_channel.cc:187 Check failed: 拒绝访问 (0x5)`），`clip-path: url(#…)` 在真机上的裁剪、
+以及「布裂开」读起来像不像一刀，都只有用户开页面才知道。对照用：
+`index.html?cake=cut&cutat=0.5`（停在让开的中段）、`?cake=cut&cutat=0.9`（下潜段）。

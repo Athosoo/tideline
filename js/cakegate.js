@@ -4,9 +4,10 @@
    所以刀尖永远指着圆心，这是罗盘的规矩，不是动画的随手设定。
 
    滚动（--gate）和这一刀（--cut）谁先到算谁的：--open = max(--gate, --cut)。
-   切开时蛋糕沿刀轴裂成两半，缝里什么都没有 —— 只有一道阴影（css 的 .cut-gap）：
-  不画剖面、不摆奶油果酱（2026-10-22 用户否掉了那五层夹层）。镜头随后钻进这道缝，
-  缝外面的台布才被洞口吃掉，洞里是那只活着的海。
+   切开时刀真的从蛋糕上划过去（.cut-seam 跟着刀长），两半随即让开，
+   而缝里什么都没有 —— 布自己身上也开着同一条缝（.cloth 的 clip-path）：
+   不画剖面、不摆奶油果酱（2026-10-22 用户否掉了那五层夹层，之后又否掉了
+   那道用来遮丑的暗缝）。镜头随后钻进这道缝，最后一点残余的布由洞口吃掉。
 
    ?cake=aim|cut 冻结/预演某个相位（截图对照用）。
    两扇门已于 2026-10-22 删除，这一层就是封面本身，没有退路可退。 */
@@ -27,12 +28,14 @@
   var FLY_V = 2 / (1 + (FLY_B - FLY_A));   // 峰值 1.3699：由「三段位移和 = 1」解出
   var CUT = 2.6;                // 切开：布慢慢裂开，2.6s 走完
   var HOLD = 0.28;              // 先亮一道缝 280ms，布纹丝不动
+  var SLICE = 0.16;             // 划过：占 CUT 的前 16%（≈0.42s），刀尖从入口划出盘沿
+  var SEAM_W = 1000;            // .cut-seam 的基准长度（CSS 里 width: 1000px）
   var STITCH = 1.6;             // 回封面：镜头从裂口里退出来 1600ms
 
   var clothWrap = document.getElementById("clothWrap");
   var cakeStage = document.getElementById("cakeStage");
   var cakeEl = cakeStage ? cakeStage.querySelector(".cake") : null;
-  var cutGap = document.getElementById("cutGap");
+  var slitPath = document.getElementById("clothSlitPath");
   var chartLines = document.getElementById("chartLines");
   var chartStars = document.getElementById("chartStars");
   var scallop = document.getElementById("scallop");
@@ -132,6 +135,36 @@
   }
 
   function bearingTo(tx, ty) { return Math.atan2(S.geom.cy - ty, S.geom.cx - tx); }
+
+  /* ---------- 台布上那道缝 ----------
+     不是往缝里放东西：缝是台布自己身上开的一个洞。clipPath 用 evenodd 挖，
+     外圈是整块布、内圈是一条沿切口方向的带子，宽度 = 两半让开的距离。
+     坐标是视口 CSS 像素（clipPathUnits=userSpaceOnUse），中心就是布的圆心
+     —— 也就是 transform-origin，布放大时缝跟着一起放大，两条边才对得上。 */
+  var slitKey = "";
+  function setSlit(halfLocal) {
+    var W = window.innerWidth;
+    var H = window.innerHeight;
+    var key = W + "x" + H + "|" + S.cutAngle.toFixed(4) + "|" + halfLocal.toFixed(1);
+    if (key === slitKey) return;
+    slitKey = key;
+    if (!slitPath) return;
+    var outer = "M0 0H" + W + "V" + H + "H0Z";
+    if (!(halfLocal > 0.5)) { slitPath.setAttribute("d", outer); return; }
+    var a = S.cutAngle;
+    var ux = Math.cos(a), uy = Math.sin(a);      // 长轴 = 切口方向
+    var nx = -uy, ny = ux;                       // 短轴 = 法线（两半让开的方向）
+    var L = W + H;                               // 半长：斜着也够伸出屏幕
+    var cx = W * 0.5, cy = H * 0.5;
+    var ax = cx - ux * L, ay = cy - uy * L;
+    var bx = cx + ux * L, by = cy + uy * L;
+    var d = "M" +
+      (ax + nx * halfLocal).toFixed(1) + " " + (ay + ny * halfLocal).toFixed(1) + "L" +
+      (bx + nx * halfLocal).toFixed(1) + " " + (by + ny * halfLocal).toFixed(1) + "L" +
+      (bx - nx * halfLocal).toFixed(1) + " " + (by - ny * halfLocal).toFixed(1) + "L" +
+      (ax - nx * halfLocal).toFixed(1) + " " + (ay - ny * halfLocal).toFixed(1) + "Z";
+    slitPath.setAttribute("d", outer + d);
+  }
 
   function shortest(from, to) {
     var d = (to - from) % TAU;
@@ -360,7 +393,9 @@
 
   /* ---------- 劈开：沿刀线把蛋糕分成两半，缝里只有一道阴影 ----------
      台布不再撕 —— 撕出来的那两条数学直边，正是上一版被挑出的瑕疵。
-     两半之间那一条是 .cut-gap：切开的地方光进不去，所以是暗的，不是一张剖面图。
+     两半之间那一条**不放任何东西**：布自己身上也开着同一条缝（.cloth 的
+     clip-path: url(#clothSlit)，缝宽每帧按两半让开的距离写进 #clothSlitPath），
+     缝后面就是已经瞬移就位的长廊 —— 切开直接看见海。
      镜头正是从这道缝钻进去的，台布在那之后才被那个洞吃掉（CSS 的 --hole）。 */
   var CUT_N = 26;
   var halfA = null;
@@ -425,8 +460,6 @@
       cakeStage.appendChild(half);
       if (side === "a") halfA = half; else halfB = half;
     });
-    // 暗缝要压在两个半块下面：插到第一个半块之前
-    if (cutGap && halfA) cakeStage.insertBefore(cutGap, halfA);
     cakeEl.classList.add("is-source");
     S.cakeSize = cakeEl.offsetWidth || 360;
     applyCutGeometry(S.cutAngle);
@@ -547,23 +580,37 @@
     S.phase = "cut";
     S.cutHold = 0;
     S.cutTarget = 1;
+    S.sliced = false;
+    S.crumbed = false;
     applyCutGeometry(S.cutAngle);
+    // 刀真的从蛋糕上划过去：从眼下的刀尖出发，穿过圆心，一直划出盘沿。
+    // 方向和长度都按真实位置算（dx/dy 除以模长），不靠 sign 猜正负。
+    var dx = S.geom.cx - S.tip.x;
+    var dy = S.geom.cy - S.tip.y;
+    var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    S.sliceFrom = { x: S.tip.x, y: S.tip.y };
+    S.sliceDir = { x: dx / dist, y: dy / dist };
+    S.sliceLen = dist * 2 + (S.cakeSize || 360) * 0.16;
     gateEl.classList.add("is-cut");
     // 一刀的力：画面抖 170ms，烛焰跟着顿一下。没有这一下，刀像是贴上去的。
     gateEl.classList.add("is-impact");
     setTimeout(function () { gateEl.classList.remove("is-impact"); }, 180);
     if (seamEl) {
-      seamEl.style.transform = "translate3d(" + S.geom.cx.toFixed(0) + "px," + S.geom.cy.toFixed(0) + "px,0) rotate(" + (S.bearing * DEG).toFixed(2) + "deg)";
       seamEl.classList.add("is-live");
+      seamEl.style.opacity = "0.95";
     }
-    spawnCrumbs();
+    // 长廊必须**现在**就在缝后面：这一版缝里什么都不放，缝一开后面直接是海。
+    // 此刻布整块不动、缝宽还是 0，跳转本身看不见任何跳变；等分开了再跳，
+    // 就会在缝里闪一帧空背景 —— 那正是「乱的帧」。
+    if (!S.archiveJump && !NOJUMP) {
+      S.archiveJump = true;
+      if (hooks.openArchive) hooks.openArchive(true);
+    }
     document.body.classList.remove("is-cake-cursor");
-    // 布一裂开，布上的字和那道框就得跟着走：它们印在布上，不是浮在海面上。
+    // 布上的字和那道框跟着布一起走：它们印在布上，不是浮在海面上。
     document.body.classList.add("is-cutting");
-    // 切口先亮一会儿，再让整张幕布跟着开 —— 一刀是一件事，不是两件
-    // 立刻把长廊就位（instant），而不是边切边滚：切开时长廊必须已经在那儿，
-    // 否则布裂开了，观众看到的是一帧还在滑动的半成品。
-    // 揭开时机交给 update()：HOLD 之后裂布，CUT 走完才算 open。
+    // 往后全交给 update()：HOLD 里只有一道亮缝（布纹丝不动），
+    // 然后 SLICE 让刀真的划过去，划完才让两半让开，CUT 走完才算 open。
   }
 
   /* ---------- 缝合：回封面时台布从切口缝回去 ---------- */
@@ -576,7 +623,15 @@
     S.finished = false;
     S.archiveJump = false;
     gateEl.classList.remove("is-cut");
-    if (seamEl) seamEl.classList.remove("is-live");
+    gateEl.classList.remove("is-sliced");
+    S.sliceFrom = null;
+    S.sliced = false;
+    S.crumbed = false;
+    setSlit(0);
+    if (seamEl) {
+      seamEl.classList.remove("is-live");
+      seamEl.style.opacity = "0";
+    }
   }
 
   /* ---------- 事件 ---------- */
@@ -691,35 +746,50 @@
     // 再把 --gate 算进来，揭开那一帧 gate 就是 1，布会当场飞到底 —— 又成了「太快」。
     var eff = S.phase === "cut" || S.phase === "open" ? easeInOut(S.cut) : S.cut;
     gateEl.style.setProperty("--cut", eff.toFixed(4));
-    // 一刀是两件事：先劈开（裂缝里露出切面），再下潜（镜头钻进裂口）。
-    // 劈开用 easeInOut —— 两头慢中间快，像被掰开的；下潜是纯加速，越到后面越快。
+    // 一刀是三件事：刀先真的划过（SLICE 那一段），两半才让开（缝里直接是海），
+    // 镜头随后钻进这道缝。划过用 smoothstep：两头轻、中段快，像一刀划过去。
     var p = S.cut;
-    S.split = easeInOut(clamp((p - 0.02) / 0.44, 0, 1));
-    var splitB = easeInOut(clamp((p - 0.055) / 0.44, 0, 1));   // 另一半晚 30ms 起步
-    var dz = clamp((p - 0.28) / 0.66, 0, 1);
+    var sliceU = clamp(p / SLICE, 0, 1);
+    if (S.phase === "cut" && S.sliceFrom) {
+      var stroke = easeInOut(sliceU);
+      S.tip.x = S.sliceFrom.x + S.sliceDir.x * S.sliceLen * stroke;
+      S.tip.y = S.sliceFrom.y + S.sliceDir.y * S.sliceLen * stroke;
+      placeKnife();
+      if (seamEl) {
+        // 亮缝跟着刀尖长：元素左端钉在入口，scaleX = 已经划过的长度
+        seamEl.style.transform = "translate3d(" + S.sliceFrom.x.toFixed(1) + "px," +
+          S.sliceFrom.y.toFixed(1) + "px,0) rotate(" + (S.cutAngle * DEG).toFixed(2) + "deg)" +
+          " scaleX(" + Math.max(0.001, (stroke * S.sliceLen) / SEAM_W).toFixed(4) + ")";
+        seamEl.style.opacity = (sliceU < 1 ? 0.95 : clamp(1 - (p - SLICE) / 0.05, 0, 1)).toFixed(2);
+      }
+      // 碎屑在刀尖穿过圆心那一刻才崩：早了就成了「一落刀就炸」
+      if (!S.crumbed && stroke >= 0.5) { S.crumbed = true; spawnCrumbs(); }
+      if (sliceU >= 1 && !S.sliced) { S.sliced = true; gateEl.classList.add("is-sliced"); }
+    }
+    // 劈开要让刀先划完再起 —— 划到一半布就自己让开，那是「没切就开了」。
+    // 劈开用 easeInOut（两头慢中间快，像被掰开的），下潜是纯加速。
+    S.split = easeInOut(clamp((p - SLICE) / 0.42, 0, 1));
+    var splitB = easeInOut(clamp((p - SLICE - 0.03) / 0.42, 0, 1));   // 另一半晚 80ms 起步
+    var dz = clamp((p - 0.34) / 0.66, 0, 1);
     S.dive = clamp(dz * dz * (1.15 - 0.15 * dz), 0, 1);
-    // 缝只要开到「看得见那道暗」就够：再大两半就飞出画面了，那里还不到下潜的时候。
-    // 0.12 是从上一版的 0.17 收窄来的 —— 没有剖面要露，太宽就成了沟。
+    // 缝宽不是猜的：半块在 .cake-stage 里沿法线位移 (gap + dive*220)，而 .cake-stage
+    // 自己放大 (1 + dive*2.25)，屏幕上就是 (gap + dive*220)*(1 + dive*2.25)；
+    // 布只放大 (1 + dive*0.5)，折回布自己的坐标再挖洞，两条边才对得上。
     var gapMax = Math.min((S.cakeSize || 360) * 0.12, 64);
     gateEl.style.setProperty("--split", S.split.toFixed(4));
     gateEl.style.setProperty("--gap", (S.split * gapMax).toFixed(1));
     gateEl.style.setProperty("--gapb", (splitB * gapMax).toFixed(1));
     gateEl.style.setProperty("--dive", S.dive.toFixed(4));
+    var gapNow = Math.max(S.split, splitB) * gapMax;
+    // +6：缝要比两半让开的距离再宽一点点，它的边才压在蛋糕身下面 ——
+    // 两半各自还有 1.3°/1.8° 的歪，正正好等宽会在盘沿露出布丝。
+    setSlit(((gapNow + S.dive * 220) * (1 + S.dive * 2.25)) / (1 + S.dive * 0.5) + 6);
     // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
     // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
     var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
     gateEl.style.setProperty("--hole", (hz * hz).toFixed(4));
     gateEl.classList.toggle("is-diving", S.dive > 0.002);
     gateEl.style.setProperty("--fade", clamp((S.dive - 0.5) / 0.5, 0, 1).toFixed(4));
-    // 那道亮缝是一瞬间的事：它只负责「刀切进来」这一下
-    if (seamEl) seamEl.style.opacity = clamp(1 - S.cut * 7, 0, 1).toFixed(2);
-    // 洞里必须有海。归档案在页面下面，不跳到那儿，洞口就只是一块空背景 ——
-    // 所以在洞还小的时候（dive 0.45）就把长廊瞬移到位，剩下半个下潜
-    // 是隔着越来越大的洞看真实的海。此时 --gate 还锁着 0，整层不会提前淡出。
-    if (S.dive > 0.45 && !S.archiveJump && !NOJUMP) {
-      S.archiveJump = true;
-      if (hooks.openArchive) hooks.openArchive(true);
-    }
     // 门开完了、--gate 也爬上来了，这时候封面那套字才允许回来（否则会闪一下）
     if (S.phase === "open" && !S.finished && g > 0.6) {
       S.finished = true;

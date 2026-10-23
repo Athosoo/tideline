@@ -1573,6 +1573,11 @@ function openArchive(instant) {
     top: target,
     behavior: instant || REDUCED_MOTION.matches ? "auto" : "smooth",
   });
+  // 瞬移之后必须**这一帧**就把相机和 --gate 推到位：animate() 里
+  // updateScrollState 跑在 CakeGate.update 之前，瞬移又是 CakeGate 发起的，
+  // 不补这一下，海就会拿跳转前的旧相机画一帧 —— 那一帧就是「切开之后那张
+  // 不知道啥」。dt 传 0：只做对齐，不做任何阻尼推进。
+  if (instant) updateScrollState(0);
 }
 
 function returnToCover() {

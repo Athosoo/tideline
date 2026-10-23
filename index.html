@@ -203,6 +203,19 @@
 
   <section class="intro" id="intro" aria-label="封面：切一刀，进入明信片长廊">
     <div class="cake-gate" id="cakeGate" aria-hidden="true">
+      <!-- 切口就是台布自己身上的一道缝：这个 clipPath 给 .cloth 挖洞（url(#clothSlit)）。
+           clipPathUnits=userSpaceOnUse → 里面写的就是视口 CSS 像素，JS 每帧只改那一条
+           path 的 d。别给它 display:none —— Chrome 对藏在 display:none 里的
+           clipPath 引用会失效（不报错，就是不裁）。 -->
+      <svg class="gate-clip" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+          <clipPath id="clothSlit" clipPathUnits="userSpaceOnUse" clip-rule="evenodd">
+            <!-- 初值是「一整块布」：首帧还没跑 js 之前，这块 9999 的方框就是满屏，
+                 写成小方块会让封面在装载的那一帧被裁成一个点。 -->
+            <path id="clothSlitPath" clip-rule="evenodd" d="M0 0H9999V9999H0Z"></path>
+          </clipPath>
+        </defs>
+      </svg>
       <div class="cloth" id="clothWrap">
         <div class="cloth-weave"></div>
         <div class="cloth-slub"></div>
@@ -294,7 +307,6 @@
           </svg>
           <div class="cake-candles" id="candles"></div>
         </div>
-        <div class="cut-gap" id="cutGap" aria-hidden="true"></div>
       </div>
 
       <div class="knife" id="knife">

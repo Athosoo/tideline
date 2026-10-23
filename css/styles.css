@@ -2817,9 +2817,14 @@ html.diag-ghosts body.is-holding .postcard-slot:not(.is-lifted) {
   opacity: 0;
 }
 
-/* 这一刀落下，刀就完成了它的事：不留在揭开的画面上 */
-.cake-gate.is-cut .knife,
+/* 刀是真的从蛋糕上划过去的（js 的 SLICE 那一段），所以它不能一落刀就消失：
+   is-cut 只撤掉罗盘虚线和那支胖指针，刀身要等刀尖越过盘沿（is-sliced）才淡出。 */
 .cake-gate.is-cut .knife-bearing {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.cake-gate.is-sliced .knife {
   opacity: 0;
   transition: opacity 0.22s ease;
 }
@@ -2849,11 +2854,26 @@ body.is-cake-cursor .cursor {
   opacity: 0;
 }
 
+/* clipPath 的容器：0×0、不出血，只用来挂 #clothSlit 给 .cloth 挖洞。
+   不能 display:none（Chrome 会静默不裁）。 */
+.gate-clip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* ── 布 ─────────────────────────────────────────────────────────────────── */
 .cloth {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  /* 切口：布自己身上那条缝（evenodd 挖洞，宽窄由 js 按两半让开的距离写进来）。
+     clip 作用在布自己的坐标系里，所以布整体放大时缝跟着一起放大。 */
+  clip-path: url(#clothSlit);
   background:
     radial-gradient(ellipse 92% 78% at 50% 44%, #fdf8ec 0%, #f8efdd 42%, #eee0c6 100%),
     linear-gradient(158deg, #faf3e3 0%, #f2e6d0 58%, #e8d9be 100%);
@@ -3192,16 +3212,20 @@ body.is-cake-cursor .cursor {
 }
 
 /* ── 切开 ───────────────────────────────────────────────────────────────── */
+/* 亮缝：元素的左端钉在刀进入的那个点上，scaleX 跟着刀尖走 —— 它是一条
+   跟着刀长出来的亮线，不是提前画好的一整条。长度基准 SEAM_W=1000px。 */
 .cut-seam {
   position: absolute;
-  left: -1400px;
+  left: 0;
   top: -1px;
-  width: 2800px;
+  width: 1000px;
   height: 2px;
+  transform-origin: 0 0;
   opacity: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(255, 214, 160, 0) 0%, rgba(255, 231, 192, 0.9) 34%, rgba(255, 245, 226, 1) 50%, rgba(255, 231, 192, 0.9) 66%, rgba(255, 214, 160, 0) 100%);
+  background: linear-gradient(90deg, rgba(255, 214, 160, 0) 0%, rgba(255, 231, 192, 0.45) 44%, rgba(255, 245, 226, 0.95) 88%, rgba(255, 245, 226, 1) 100%);
   transition: opacity 0.12s linear;
+  will-change: transform, opacity;
 }
 
 .cut-seam.is-live {
@@ -3392,11 +3416,14 @@ body.is-cake-cursor .cursor {
   display: none;
 }
 
-/* ── 镜头：切蛋糕 → 钻进裂口（2026-10-22 用户拍板）─────────────────────────
+/* ── 镜头：切蛋糕 → 从缝里钻进长廊（2026-10-22 用户拍板，m00183）─────────
    撕幕布退场了：撕出来那两条数学直边正是被挑出的瑕疵，而且布一撕开，四周
    已经露出画廊，「从里面出来」的惊喜就没了。现在只发生一件事 ——
-   刀切开蛋糕，两半向外滑开（裂缝里是切面），镜头随即钻进那道裂口，
-   台布被这个洞吃掉：洞的外面还是布，洞里是活着的海。
+   刀真的从蛋糕上划过去（.cut-seam 跟着刀长出来），划完两半向外滑开，
+   而**两半之间什么都不放**：布自己身上也开着同一条缝（.cloth 的
+   clip-path: url(#clothSlit)，宽度由 js 每帧算进 #clothSlitPath），
+   缝后面就是已经瞬移就位的长廊 —— 切口里直接是海。
+   镜头随即钻进这道缝，最后那点残余的布由这个洞吃掉。
    JS 每帧把下面这几个量写上来：
      --split 劈开进度 / --gap 半块位移(px) / --gapb 另一半（错 30ms）
      --dive 下潜进度 / --hole 洞口半径 / --fade 近景淡出 / --cda 切口角度 */
@@ -3467,51 +3494,6 @@ body.is-cake-cursor .cursor {
     translate(-50%, -50%)
     translate3d(calc(var(--cnx) * (var(--gapb) + var(--dive) * 220) * -1px), calc(var(--cny) * (var(--gapb) + var(--dive) * 220) * -1px), 0)
     rotate(calc(var(--split) * -1.8deg));
-}
-
-/* 裂缝：两半之间那一道暗。里面什么都没有 —— 没有奶油、没有胚层、没有果酱。
-   2026-10-22 用户砍掉了那五层剖面（原话「蛋糕被切开里面不需要搞什么乱七八糟填充物」）：
-   切开一块蛋糕，从斜上方看见的是一道有深度的暗缝，不是一张蛋糕广告的剖面图。
-   这一层夹在台布和两个半块之间 —— 半块压它，它压布。 */
-.cut-gap {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: var(--cs);
-  height: var(--cs);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  /* mask 收到「蛋糕 + 盘子」那团轮廓里（蛋糕体 rx 34%，盘沿 41%）：不收的话
-     一条直带会从蛋糕侧面伸出去，横在布上。 */
-  -webkit-mask-image: radial-gradient(ellipse 41% 26% at 50% 48%, #000 0 52%, rgba(0, 0, 0, 0.6) 82%, rgba(0, 0, 0, 0) 100%);
-  mask-image: radial-gradient(ellipse 41% 26% at 50% 48%, #000 0 52%, rgba(0, 0, 0, 0.6) 82%, rgba(0, 0, 0, 0) 100%);
-  opacity: min(1, calc(var(--split) * 14));
-}
-
-/* 一条只有阴影的缝：长轴躺在切口方向上（rotate(--cda)），
-   厚度 = 两半让开的距离（两次 --gap + 下潜多推的 220px 各一次）。
-   两头收掉、中间最深 —— 缝的深浅是光进不去，不是里面塞了东西。
-   两条边那圈羽化是被半块压住的（.cut-gap 在它们下面），只负责让接缝不生硬。 */
-.cut-gap::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 100%;
-  height: calc((max(var(--gap), var(--gapb)) + var(--dive) * 220) * 2px + 10px);
-  transform: translateY(-50%) rotate(var(--cda));
-  background: linear-gradient(90deg,
-    rgba(32, 24, 16, 0) 0%,
-    rgba(32, 24, 16, 0.3) 6%,
-    rgba(30, 23, 15, 0.58) 16%,
-    rgba(26, 20, 13, 0.74) 34%,
-    rgba(22, 17, 11, 0.8) 50%,
-    rgba(26, 20, 13, 0.74) 66%,
-    rgba(30, 23, 15, 0.58) 84%,
-    rgba(32, 24, 16, 0.3) 94%,
-    rgba(32, 24, 16, 0) 100%);
-  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000 20%, #000 80%, rgba(0, 0, 0, 0) 100%);
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000 20%, #000 80%, rgba(0, 0, 0, 0) 100%);
 }
 
 /* 一刀的力：抖 180ms。用独立的 translate 属性，不抢子元素各自的 transform。 */
