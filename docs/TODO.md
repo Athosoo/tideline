@@ -686,8 +686,56 @@ scale(calc(1 + var(--dive) * 2.25))` + `--fade` 的近景模糊/淡出）→ 镜
 **为什么不是干脆不留缝**：切的 1.9s 里（`CUT = 2.6`，`split` 在 p 0.02–0.46 推开）两半背后是
 台布和烛光。严丝合缝地滑开只读得出「剪辑跳了一下」，读不出「切开了」。
 
+> **⚠️ 用户 m00183 又否掉了这条暗缝本身**（「直接进入到海洋长廊，就是不要加缝带」）：
+> 缝里连阴影也不要，切开就该看见海。见 §7.21。
+
 **怎么验**：本沙箱的 Chrome 起不来（`crash server failed to launch, self-terminating`；
 `--disable-crashpad`、`node _lab/tools/siteshot.mjs` 都失败），这一轮只有几何账 —— 缝厚
 `2*(split*gapMax + dive*220) + 10` px ≥ 两半间距 `2*(…)`，两半各压住 5px；mask 椭圆 `rx 41% /
 ry 26%` 覆盖蛋糕体（y 27%–68%）与盘沿。**观感要用户开页面看**：`?cake=cut&cutat=0.5`
 停在最看得出缝的中段。
+
+### 7.21 待办（用户 m00183，2026-10-22 深夜 · 未开工）
+
+用户原话：「记一下待办：切开蛋糕里面不要有东西，直接进入到海洋长廊，就是不要加缝带。然后衔接要自然，
+现在是切开后有一帧不知道啥，才进入长廊，很丑。还有切蛋糕的时候要有刀划过切蛋糕的动作呀」
+
+三条，按顺序就是三次改动，**第 1 条和第 2 条是同一次活的里外两面**（删了缝带，缝后面露出什么就成了
+硬问题），第 3 条独立。
+
+**① 缝里不放任何东西，切开直接是海**
+
+- 删 `.cut-gap`：`index.html:297` 的 `<div class="cut-gap" id="cutGap">`、`css/styles.css:3472-3514`
+  的整块、`js/cakegate.js:35`（`var cutGap = …`）与 `js/cakegate.js:429`（`insertBefore`）。
+- 删掉之后缝后面是**台布 + 烛光**：`split` 在 p 0.02–0.46 推开，两半最多让开
+  `2 * min(size * 0.12, 64)` ≈ 100px（`js/cakegate.js:703`），切开的 1.9s 里那一条是亮布 ——
+  这正是当初塞暗缝的理由（§7.20）。所以**必须先把长廊挪到缝后面**：
+  `js/cakegate.js:719-721` 的 `openArchive(true)`（现在在 `S.dive > 0.45` 才跳）要挪到裂开之前，
+  `S.split` 还没起来的那一段（p ≈ 0.02，`HOLD = 0.28s` 里跳完），缝一睁眼就是海。
+- 风险（§7.19 的老坑）：早跳曾经出过「布被画到屏幕下方」的坏帧 —— 跳的那一帧必须是
+  `.cake-gate` 整层还盖满屏、且 `--split` 仍为 0 的那一帧；跳完再让 `--split` 起来。
+
+**② 切开 → 长廊之间那一帧「不知道啥」：相机晚一帧**
+
+- 已定位：`js/app.js:2279-2290` 的 `animate()` 里 `updateScrollState(dt)` 跑在
+  `CakeGate.update(dt, gate)` **之前**；而 `openArchive(instant)`（`js/app.js:1567`）只做
+  `state.snapCamera = true` + `window.scrollTo({behavior:"auto"})`，`snapCamera` 要到
+  `updateScrollState` 里才消费（`js/app.js:1398-1399`）。所以跳发生在这一帧的相机更新之后 ——
+  正好是「页面已经跳到长廊、相机还停在封面」的一帧。同帧后半段的 `applySeaFrame()` /
+  `seaEngine.render()` 用的是旧相机 → 看见的就是那张对不上的画面。
+- 改法（择一，倾向 a）：
+  a) 在 hooks 里加 `snapNow`，`openArchive(true)` 之后同帧立刻跑一次 `updateScrollState(0)`，
+     让相机在海渲染之前对齐（海渲染在 `CakeGate.update` 之后，来得及）；
+  b) 把 `CakeGate.update` 挪到 `updateScrollState` 之前 —— 影响面大，先不动。
+- 验收：切完到长廊之间不再有任何一帧「既不是布也不是长廊」；`?cake=cut` 逐帧看不出来。
+
+**③ 刀要真的从蛋糕上划过去**
+
+- 现状：`placeKnife()`（`js/cakegate.js:455`）只把刀尖钉在指针上，`cut()` 之后刀直接
+  `opacity: 0`（`css/styles.css:2821-2825`）—— 没有一刀划过的动作。
+- 要做：`cut()` 起手先让刀沿切口方向（`--cda`）从盘外一头扫到另一头，约 0.4–0.5s，刀身随行进
+  从 `bearing` 角摆到切口角；`#cutSeam`（`index.html:314`）现在是
+  `opacity: clamp(1 - S.cut * 7)` 一闪就没（`js/cakegate.js:715`），改成**跟着刀尖生长**：缝的长度 =
+  刀已经走过的距离，刀走到哪缝开到哪。刀走完这一段才开始 `S.split`（把 `--split` 的起点从
+  p 0.02 推到刀程之后），这样「划开」和「裂开」是先后两件事，不再同时发生。
+- 顺带：`CUT = 2.6s` 要重排成「划 0.45s + 裂 1.6s + 下潜」，总时长不要比现在长。
