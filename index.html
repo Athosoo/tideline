@@ -233,6 +233,150 @@
           <g id="chartStars" fill="currentColor"></g>
         </svg>
 
+        <!-- 海图边注：罗盘、航线、比例尺。单独一层，不跟主海图一起吃中心遮罩，
+             所以角落里的东西才看得见。颜色用旧靛青，和暖米色的布分得开。 -->
+        <svg class="cloth-marginalia" viewBox="0 0 1440 900" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <g class="marg-route" stroke="currentColor" stroke-linecap="round">
+            <path d="M120 636 C260 600 340 560 470 500 S760 336 930 268 S1180 150 1330 86" stroke-width="1.1" stroke-dasharray="1 8" opacity=".5"/>
+          </g>
+          <g class="marg-route-mark" fill="currentColor" stroke="none" opacity=".45">
+            <circle cx="470" cy="500" r="2.2"/><circle cx="760" cy="370" r="1.8"/><circle cx="1040" cy="216" r="2.2"/>
+          </g>
+          <g class="marg-ship" transform="translate(930 268) rotate(-24)" fill="currentColor" stroke="none" opacity=".5">
+            <path d="M-11 5H11L6 12H-7Z"/><path d="M0 5V-9L9 -1H0Z" opacity=".85"/><path d="M-1 5V-9L-8 -1H-1Z" opacity=".55"/>
+          </g>
+          <g class="marg-rose" transform="translate(1128 182)" color="#3D5550" opacity=".62">
+            <circle r="96" stroke="currentColor" stroke-width=".9"/>
+            <circle r="88" stroke="currentColor" stroke-width=".45" stroke-dasharray="1 7" opacity=".7"/>
+            <g stroke="currentColor" stroke-width=".8">
+              <path d="M0 -88L10 -10L0 0L-10 -10Z"/><path d="M0 -88L10 -10L0 0L-10 -10Z" transform="rotate(90)"/>
+              <path d="M0 -88L10 -10L0 0L-10 -10Z" transform="rotate(180)"/><path d="M0 -88L10 -10L0 0L-10 -10Z" transform="rotate(270)"/>
+              <path d="M0 -58L8 -8L0 0L-8 -8Z" transform="rotate(45)"/><path d="M0 -58L8 -8L0 0L-8 -8Z" transform="rotate(135)"/>
+              <path d="M0 -58L8 -8L0 0L-8 -8Z" transform="rotate(225)"/><path d="M0 -58L8 -8L0 0L-8 -8Z" transform="rotate(315)"/>
+            </g>
+            <g fill="currentColor" stroke="none" opacity=".15">
+              <path d="M0 -88L0 0L-10 -10Z"/><path d="M0 -88L0 0L-10 -10Z" transform="rotate(90)"/>
+              <path d="M0 -88L0 0L-10 -10Z" transform="rotate(180)"/><path d="M0 -88L0 0L-10 -10Z" transform="rotate(270)"/>
+              <path d="M0 -58L0 0L-8 -8Z" transform="rotate(45)"/><path d="M0 -58L0 0L-8 -8Z" transform="rotate(135)"/>
+              <path d="M0 -58L0 0L-8 -8Z" transform="rotate(225)"/><path d="M0 -58L0 0L-8 -8Z" transform="rotate(315)"/>
+            </g>
+            <circle r="4" fill="currentColor" stroke="none" opacity=".55"/>
+            <path d="M0 -3L21 0L0 3Z" fill="#8C4A3C" stroke="none" opacity=".55" transform="rotate(-38)"/>
+          </g>
+          <g class="marg-scale" transform="translate(150 602)" color="#3D5550" opacity=".55">
+            <rect x="0" y="-4" width="37.5" height="8" fill="currentColor" stroke="none" opacity=".22"/>
+            <rect x="75" y="-4" width="37.5" height="8" fill="currentColor" stroke="none" opacity=".22"/>
+            <path d="M0 0H150M0 -5V5M37.5 -3V3M75 -5V5M112.5 -3V3M150 -5V5" stroke="currentColor" stroke-width=".8"/>
+          </g>
+        </svg>
+
+        <!-- 布的卷边：一道压线、一排针脚、一条旧靛青的织边 -->
+        <div class="cloth-hem" aria-hidden="true"></div>
+        <svg class="cloth-thread" viewBox="0 0 96 34" aria-hidden="true">
+          <path d="M2 26C20 8 34 32 50 16S76 28 94 8" stroke="#5C4A32" stroke-width="1" fill="none" opacity=".32"/>
+        </svg>
+
+        <!-- 桌上的东西：都是平铺的，和布一起缩放，切开时一起退场 -->
+        <div class="table-props" aria-hidden="true">
+          <div class="prop prop--botanical">
+            <svg viewBox="0 0 280 190" aria-hidden="true">
+              <g fill="none" stroke="#7C8368" stroke-linecap="round">
+                <path d="M22 178C60 140 96 104 150 62" stroke-width="1.6"/>
+                <path d="M46 172C78 150 112 132 176 112" stroke-width="1.2"/>
+                <path d="M64 180C96 164 130 156 206 156" stroke-width="1"/>
+              </g>
+              <g fill="#7C8368" opacity=".68">
+                <ellipse cx="58" cy="146" rx="13" ry="3.6" transform="rotate(-38 58 146)"/>
+                <ellipse cx="82" cy="126" rx="12" ry="3.4" transform="rotate(-42 82 126)"/>
+                <ellipse cx="104" cy="110" rx="11" ry="3.2" transform="rotate(-36 104 110)"/>
+                <ellipse cx="92" cy="154" rx="12" ry="3.4" transform="rotate(-18 92 154)"/>
+                <ellipse cx="126" cy="140" rx="11" ry="3.2" transform="rotate(-14 126 140)"/>
+                <ellipse cx="150" cy="162" rx="12" ry="3.2" transform="rotate(-8 150 162)"/>
+                <ellipse cx="174" cy="150" rx="10" ry="3" transform="rotate(-4 174 150)"/>
+              </g>
+              <g fill="#8F7F9A" opacity=".8">
+                <circle cx="150" cy="62" r="2.2"/><circle cx="145" cy="55" r="1.8"/><circle cx="156" cy="54" r="1.8"/>
+                <circle cx="141" cy="47" r="1.5"/><circle cx="151" cy="46" r="1.6"/><circle cx="160" cy="47" r="1.4"/>
+                <circle cx="176" cy="112" r="2"/><circle cx="171" cy="105" r="1.6"/><circle cx="182" cy="105" r="1.5"/>
+                <circle cx="168" cy="98" r="1.3"/><circle cx="177" cy="97" r="1.4"/>
+                <circle cx="206" cy="156" r="1.8"/><circle cx="201" cy="149" r="1.4"/><circle cx="212" cy="149" r="1.3"/>
+              </g>
+              <g fill="#8F7F9A" opacity=".45">
+                <circle cx="116" cy="170" r="1.1"/><circle cx="128" cy="176" r=".9"/><circle cx="142" cy="172" r="1"/>
+                <circle cx="188" cy="170" r="1"/><circle cx="196" cy="178" r=".8"/>
+              </g>
+              <rect x="30" y="150" width="48" height="14" rx="1" transform="rotate(-32 54 157)" fill="#F2E7C9" opacity=".38"/>
+            </svg>
+          </div>
+
+          <div class="prop prop--fork">
+            <svg viewBox="0 0 360 72" aria-hidden="true">
+              <defs>
+                <linearGradient id="forkSteel" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#E4E0D2"/><stop offset="28%" stop-color="#C2C7BC"/>
+                  <stop offset="58%" stop-color="#92998F"/><stop offset="82%" stop-color="#B4BAAF"/>
+                  <stop offset="100%" stop-color="#757C74"/>
+                </linearGradient>
+                <mask id="forkSlits" maskUnits="userSpaceOnUse" x="240" y="0" width="120" height="72">
+                  <rect x="240" y="0" width="120" height="72" fill="#fff"/>
+                  <path d="M295 29H354M295 36H354M295 43H354" stroke="#000" stroke-width="4.5"/>
+                </mask>
+              </defs>
+              <!-- 柄：尾端略粗，向叉头收；和叉头是一整块钢，不靠箍分开 -->
+              <path d="M8 29Q8 23 16 23L206 21L222 24L222 48L206 51L16 49Q8 49 8 43Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9"/>
+              <path d="M8 29Q8 23 16 23L24 23L24 49L16 49Q8 49 8 43Z" fill="#B9BFB5" stroke="#565C55" stroke-width=".8"/>
+              <rect x="204" y="21" width="4" height="30" rx="2" fill="#A7AEA5" opacity=".45"/>
+              <rect x="212" y="21" width="3" height="30" rx="1.5" fill="#C6CCC2" opacity=".4"/>
+              <path d="M222 24L246 22L252 28L252 44L246 50L222 48Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9"/>
+              <path d="M250 18Q250 14 257 14L345 22Q351 23 351 28L351 44Q351 49 345 50L257 58Q250 58 250 54Z" fill="url(#forkSteel)" stroke="#565C55" stroke-width=".9" mask="url(#forkSlits)"/>
+              <path d="M256 19L342 26" stroke="#FFFFFF" stroke-width=".8" opacity=".42" mask="url(#forkSlits)"/>
+              <path d="M22 30L202 28" stroke="#FFFFFF" stroke-width="1" opacity=".5"/>
+              <path d="M20 43L204 45" stroke="#6B726A" stroke-width=".5" opacity=".38"/>
+            </svg>
+          </div>
+
+          <div class="prop prop--postcard">
+            <div class="postcard">
+              <span class="postcard-divider"></span>
+              <span class="postcard-line postcard-line--a"></span>
+              <span class="postcard-line postcard-line--b"></span>
+              <span class="postcard-line postcard-line--c"></span>
+              <span class="postcard-line postcard-line--d"></span>
+              <span class="postcard-line postcard-line--e"></span>
+              <span class="postcard-stamp">
+                <svg viewBox="0 0 30 34" aria-hidden="true">
+                  <rect x=".5" y=".5" width="29" height="33" fill="#F3E6CB" stroke="#8C6E4A" stroke-opacity=".55" stroke-dasharray="2 2"/>
+                  <g fill="#3D5550" opacity=".8">
+                    <rect x="4" y="18" width="3" height="7"/><rect x="8" y="14" width="3" height="11"/>
+                    <rect x="12" y="10" width="3" height="15"/><rect x="16" y="6" width="3" height="19"/>
+                    <rect x="20" y="12" width="3" height="13"/><rect x="24" y="16" width="2" height="9"/>
+                  </g>
+                  <path d="M3 28Q8 24 13 28T23 28" stroke="#3D5550" stroke-width="1" fill="none" opacity=".5"/>
+                </svg>
+              </span>
+              <span class="postcard-postmark">
+                <svg viewBox="0 0 64 44" aria-hidden="true">
+                  <circle cx="20" cy="20" r="13" fill="none" stroke="#8C4A3C" stroke-width="1"/>
+                  <circle cx="20" cy="20" r="10" fill="none" stroke="#8C4A3C" stroke-width=".6" stroke-dasharray="1 2"/>
+                  <path d="M33 16H60M33 21H58M33 26H60" stroke="#8C4A3C" stroke-width="1" opacity=".65"/>
+                </svg>
+              </span>
+              <span class="postcard-seal"></span>
+            </div>
+          </div>
+
+          <div class="prop prop--sugar">
+            <i style="left:26%;top:72%;width:4px;height:4px"></i>
+            <i style="left:29%;top:77%;width:3px;height:3px"></i>
+            <i style="left:34%;top:71%;width:2px;height:2px"></i>
+            <i style="left:37%;top:79%;width:3px;height:2px"></i>
+            <i style="left:74%;top:71%;width:4px;height:4px"></i>
+            <i style="left:77%;top:77%;width:2px;height:2px"></i>
+            <i style="left:79%;top:73%;width:3px;height:3px"></i>
+            <i style="left:72%;top:80%;width:2px;height:2px"></i>
+          </div>
+        </div>
+
       </div>
       <div class="cake-stage" id="cakeStage">
         <div class="cake">
@@ -283,6 +427,7 @@
             <ellipse class="cake-plate-shade" cx="240" cy="283" rx="196" ry="66" fill="url(#plateShade)"/>
             <ellipse class="cake-plate-edge" cx="240" cy="283" rx="196" ry="66" stroke="#BC9E74" stroke-width="1.1" opacity=".6"/>
             <ellipse class="cake-plate-dash" cx="240" cy="283" rx="182" ry="60" stroke="#CEB48F" stroke-width=".8" opacity=".45" stroke-dasharray="1 6"/>
+            <ellipse class="cake-plate-gold" cx="240" cy="283" rx="190" ry="63" fill="none" stroke="#C6A15B" stroke-width="1.2" opacity=".72"/>
 
             <!-- 蛋糕：侧壁圆柱 + 抹面竖纹（俯视时这条壁被压成一条线，js 每帧改 d） -->
             <ellipse class="cake-foot" cx="240" cy="292" rx="178" ry="50" fill="#8A6B42" opacity=".13"/>
@@ -309,13 +454,35 @@
         </div>
       </div>
 
+      <!-- 空气里的尘埃：只给静物一点活气，不参与开屏序列 -->
+      <div class="air" aria-hidden="true">
+        <i style="left:18%;top:28%;--dur:22s;--dx:16px;--dy:-26px;--delay:-4s"></i>
+        <i style="left:30%;top:62%;--dur:26s;--dx:-12px;--dy:-34px;--delay:-11s"></i>
+        <i style="left:44%;top:18%;--dur:19s;--dx:20px;--dy:-20px;--delay:-7s"></i>
+        <i style="left:58%;top:72%;--dur:24s;--dx:-18px;--dy:-30px;--delay:-2s"></i>
+        <i style="left:72%;top:24%;--dur:21s;--dx:12px;--dy:-24px;--delay:-15s"></i>
+        <i style="left:82%;top:58%;--dur:27s;--dx:-22px;--dy:-36px;--delay:-9s"></i>
+        <i style="left:12%;top:54%;--dur:23s;--dx:18px;--dy:-22px;--delay:-18s"></i>
+        <i style="left:88%;top:38%;--dur:20s;--dx:-10px;--dy:-28px;--delay:-6s"></i>
+      </div>
+
       <div class="knife" id="knife">
         <svg class="knife-art" viewBox="0 0 344 54" width="344" height="54" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="knifeSteel" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#FCFDF9"/>
+              <stop offset="40%" stop-color="#DFE4DC"/>
+              <stop offset="76%" stop-color="#B6BDB6"/>
+              <stop offset="100%" stop-color="#E9EDE5"/>
+            </linearGradient>
+          </defs>
           <ellipse class="knife-shadow" cx="176" cy="46" rx="150" ry="6" fill="#2A2C29" opacity=".16"/>
-          <path class="knife-blade" d="M342 23.5 L152 17.5 Q142 17.5 142 27 Q142 36.5 152 36.5 L342 30.5 Z" fill="#F2F4F0" stroke="#8C918B" stroke-width=".7"/>
+          <path class="knife-blade" d="M342 23.5 L152 17.5 Q142 17.5 142 27 Q142 36.5 152 36.5 L342 30.5 Z" fill="url(#knifeSteel)" stroke="#8C918B" stroke-width=".7"/>
           <path class="knife-edge" d="M342 30.5 L152 36.5 Q147 36.5 145 33" stroke="#FFFFFF" stroke-width=".9" opacity=".9" stroke-linecap="round"/>
           <path class="knife-spine" d="M338 22.5 L156 17.5" stroke="#C7CCC4" stroke-width=".8" stroke-linecap="round"/>
           <path d="M150 15.5 L138 15.5 Q132 15.5 132 27 Q132 38.5 138 38.5 L150 38.5 Z" fill="#B9BFB6" stroke="#8C918B" stroke-width=".6"/>
+          <rect x="133" y="16.5" width="3" height="21" rx="1.5" fill="#C6A15B" opacity=".78"/>
+          <path d="M303 24v6M300 26h6M301 30h4" stroke="#A9B0A8" stroke-width=".6" opacity=".65"/>
           <rect x="18" y="18.5" width="116" height="17" rx="8.5" fill="#2A2C29" opacity=".88"/>
           <circle cx="44" cy="27" r="2.1" fill="#E6E1D4"/>
           <circle cx="76" cy="27" r="2.1" fill="#E6E1D4"/>

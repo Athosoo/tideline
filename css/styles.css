@@ -3583,3 +3583,240 @@ body.is-cake-cursor .cursor {
     repeating-linear-gradient(45deg, rgba(96, 76, 48, 0.07) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(78deg, rgba(88, 70, 46, 0.06) 0 1px, transparent 1px 7px);
 }
+
+/* ── 开屏静物（第七轮，2026-10-23）────────────────────────────────────────
+   蛋糕还是主角，其余都是「桌上的东西」：布边、卷边、海图边角、一枝海薰衣草、
+   一把叉、一张明信片、几粒糖。全部平铺在布上，跟着布一起缩放、一起被切口裁开；
+   切开时整层淡出，不抢下潜。位置都避开盘子的投影。                        */
+.cloth-marginalia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: #3D5550;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* 布的卷边：不是在布上画一条线，是布自己折过去的一道边 */
+.cloth-hem {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: calc(18vh + 6px);
+  height: 14px;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      rgba(90, 70, 45, 0) 0%,
+      rgba(90, 70, 45, 0.1) 34%,
+      rgba(255, 249, 235, 0.38) 64%,
+      rgba(90, 70, 45, 0) 100%);
+  border-top: 0;
+  box-shadow:
+    0 -8px 18px rgba(90, 70, 45, 0.05),
+    0 10px 20px rgba(90, 70, 45, 0.07);
+}
+.cloth-hem::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #3D5550 0 2px, transparent 2px 9px);
+  opacity: 0.18;
+}
+
+.cloth-thread {
+  position: absolute;
+  left: 4%;
+  bottom: calc(18vh + 10px);
+  width: 96px;
+  height: auto;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.table-props {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.25s linear;
+}
+.cake-gate.is-cut .table-props { opacity: 0; }
+
+.prop {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+}
+.prop svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.prop--botanical {
+  left: 3.5%;
+  top: 12%;
+  width: clamp(150px, 20vw, 270px);
+  transform: rotate(-16deg);
+  filter: drop-shadow(-4px 6px 6px rgba(60, 45, 28, 0.18)) contrast(1.06) brightness(0.97);
+}
+
+.prop--fork {
+  left: 6.5%;
+  top: 65%;
+  width: clamp(180px, 18vw, 245px);
+  transform: rotate(15deg);
+  filter: drop-shadow(-6px 10px 6px rgba(40, 30, 18, 0.35)) contrast(1.06);
+}
+
+.prop--postcard {
+  right: 5%;
+  top: 61%;
+  width: clamp(150px, 16vw, 205px);
+  transform: rotate(-7deg);
+  filter: drop-shadow(7px 9px 11px rgba(60, 45, 28, 0.22)) brightness(0.96) saturate(0.95);
+}
+
+.prop--sugar { inset: 0; }
+.prop--sugar i {
+  position: absolute;
+  display: block;
+  background: #FBF3DF;
+  border-radius: 1px;
+  box-shadow: 0 0 0 0.5px rgba(120, 95, 60, 0.16);
+}
+.prop--sugar i:nth-child(3n) { background: #F6E7CC; }
+.prop--sugar i:nth-child(4n) { background: #FFFDF4; }
+
+/* 明信片：背面朝上，邮票、邮戳、横线、火漆都在 */
+.postcard {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.55;
+  overflow: hidden;
+  border: 1px solid rgba(120, 95, 60, 0.22);
+  border-radius: 2px;
+  background: linear-gradient(150deg, #FBF3DF 0%, #F4E6CB 58%, #EEDDBF 100%);
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 255, 255, 0.2),
+    inset 0 0 26px rgba(140, 110, 70, 0.16);
+}
+.postcard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(0deg, rgba(120, 95, 60, 0.035) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+.postcard-divider {
+  position: absolute;
+  left: 46%;
+  top: 8%;
+  bottom: 8%;
+  width: 1px;
+  background: rgba(120, 95, 60, 0.24);
+}
+.postcard-line {
+  position: absolute;
+  left: 8%;
+  height: 1px;
+  background: rgba(90, 75, 55, 0.26);
+  transform: rotate(-1deg);
+}
+.postcard-line--a { top: 56%; width: 33%; }
+.postcard-line--b { top: 64%; width: 36%; }
+.postcard-line--c { top: 72%; width: 32%; }
+.postcard-line--d { top: 80%; width: 35%; }
+.postcard-line--e { top: 88%; width: 27%; }
+
+.postcard-stamp {
+  position: absolute;
+  right: 7%;
+  top: 7%;
+  width: 24%;
+  transform: rotate(1.5deg);
+  filter: drop-shadow(0 1px 1px rgba(90, 60, 35, 0.18));
+}
+.postcard-postmark {
+  position: absolute;
+  right: 18%;
+  top: 9%;
+  width: 38%;
+  transform: rotate(-12deg);
+  opacity: 0.72;
+}
+.postcard-seal {
+  position: absolute;
+  left: 9%;
+  bottom: 10%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #B5634F 0%, #8C4A3C 46%, #6E2E26 100%);
+  box-shadow:
+    0 1px 2px rgba(60, 30, 20, 0.35),
+    inset 0 0 2px rgba(255, 200, 160, 0.5);
+}
+
+/* 空气里的尘埃：很慢、很淡，只负责「这张桌子是活的」 */
+.air {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+.air i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #FFE9BF;
+  box-shadow: 0 0 5px rgba(255, 214, 150, 0.6);
+  opacity: 0;
+  animation: airFloat var(--dur, 22s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes airFloat {
+  0%   { opacity: 0; transform: translate3d(0, 10px, 0); }
+  16%  { opacity: 0.5; }
+  62%  { opacity: 0.28; }
+  100% { opacity: 0; transform: translate3d(var(--dx, 12px), var(--dy, -28px), 0); }
+}
+
+/* 四角压冷一点：暖中心之外是海的颜色，不是一张灰卡纸 */
+.cloth-vignette {
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(20, 34, 34, 0) 34%,
+      rgba(22, 38, 38, 0.1) 58%,
+      rgba(18, 32, 32, 0.4) 82%,
+      rgba(12, 22, 24, 0.7) 100%),
+    linear-gradient(180deg,
+      rgba(16, 28, 28, 0.28) 0%,
+      rgba(16, 28, 28, 0) 16%,
+      rgba(16, 28, 28, 0) 76%,
+      rgba(12, 22, 24, 0.34) 100%);
+}
+
+@media (max-width: 680px) {
+  .prop--fork,
+  .prop--postcard { display: none; }
+  .prop--botanical {
+    left: 2%;
+    top: 15%;
+    width: 44vw;
+    opacity: 0.9;
+  }
+  .cloth-hem { bottom: calc(14vh + 6px); }
+  .cloth-thread { bottom: calc(14vh + 10px); }
+  .cloth-marginalia { opacity: 0.42; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .air { display: none; }
+}
+
+/* 烛光收一点，布纹才不会被洗白；中心留给蛋糕，不留给一块过曝的白 */
+.cloth-light { opacity: 0.86; }

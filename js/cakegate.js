@@ -542,6 +542,7 @@
       plateShade: root.querySelector(".cake-plate-shade"),
       plateEdge: root.querySelector(".cake-plate-edge"),
       plateDash: root.querySelector(".cake-plate-dash"),
+      plateGold: root.querySelector(".cake-plate-gold"),
       foot: root.querySelector(".cake-foot"),
       wall: root.querySelector(".cake-wall"),
       wallShade: root.querySelector(".cake-wall-shade"),
@@ -577,6 +578,7 @@
       setEllipse(tr.plateShade, 240, 283 - 43 * u, 196, 66 + 130 * u);
       setEllipse(tr.plateEdge, 240, 283 - 43 * u, 196, 66 + 130 * u);
       setEllipse(tr.plateDash, 240, 283 - 43 * u, 182, 60 + 122 * u);
+      setEllipse(tr.plateGold, 240, 283 - 43 * u, 190, 63 + 127 * u);
       setEllipse(tr.foot, 240, 292 - 52 * u, 178, 50 + 128 * u);
       if (tr.wall) tr.wall.setAttribute("d", wallD);
       if (tr.wallShade) tr.wallShade.setAttribute("d", wallD);
