@@ -81,6 +81,8 @@
     zooming: false,
     cam: 1,
     clothCam: 1,
+    // 布身上有没有缺口（= 缝是否闭着）。true 时 .cloth 不挂 clip-path。
+    whole: true,
     warm: false,        // 长廊是否已经在布后面预热好
     knifeStarted: false,
     cutQueued: false,
@@ -182,6 +184,16 @@
     var key = W + "x" + H + "|" + S.cutAngle.toFixed(4) + "|" + halfLocal.toFixed(1);
     if (key === slitKey) return;
     slitKey = key;
+    /* 缝闭着的时候那块布身上没有任何缺口，clip-path 却还挂着一条 SVG 引用：
+       带着 SVG 引用的层缓存不住，布底下那十几层渐变、布纹、海图、光斑每帧都
+       得重画一遍（实测 fly 段 65ms → 44ms 就是从这儿省下来的）。所以缝一闭上
+       就把 clip 摘掉，布恢复成「一整块」—— 视觉上零差别，因为闭着的缝本来就
+       是整块布的形状（setSlit 里那个 outer 矩形就等于布的盒子）。 */
+    var whole = !(halfLocal > 0.5);
+    if (whole !== S.whole) {
+      S.whole = whole;
+      if (clothWrap) clothWrap.classList.toggle("is-whole", whole);
+    }
     if (!slitPath) return;
     var outer = "M0 0H" + W + "V" + H + "H0Z";
     if (!(halfLocal > 0.5)) { slitPath.setAttribute("d", outer); return; }

@@ -2886,6 +2886,13 @@ body.is-cake-cursor .cursor {
   isolation: isolate;
 }
 
+/* 缝闭着的时候（没动刀、或缝已经缝回去了）布身上本来就没有缺口，那条
+   clip-path 只是一条空引用 —— 而带着 SVG 引用的层缓存不住，布底下十几层
+   渐变/布纹/海图每帧都得重画。is-whole 由 cakegate 的 setSlit 维护。 */
+.cloth.is-whole {
+  clip-path: none;
+}
+
 .cloth.is-source {
   visibility: hidden;
 }
