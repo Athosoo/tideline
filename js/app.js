@@ -169,6 +169,9 @@ const DIAG = Object.assign(window.__tidelineDiag, {
   /* ?ghosts=1 把「聚焦时其它明信片仍留在画面上」的旧行为放回来，用来在真机上
      确认那团影子到底是卡还是合成器残影。默认关，不带参数时没有任何影响。 */
   ghosts: /[?&]ghosts=1/.test(window.location.search),
+  /* 开屏二分用：?noparkcorr=1 关掉「布盖着时不跑长廊管线」那条捷径，
+     用来对照量它的收益（默认不带参数时行为就是开着捷径）。 */
+  noparkcorr: /[?&]noparkcorr=1/.test(window.location.search),
 });
 if (DIAG.ghosts) document.documentElement.classList.add("diag-ghosts");
 
@@ -370,6 +373,8 @@ const state = {
   waterTime: 0,
   lastFrame: 0,
   introHidden: false,
+  // 布后面那套长廊管线这一帧要不要跑（true = 跑一次，跑完自己清零）
+  corridorDirty: true,
   corridorFloor: 0,
   lastScrollY: 0,
   returningToCover: false,
@@ -1591,6 +1596,7 @@ function openArchive(instant) {
   if (state.focusOpen) return;
   // 瞬移进长廊时让相机同帧对齐（见 updateScrollState 里的 direct）
   if (instant) state.snapCamera = true;
+  state.corridorDirty = true;
   const target = state.introPx * 1.02
   window.scrollTo({
     top: target,
@@ -2165,6 +2171,7 @@ function handleResize() {
     }
 
     oceanBoxStale = true;
+    state.corridorDirty = true;
     if (seaEngine) {
       const rect = oceanRect();
       seaEngine.resize(Math.round(rect.width || window.innerWidth), Math.round(rect.height || window.innerHeight));
@@ -2314,14 +2321,32 @@ function animate(now) {
   const dt = clamp((now - state.lastFrame) / 1000, 0.001, 0.05);
   state.lastFrame = now;
 
-  updateScrollState(dt);
+  /* 布还没裂开的时候，观众看到的是那块不透明的亚麻布：长廊、明信片、
+     太阳、海面全在布后面。这 1.3 秒（飞刀 + 瞄准）里每帧照算一遍滚动阻尼、
+     七张明信片的变换和整个 WebGPU 海面，是在给看不见的像素付账 —— 而它恰好
+     是整段开屏里最该稳的一段。布一让开（isSealed 变假）立刻恢复，一帧不差：
+     openArchive 瞬移那次会先把 corridorDirty 立起来，保证处理到位再停。 */
+  const sealed = state.coverLocked && !state.cakeCutting &&
+    (!window.CakeGate || CakeGate.isSealed());
+  const parkCorridor = sealed && !DIAG.noparkcorr;
+  const corridorLive = !parkCorridor || state.corridorDirty === true;
+  if (corridorLive) {
+    state.corridorDirty = false;
+    updateScrollState(dt);
+  }
   if (window.CakeGate) CakeGate.update(dt, state.gate);
-  applyCardTransforms(now, dt);
+  if (corridorLive) applyCardTransforms(now, dt);
   updateCursor(dt);
   if (window.Weather) Weather.update(dt, now);
 
   // Hold the sea and the cards still while a postcard is in hand.
   // Keeping a single accumulated clock avoids a phase jump when it resumes.
+  //
+  // 海面这边一分钱都不省：把画布停掉能让合成器把那几层全屏的布纹一起丢进
+  // 睡眠，等布裂开再一起醒，头几帧要重算整张表面 —— 实测卡在缝张开那一刻，
+  // 480ms 一帧，连着两三帧。相比之下停掉海面省下的那点根本不够赔。
+  // （对照实验：海面照画时 cut 段 avg 30.6ms，把海面按 5fps 热着是 37.9ms，
+  // 全停是 48–54ms 并且带 480–630ms 的尖峰。）
   if (seaEngine) {
     if (!REDUCED_MOTION.matches) state.waterTime += dt;
     const seaInterval = quality.waterFps > 0 ? 1 / quality.waterFps : 0;

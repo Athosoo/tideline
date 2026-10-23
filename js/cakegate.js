@@ -1124,6 +1124,12 @@
     cut: cut,
     stitch: stitch,
     isActive: function () { return S.mounted === true && S.phase !== "open"; },
+    /* 布是否还严丝合缝地盖着整块屏幕：没有缝、没在裂开、也没在下潜。
+       app.js 拿它判断「布后面那些根本看不见的东西这一帧还要不要算」。 */
+    isSealed: function () {
+      return S.mounted === true && S.cut <= 0.001 && S.cutTarget <= 0.001 &&
+        S.dive <= 0.001 && S.split <= 0.001;
+    },
     debug: function () {
       return {
         phase: S.phase,
