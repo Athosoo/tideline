@@ -129,7 +129,20 @@
     `timeLabel()` / `conditionLabel()` / `env.sliders` / `env.weatherBar` 一并消失，
     `js/weather.js` 少 60 行、CSS 少 98 行；
     ③**治「一下一下往前跳」**：时针改用真实经过时间 `clockDt`（不吃 `app.js` 夹在 0.05 s 的
-    `dt`），`.celestial` 加 `left/top 0.28s linear` 过渡，拖动/快进时关掉。
+    `dt`）。当时给的 `left/top 0.28s linear` 过渡只把整像素吸附抹成「一顿一顿」，2026-10-24
+    已换成 `translate`（见下条）。
+  - 2026-10-24（用户第四条反馈的两个问题）：
+    ①**删掉夜间海面上那条硬贴的三角形月光**：`.moon-path` 整层没了（`conic-gradient` 的 ±24°
+    楔形 + 贴底反光），`index.html` / `css/styles.css` / `js/weather.js` 里的
+    `--moon-path`、`--moon-path-near-x` 一并消失。用户原话「我要的是海面真正响应，做不到就不做啦」
+    —— 所以没有补第二层假光：夜里那条波光现在只剩引擎自己的 specular
+    （`SEA_PALETTE.night.sunI = 1.55`，方向跟随 `sunX/sunY`，平水面高光横坐标恒为 `2*sunX-1`）。
+    ②**日月抽搐改走 `translate`**：`left/top` 每帧写就是每帧布局、最终按整像素绘制（夜里月亮约
+    0.25px/帧，攒 4 帧才挪一格）。现在 `.celestial` 是 `left:0; top:0; translate:74vw 11vh;`
+    且没有位移过渡，`applySun` 每帧写 `el.style.translate`（px = `sunX * viewW`），视口尺寸由
+    `measureViewport()` 在 `initDOM` 与 `resize` 时量；沙箱里 `env.viewW === 0` 时跳过写入。
+    证据 `_wip/verify/moon_path.mjs`：夜间 60fps 推演 3570 帧，单帧最大 0.32px、单帧变化量最大
+    0.01px、亚像素占比 90%、无重复台阶；`ui_static.mjs` 断言 translate 定位与「没有 left/top 过渡」。
   - 数值证据：`_wip/verify/time_smoke.mjs`（60fps 推演 135 秒）——单帧最大横移 0.036%、纵移
     0.093%（≈0.7px），日夜交接处横移 0.002%、拖动反解误差 0.0000 小时，全部通过。
     2026-10-23 追加方向断言：6.5 时 `sunX=0.88`、12 时 `0.50`、17.5 时 `0.12`（右升左落）；

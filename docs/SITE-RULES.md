@@ -53,8 +53,10 @@
   （2026-10-23 修的 bug：拖完日月之后时间就停住不走。）
 - **日月不许「一顿一顿往前跳」**（2026-10-23 用户第三条反馈）：时针按真实经过时间推进
   （`clockDt`，不吃 `js/app.js` 夹在 0.05 s 的那个 `dt`；只对切走标签页的超长空档设 0.25 s 上限），
-  并给 `.celestial` 加 `left 0.28s linear, top 0.28s linear` 过渡抹平整像素吸附；
-  拖动（`.is-dragging`）与快进（`.is-warping`）时关掉过渡，保证跟手 / 1 秒到位。
+  **位移只走 `translate`**（2026-10-24）：`.celestial` 的 `left/top` 归零，`applySun` 每帧把
+  `state.sunX/sunY × viewport` 写成 px 的 `el.style.translate`（合成器浮点，亚像素连续，不会被吸
+  到整像素）。**不要给位移加任何过渡** —— 拖动要 1:1 跟手、快进要 1 秒走完半天，过渡只会把两者
+  都拖成「一顿一顿」；夜里那条波光也不许再补 CSS 假光层。
 - **顶部 WEATHER 控件（药丸 + AUTO / RESET 面板）已整块删除**（2026-10-23）：`initPanel()` /
   `syncPanel()` / `timeLabel()` / `conditionLabel()` 连同 `#weatherBar` 的 HTML 与 CSS 一并没了
   （静态断言 `_wip/verify/ui_static.mjs`）。想把表冻在某一刻只剩开发者后门 `?t=<hour>`

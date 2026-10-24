@@ -144,11 +144,12 @@ dispose()
 
 > ⚠️ **月亮高度是太阳高度取反**（`js/weather.js` 的 `visualElev`：
 > 夜里 `clamp(-sunElevationRaw, 0, 74)`）。任何「月亮升到多高」的判断都必须先取反，
-> 直接拿 `state.sunElevationRaw` 算会恒得负数 —— `--moon-path` 就踩过这个坑，光带永远不出现。
+> 直接拿 `state.sunElevationRaw` 算会恒得负数 —— 旧的 `--moon-path` 光带就踩过这个坑（该层 2026-10-24 已删）。
 
-> ⚠️ **夜里的海面是「暗底 + 一条月光路」，不是均匀提亮**：亮的那条由两层叠出来 ——
-> 引擎的真实高光（`SEA_PALETTE.night.sunI`，跟随 `weather.sunX/sunY` 的方向）打底，
-> CSS 静态层 `.moon-path`（`css/styles.css`）补形状与浓度。只画引擎一层会灰、只画 CSS 一层会假。
+> ⚠️ **夜里的海面是「暗底 + 一条月光路」，不是均匀提亮**：这条路现在是**纯引擎**的 ——
+> `SEA_PALETTE.night.sunI` 抬到 1.55 之后 specular 自己就能连成带颗粒的波光，方向跟随
+> `weather.sunX/sunY`。2026-10-24 已删掉叠在上面的那条 CSS 三角形光带，**别再补回来**：
+> 那层是贴死的渐变、不随波浪走，用户要求「海面真正响应，做不到就不做」。
 > 水体颜色（`deep` / `shallow`）不要跟着提亮，否则整片海会变成黄昏色。
 
 > ⚠️ **「波光跟不跟日月走」要分三层看**（2026-10-23 用户追问「是否是技术做不到」——
@@ -156,14 +157,13 @@ dispose()
 > ① 引擎层：`js/app.js` 的 `applySeaFrame()` 把 `weather.sunX/sunY` 换算成光方向交给
 >    `setLight`，再进 `js/sea-entry.js` 的 `uSunDir`；平水面高光点的横坐标恒等于 `2*sunX-1`，
 >    也就是永远落在盘的正下方。这条线不要动。
-> ② CSS 静态层 `.moon-path`：主锥顶点本来就跟着 `--sun-x`，但**贴底那团反光原来写死
->    `at 50% 101%`** —— 全带最亮的一块钉在画面正中，月亮挪到哪儿它都不动，用户看到的就是它。
->    现在锚点是 `--moon-path-near-x`，由 `applySun` 写 `50 + (x - 50) * 0.45`：盘到左右缘时
->    这团各偏 20.8%，整条带因此斜着指向月亮（左右反号）。给到 1.0 会让近处反光离开视点脚下。
+> ② 曾经还有一层 CSS 静态假光（三角形光带 + 贴底反光）：贴底那团写死 `at 50% 101%`、不跟波浪走，
+>    是「假」的根源。2026-10-24 已整层删除 —— 用户要的是海面真正响应，做不到就不做。
 > ③ Canvas-2D 后备层：`WaterPainter.draw` 的 `shimmers` 横坐标原来只由随机数与场景漂移决定，
 >    与光方向完全无关；现在以 `sunX * width` 为带心散开，并按横向偏移给每道亮纹倾角。
-> 改动后跑 `node _wip/verify/moon_path.mjs`：它把 `applySun` 搬进沙箱逐半小时扫一整夜，
-> 断言近处锚点与公式一致、随盘单调、左右反号，并静态检查三层接线。
+> 改动后跑 `node _wip/verify/moon_path.mjs`：它静态断言假光层（html / css / js 里的 `moon-path`）
+> 已彻底消失、引擎接线还在，再把 `applySun` 搬进沙箱扫一整夜，并用 60fps 位移流验证夜里每帧都在动
+> （单帧最大 0.32px、无重复台阶）。
 
 ### 3.3 质量档：`QUALITY_PRESETS`（js/app.js:265）
 
@@ -313,7 +313,7 @@ rm -rf ./js/vendor
 | 拖完时间不走 | `initCelestial` 的 `finish()` 末尾必须**无条件**写回 `state.manualTime = false; state.autoTime = true;`（拖动过程中才允许 `manualTime = true`）。2026-10-23 的 bug 就是 `applyDrag` 把 `manualTime` 置真之后再没人收回，表冻住了 —— `_wip/verify/celestial_flow.mjs` 专测这条 |
 | 双击/单击判定 | 不用 `dblclick`（触屏不可靠），在 `pointerup` 里自己数：`DBL_TAP_MS = 350` / `DBL_TAP_PX = 28`。**单击必须什么都不做**，否则误触就把表挪走 |
 | 切昼夜必须「走」过去 | 用户 2026-10-23：转换昼夜不能原地变，要在 1 秒内让日/月来到对方的位置。所以 `toggleDayNight()` 只写 `state.warpHours = Math.min(24, state.warpHours + 12)` + `env.lastNow = 0`，真正的推进在 `update()`：`const step = Math.min(state.warpHours, clockDt * WARP_HOURS_PER_SEC)`（= 12 小时/秒），递减到 0 为止，期间**跳过**常规自动流逝、`applySky()` 每帧都跑（90 ms 节流会让天色跳）。**别改回「直接把 timeTarget 设成 0 / 12」** —— 那就是用户否掉的原地换图。`env.lastNow = 0` 不能省：双击两次点击之间隔了 100~350 ms，会被乘以 12 变成第一帧窜出 1~4 小时 |
-| 日月抖动 / 一顿一顿 | 两个成因都治了（2026-10-23 第三条反馈）：①`js/app.js:2313` 把 `dt` 夹在 0.05 s，帧一长就丢时间、时针速度抖，所以 `update()` 里另算 `clockDt = clamp((now - env.lastNow)/1000, 0, 0.25)`；②`5 秒 = 1 小时`时日月一秒只挪 1~2 px，光栅化会吸到整像素上，所以 `.celestial` 带 `left/top 0.28s linear` 过渡（拖动 `.is-dragging`、快进 `.is-warping` 时置 `transition: opacity 0.6s ease` 关掉）。改这两处要同步跑 `celestial_flow.mjs` |
+| 日月抖动 / 一顿一顿 | 两个成因都治了（2026-10-23 第三条反馈）：①`js/app.js:2313` 把 `dt` 夹在 0.05 s，帧一长就丢时间、时针速度抖，所以 `update()` 里另算 `clockDt = clamp((now - env.lastNow)/1000, 0, 0.25)`；②`5 秒 = 1 小时`时日月一秒只挪 1~2 px，光栅化会吸到整像素上。2026-10-23 试过 `left/top 0.28s linear` 过渡，只把它抹成「一顿一顿」；2026-10-24 改成位移只走 `translate`：`.celestial` 的 `left/top` 归零、带 `translate: 74vw 11vh` 初值，`applySun` 每帧写 `el.style.translate`（px、合成器浮点、亚像素连续），**位移一点过渡都不要**。改这两处要同步跑 `celestial_flow.mjs` |
 | 顶部 WEATHER 控件已删 | 2026-10-23 用户第二次要求：「我说的删掉的按钮是 weather 那一个控件」。`#weatherBar` 的 HTML、`.weather-bar*` 的全部 CSS、`initPanel()` / `syncPanel()` / `timeLabel()` / `conditionLabel()` / `env.sliders` / `env.weatherBar` 两处 `setVar` 全删了。**别再把它加回来**（连 AUTO / RESET 都不要），也没了「回真实时间」的入口。右上角那个小圆圈是自定义光标 `.cursor-ring`，不是按钮，别删 |
 | 抓图 | 用 `_wip/verify/shoot.sh`（每次新建 profile、绝对 Windows 路径）；沿用旧 profile 会撞锁静默失败。**但本沙箱根本起不了浏览器**：headless Chrome 报 crashpad `crash server failed to launch` 后自杀、headless Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，所以这里的交互改动只能给脚本证据（见 `WORKLOG.md` 2026-10-22 那两条的「未验」说明） |
 | 类名复用打穿长廊 | 静物那轮（`GIFT@54667a6`）给封面道具写的是**裸选择器** `.postcard` / `.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` / `.postcard-postmark` / `.postcard-seal`，而长廊卡片自己也挂 `.postcard`。它们在文件末尾、特异性相同，于是把长廊的 `position: absolute; inset: 0` 盖成 `position: relative; aspect-ratio: 1.55` —— 七张竖版卡（槽位 238×357）塌成 238×153 的纸背，还叠上封面的米色渐变与横纹。修法：这 12 条全部前缀 `.prop--postcard`（`css/styles.css:3692-3756`）。**新增任何道具/组件样式前，先 `Select-String '^\.类名'` 看这个类名是否已被别处占用**；共用类名必须靠父级作用域隔离 |
