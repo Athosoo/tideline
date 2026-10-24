@@ -543,25 +543,28 @@ img {
 
 .celestial {
   position: absolute;
-  left: var(--sun-x, 74%);
-  top: var(--sun-y, 11%);
+  /* 位移不走 left/top。那两条属性每帧改一次就是一轮布局 + 整像素重绘：夜里
+     月亮约 12px/s，也就是每帧 0.2px，会被吸到整像素上，看起来就是「一下一下
+     往前跳」（2026-10-23 加 0.28s 过渡只把它抹成了一顿一顿，没根治）。
+     translate 是合成器属性、按浮点插值，亚像素位移也是连续的；具体 px 由
+     weather.js 的 applySun 每帧写 el.style.translate。 */
+  left: 0;
+  top: 0;
+  translate: 74vw 11vh;
   width: var(--sun-size, clamp(155px, 12vw, 240px));
   aspect-ratio: 1;
   z-index: 1;
   transform: translate(-50%, -50%) translate3d(calc(var(--scene) * -3.5vw + var(--mx) * -9px), calc(var(--scene) * -1.6vh + var(--my) * -5px), 0);
-  will-change: transform, left, top;
+  will-change: transform, translate;
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
-  /* left/top 每帧都在变，而 5 秒 = 1 小时时日月一秒只挪 1~2 像素：光栅化会把它
-     吸到整像素上，看起来就是「一下一下往前跳」（2026-10-23 用户反馈）。给一小段
-     线性过渡让浏览器自己插值，跳动就抹平了。拖动和快进下不插值，见下面两行。 */
-  transition: opacity 0.6s ease, left 0.28s linear, top 0.28s linear;
+  transition: opacity 0.6s ease;
 }
 
-/* 拖动要 1:1 跟手、切昼夜要 1 秒走完半天，这两段都不能被过渡拖慢。 */
-.celestial.is-dragging { cursor: grabbing; transition: opacity 0.6s ease; }
-.celestial.is-warping { transition: opacity 0.6s ease; }
+/* 位移已经没有过渡了（拖动天然 1:1 跟手，快进 1 秒走完半天），
+   这里只剩拖动时的光标形状。 */
+.celestial.is-dragging { cursor: grabbing; }
 
 /* 关键：光必须「加」到天空上，而不是盖在天空上。
    .celestial 自己带 transform（视差），transform 会生成一个隔离的层叠上下文——

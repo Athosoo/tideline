@@ -138,6 +138,11 @@
     lastSky: 0,
     /* 上一帧的 now（毫秒）。update 用它算「真实经过的时间」，见 clockDt。 */
     lastNow: 0,
+    /* 视口尺寸（CSS px）。日月盘的位置要写成 px 的 translate（见 applySun），
+       initDOM 里量一次、resize 时更新；测试沙箱不调 initDOM，值保持 0，
+       applySun 就跳过 translate 写入。 */
+    viewW: 0,
+    viewH: 0,
   };
 
   function solarPosition(hours, doy, latitude) {
@@ -372,6 +377,15 @@
        这样窗口大小变化时不用再进 JS 重算。 */
     state.sunX = x / 100;
     state.sunY = y / 100;
+    /* 盘的位移只走 translate（px）：合成器按浮点插值，亚像素也是连续的。
+       曾经用 left/top + 0.28s 线性过渡压抖动，但 left/top 每帧变一次就是
+       一轮布局，最终仍按整像素绘制——月亮慢（约 12px/s），要攒好几帧才挪
+       一格，看起来就是「抽搐」。--sun-x/--sun-y 照旧写百分比，天空渐变、
+       海面取光方向、提示文字都还在用。 */
+    if (celestial.style && env.viewW > 0 && env.viewH > 0) {
+      celestial.style.translate =
+        (state.sunX * env.viewW).toFixed(2) + "px " + (state.sunY * env.viewH).toFixed(2) + "px";
+    }
     if (!DIAG.noattr) {
       const look = day ? lookFor(state.sunElevation) : MOON_LOOK;
       const dim = 0.72 + 0.28 * state.ambient;
@@ -495,6 +509,15 @@
     env.galleryScope = document.getElementById("gallery");
     env.worldScope = document.getElementById("world");
     env.focusScope = document.getElementById("focus");
+    measureViewport();
+    if (window.addEventListener) window.addEventListener("resize", measureViewport, { passive: true });
+  }
+
+  /* 日月盘用 px 的 translate 定位（合成器浮点，亚像素不跳），所以得知道视口
+     有多大。.gallery 是 position:fixed; inset:0，视口尺寸就是它的尺寸。 */
+  function measureViewport() {
+    env.viewW = window.innerWidth || 0;
+    env.viewH = window.innerHeight || 0;
   }
 
   function initCelestial() {
