@@ -1026,3 +1026,134 @@ absolute` 与槽位一致。截图 `GIFT/_wip/shots/diag/corridor_BEFORE.png`、
 另外记一条抓图坑：**cut 相位用 `--screenshot --virtual-time-budget` 抓不到**（rAF 只跑 ~6 帧，
 cut 动画不启动，截到的是近乎空白的过渡帧），得走 `_lab/tools/siteshot.mjs` 的 CDP 通路、
 等状态机稳定再截。
+
+---
+
+## 已修 · 开屏两段卡顿：「打开那一下」和「划开那一下」到底卡在哪
+
+用户 2026-10-25 反馈：一打开文件非常卡、小刀划开那一下也很卡。这条记录怎么量的、
+改了什么、还剩什么。复跑工具在 `_wip/verify/`（根仓库，随根仓库入库）。
+
+### 先说结论（两句）
+
+1. **「打开那一下」的空白不是 JS 慢，是第一帧光栅 + GPU 上下文初始化。** 首绘前主线程
+   有 700ms 是**空闲**的（每 100ms 桶 idle 83–100ms），屏幕却黑着；把 GPU 上下文屏蔽掉
+   （`--kill-gpu`）后 FCP **一点没变**、帧产出却从 43 帧飙到 103–110 帧、p95 从 550ms 掉到
+   17–33ms。即：海面引擎一建 WebGL/WebGPU 上下文，整条合成管线被冻住 0.5–0.9s。
+2. **「划开那一下」是每帧 33ms 的结构性光栅成本**，不是 DOM 写。`cut` 段 p50 恒 33.4ms、
+   `over33` 恒 65 帧（≈30fps），A/B 前后**完全持平**；根因是 `setSlit()` 每帧换
+   `#clothSlitPath` 的 `d` → `.cloth` 的 `clip-path: url(...)` 失效 → 十几层全屏子层重画。
+
+### 量法（这套工具以后要复用）
+
+- `node _wip/verify/perf_open_cut.mjs --phase both --tag NAME [--index PATH] [--mode headed|headless]`
+  — 一次跑完「载入段」与「划开段」：页内注入 rAF/LoAF/longtask 记录器，按相位把帧分桶，
+  输出 `_lab/cloud/shots/perf/<tag>/open-cut.json`。
+- `node _wip/verify/perf_compare.mjs a1,a2,a3 b1,b2,b3` — 多 tag 取中位数，出 Δ 与百分比。
+- `node _wip/verify/_probe_sea_timeline.mjs --tag N [--css "<css>"]` — 用 `setInterval`
+  （不吃 rAF）每 100ms 采样「动画时钟 / 独立 rAF 计数 / 定时器漂移 / 海面是否建好」，
+  「第一帧到底什么时候来」用它量最可靠。
+- `node _wip/verify/_probe_thread_gap.mjs --tag N` — trace 按**线程**分桶，确认卡在 GPU 进程
+  还是渲染主线程。
+- `node _wip/verify/_probe_raster.mjs --tag N [--cats devtools.timeline]` — 光栅/布局/脚本聚合。
+- 基线钉在 git worktree 里：`git -C GIFT worktree add ../_wip/wt-base <commit>`，测量时
+  `--index _wip/wt-base/index.html`，避免边改边测污染基线。
+
+### 三个必须知道的量测陷阱（踩过，别再踩）
+
+1. **无头 Chrome 测不了这个站点。** 页面在无头里整个合成器不产帧：168 条动画
+   `currentTime` 恒 0、载入后现场起 1s rAF 只跑 1 帧、screencast 抓 0 帧，而**空白页同样
+   条件下 43fps**（排除"无头不产帧"）。`?nogl=1` 也救不了。
+   → 必须**带界面**跑：`--window-position=-32000,-32000` 把窗口挪出屏外 + 真 GPU +
+   `--disable-features=CalculateNativeWinOcclusion`（否则被判遮挡降频），实测 rAF 59fps。
+   `perf_open_cut.mjs` 默认就是 headed。
+2. **本机环境噪声 ±200ms 以上**（微信/QQ/msedgewebview2/ZCode 同时在跑）。同一份代码
+   FCP 能从 1060ms 飘到 1640ms。→ 只有**交替 A/B、每侧 ≥3 轮、取中位数**有意义；
+   跨时段比较一律无效。并且**同一时刻只能跑一个 Chrome**，并发会互相卡到超时。
+3. **`performance.getEntriesByType('paint'|'resource')` 在 `file://` 下是空的**，
+   但页内 PerformanceObserver 拿得到 FCP。`Performance.getMetrics()` 的
+   `TaskDuration` 在这套探针里读出来恒 0，别再用它。
+
+### 这次真改了什么（都在 `js/app.js` / `js/cakegate.js`，CSS 一个字没改）
+
+- `app.js:1147` **把 `createSea()` 的调用挪到双 rAF**（首帧画出去之后再建海）。
+  `createSea` 的同步前奏要一次性建完：`PlaneGeometry(420,420,256,256)` = 66,049 顶点 /
+  393,216 索引的纯 JS 循环、`RingGeometry(205,7000,128,24)`、天空球、两棵 TSL 节点图、
+  5 级 bloom —— 而这一刻海面被不透明台布整块盖着，0 像素可见。
+  **实测：init 提前 142ms（518→376）、script −54ms、style −52ms，但 FCP 只挪了 16ms。**
+  所以它是真实减负，**不是**「打开卡」的主因（注释里也这么写了）。
+  > 顺带否掉一个方案：把建海推到 1.2s 之后（`setTimeout`+`requestIdleCallback`）。
+  > A/B 3 对下来 **FCP 反而晚约 100ms**，冻结只是从「首绘前」挪到「封面之后」，
+  > 用户照样看得见 —— 已回退，只在注释里留结论。
+- `app.js:2594` 删掉 init 里重复的 `createParticles()`（`applyQuality()` 已经建过一遍）。
+- `app.js:284,1424,1481` 三处**写前缓存**：`--gate` 从写在 `#intro` 根上改为只写
+  `.intro-frame` / `.intro-vignette` 两个叶子（全仓库仅这两个消费者，
+  `styles.css:160` / `styles.css:413`），`updateRail()` 的 4 个值、`.cover-content` 的
+  3 个值各自缓存「上次写进去的字符串」，没变就不碰 DOM。与 `weather.js:59-69`、
+  `setGalleryVar()` 同一手法。
+- `cakegate.js:142` 新增 `putStyle` / `putVar` / `resetStyleCache`，把 cut 段每帧的
+  11 项写入**全部走值缓存**。模拟 157 帧：**写入 1727 → 491（−71.6%）**，每帧 DOM 写
+  12 次 → 约 3.1 次；`phase==="open"` 之后那 7 个根级变量全定住 → 每帧零写。
+- `cakegate.js:1047` 删掉每帧写的 `--cut`（全仓库无 `var(--cut)` 消费者，纯白付；
+  `?dbg=1` 那行改为同式现算）。
+- **明确没做**（teammate 论证后否掉，理由都留在了代码注释/本文件外）：
+  缝宽 2px 量化（实测 `halfLocal` 每帧变化中位数 5.02px、最大 19.23px，量化只让 8.9% 的
+  帧跳过写入）；`.cake-stage` filter 收进闸门（sigma=0 时 Skia 本就短路，收益 0.05ms 级，
+  反而把 surface 首建挪到下潜帧）；`phase==="open"` 早退（会越过 `stitch()` 的触发点
+  `cakegate.js:1041-1044`）。
+
+### A/B 结果（诚实版）
+
+| 指标（3 对交替中位数） | 改前 | 改后 | Δ |
+|---|---|---|---|
+| `ready`（init 完成） | 638 | 553 | **−85ms** |
+| `FCP` | 1388 | 1368 | −20ms（噪声内） |
+| 载入段帧数 / `>200ms` 帧 | 8 / 3 | 9 / 4 | 无改善 |
+| cut 段 `p50` / `p95` / `>33ms` | 33.4 / 50.3 / 65 | 33.4 / 66.5 / 65 | **完全持平** |
+
+**所以：这批改动让每帧少干了活（有数字），但没有让哪一段变快（也没数字）。**
+真正的两处结构性成本还没动，见下。
+
+### 还剩什么（两条要产品拍板的）
+
+**A. 打开那一下：首帧光栅约 0.7–1.1s。** CSS 隐藏式二分的结论（`animOn` = 动画时钟起步时刻）：
+`body{display:none}` → 242ms；`#intro{display:none}` → 553ms；`.cloth{display:none}` → 739ms；
+而 `.grain` 去掉（1354）、`mix-blend-mode` 全关（1138）、`filter` 全关（1229）、
+`.cloth>*{will-change:auto}`（1259）、`.cloth>*{mix-blend-mode:normal}`（1229）、
+`#gallery{display:none}`（1341，**更差**）——**去任何单独一层都不动起点，只有整块藏起来才有效**。
+即成本是 `#intro` 里那叠全屏像素的**总量**（大头是 `.cloth` 的十几层：`.cloth-weave` /
+`.cloth-slub` / `.cloth-mottle` 各带 `mix-blend-mode: multiply`、`.cloth-fiber` 是 220px
+feTurbulence 平铺、五道 `.cloth-crease`、两张 `viewBox="0 0 1440 900"` 大 SVG、`.cloth-light`
+/ `.cloth-hem` / `.cloth-thread` / `.cloth-dark`）。
+可选路（都影响观感，需要拍板）：
+- **(A1) 首帧先画「少一档」的布**，等第一帧出去后再把细节层挂上（`content-visibility` 或
+  后加 class 开 `display`）。第一帧更早，但会看到细节「浮现」一次。
+- **(A2) 精简布的层数**（合并 mottle/slub 的混合模式、把 fiber 从 220px 放大到 440px 平铺）。
+  → 质感会变，需要并排截图比。
+- **(A3) 不改**，接受 0.7s：它只是一次性的白屏，之后稳定 60fps。
+
+**B. 划开那一下：每帧 33ms。** `setSlit` 每帧换 `#clothSlitPath` 的 `d`，`.cloth` 的
+`clip-path: url(...)` 随之失效 → 十几层全屏重画 + 布自身 `contrast/saturate` surface 重建
+（`styles.css:2733-2738` 作者注释自述 30ms→23ms，就是这块）。可选路：
+- **(B1) `d` 降到 30Hz 更新**（隔帧换）。帧预算减半，但缝的余量 `+12*S.cam = 18.6px`
+  本来只比单帧最大跳变 19.23px 略小，降到 30Hz 要把它放宽到 ~28px，**有露边风险**。
+- **(B2) cut 段隐藏一半布层**（比如只留 weave + dark）。最省，但裂开时布会明显变薄。
+- **(B3) 两半布静态 clip + 只做 transform 滑开**。最省且最稳，但海图纹理会跟着滑（现在是
+  「布不动、只有洞口在动」）。
+- **(B4) 不改**，接受 30fps 的一刀：2.6 秒，且中间有大量位移，30fps 未必不可接受。
+
+（这一条上还有两个廉价候选没试：`#clothSlit` 的 band 半长 `L = W + H` = 2080px，
+而视口对角线只需 1509px（`cakegate.js:223`），降到 `Math.hypot(W,H)*1.1` 几何等价；
+`is-diving` 的 mask 在 `--hole=0` 时有 1.11s 空转窗口。两者都无证据，先记着。）
+
+### 复跑
+
+```bash
+# 基线（钉在 4ba208c 的 worktree）
+git -C GIFT worktree add ../_wip/wt-base 4ba208c
+node _wip/verify/perf_open_cut.mjs --phase both --tag base1 --index _wip/wt-base/index.html
+node _wip/verify/perf_open_cut.mjs --phase both --tag new1
+node _wip/verify/perf_compare.mjs base1,base2,base3 new1,new2,new3
+# 第一帧到底什么时候来
+node _wip/verify/_probe_sea_timeline.mjs --tag t1
+```

@@ -139,6 +139,25 @@
     return el;
   }
 
+  /* ---------- 写进 DOM 前的去重 ----------
+     自定义属性会继承：在 gateEl 上写一个变量，等于让整棵子树重新算样式。cut 段每帧
+     要写七八个变量，可其中有一半在尾巴上早就定住了（--split / --gap / --gapb 收在 1，
+     --dive / --hole / --fade 也各有一段不再变）。记下「上一次真正写进 DOM 的那个
+     字符串」，一模一样就跳过 —— 值相同，样式重算的结果也相同，画面零差别，只是不再
+     白干。凡走这里的属性都只允许从这里写：cut() / stitch() 里原先直接赋值的 seam
+     那两行也一并改走这里，否则缓存会和 DOM 对不上，跳过一次就少写一次。 */
+  var lastWrite = Object.create(null);
+  function putStyle(key, el, prop, value) {
+    if (!el || lastWrite[key] === value) return;
+    lastWrite[key] = value;
+    el.style.setProperty(prop, value);
+  }
+  /* gateEl 上的自定义属性：写入目标固定是这一层，key 就是属性名本身 */
+  function putVar(name, value) { putStyle(name, gateEl, name, value); }
+  // 兜底：如果以后有人绕过 putStyle 直接写这些属性，就在改完状态之后清一次缓存，
+  // 下一帧全部重写一遍（值本来就要变，只是多写一次，画面不差一像素）。
+  function resetStyleCache() { lastWrite = Object.create(null); }
+
   /* ---------- 几何 ---------- */
   function measure() {
     S.geom.cx = window.innerWidth * 0.5;
@@ -715,16 +734,18 @@
   function placeKnife() {
     var b = S.bearing * DEG;
     var tf = "translate3d(" + S.tip.x.toFixed(1) + "px," + S.tip.y.toFixed(1) + "px,0) rotate(" + b.toFixed(2) + "deg)";
-    knife.style.transform = tf;
+    putStyle("knife.tf", knife, "transform", tf);
     var g = S.geom;
     var dx = g.cx - S.tip.x;
     var dy = g.cy - S.tip.y;
     var dist = Math.sqrt(dx * dx + dy * dy);
     // 虚线只画到盘沿：越过盘沿就是在蛋糕身上划一道
     var r0 = (S.cakeSize || 360) * S.cam * 0.42;
-    bearingEl.style.transform = tf + " scaleX(" + (Math.max(0, dist - r0) / 100).toFixed(3) + ")";
+    putStyle("bearing.tf", bearingEl, "transform",
+      tf + " scaleX(" + (Math.max(0, dist - r0) / 100).toFixed(3) + ")");
     // 封面第一帧连罗盘虚线都不能有；它由 placeKnife 每帧写 inline，单靠 CSS 盖不住
-    bearingEl.style.opacity = (S.phase === "idle" ? 0 : clamp(1 - S.cut * 4, 0, 1)).toFixed(2);
+    putStyle("bearing.op", bearingEl, "opacity",
+      (S.phase === "idle" ? 0 : clamp(1 - S.cut * 4, 0, 1)).toFixed(2));
   }
 
   function startFly() {
@@ -850,7 +871,7 @@
     setTimeout(function () { gateEl.classList.remove("is-impact"); }, 180);
     if (seamEl) {
       seamEl.classList.add("is-live");
-      seamEl.style.opacity = "0.95";
+      putStyle("seam.op", seamEl, "opacity", "0.95");
     }
     // 长廊必须**现在**就在缝后面：这一版缝里什么都不放，缝一开后面直接是海。
     // 此刻布整块不动、缝宽还是 0，跳转本身看不见任何跳变；等分开了再跳，
@@ -896,8 +917,10 @@
     setSlit(0);
     if (seamEl) {
       seamEl.classList.remove("is-live");
-      seamEl.style.opacity = "0";
+      putStyle("seam.op", seamEl, "opacity", "0");
     }
+    // 缝回去之后一切都要从头再写一遍：清空缓存，免得下一刀被「值没变」挡住
+    resetStyleCache();
   }
 
   /* ---------- 事件 ---------- */
@@ -1022,7 +1045,9 @@
     // 只认这一刀。滚动早就不是开门的路了（app.js 的 coverLocked），
     // 再把 --gate 算进来，揭开那一帧 gate 就是 1，布会当场飞到底 —— 又成了「太快」。
     var eff = S.phase === "cut" || S.phase === "open" ? easeInOut(S.cut) : S.cut;
-    gateEl.style.setProperty("--cut", eff.toFixed(4));
+    // 原来是这里每帧写一次 --cut。全仓库没有任何规则消费 var(--cut)（styles.css 里
+    // 只剩一条没人读的默认值声明），写它等于每帧白让这一层子树失效一次，已删除。
+    // eff 照旧算出来交给下面 is-out / is-gone 与返回值。
     // 一刀是三件事：刀先真的划过（SLICE 那一段），两半才让开（缝里直接是海），
     // 镜头随后钻进这道缝。划过用 smoothstep：两头轻、中段快，像一刀划过去。
     var p = S.cut;
@@ -1034,10 +1059,12 @@
       placeKnife();
       if (seamEl) {
         // 亮缝跟着刀尖长：元素左端钉在入口，scaleX = 已经划过的长度
-        seamEl.style.transform = "translate3d(" + S.sliceFrom.x.toFixed(1) + "px," +
+        putStyle("seam.tf", seamEl, "transform",
+          "translate3d(" + S.sliceFrom.x.toFixed(1) + "px," +
           S.sliceFrom.y.toFixed(1) + "px,0) rotate(" + (S.cutAngle * DEG).toFixed(2) + "deg)" +
-          " scaleX(" + Math.max(0.001, (stroke * S.sliceLen) / SEAM_W).toFixed(4) + ")";
-        seamEl.style.opacity = (sliceU < 1 ? 0.95 : clamp(1 - (p - SLICE) / 0.05, 0, 1)).toFixed(2);
+          " scaleX(" + Math.max(0.001, (stroke * S.sliceLen) / SEAM_W).toFixed(4) + ")");
+        putStyle("seam.op", seamEl, "opacity",
+          (sliceU < 1 ? 0.95 : clamp(1 - (p - SLICE) / 0.05, 0, 1)).toFixed(2));
       }
       // 碎屑在刀尖穿过圆心那一刻才崩：早了就成了「一落刀就炸」
       if (!S.crumbed && stroke >= 0.5) { S.crumbed = true; spawnCrumbs(); }
@@ -1054,10 +1081,12 @@
     // 布只放大 (1 + dive*0.5)，折回布自己的坐标再挖洞，两条边才对得上。
     // --gap 是 .cake-stage 里的本地像素；屏幕上的位移要再乘镜头和 dive 的缩放
     var gapMax = Math.min((S.cakeSize || 360) * S.cam * 0.12, 64) / S.cam;
-    gateEl.style.setProperty("--split", S.split.toFixed(4));
-    gateEl.style.setProperty("--gap", (S.split * gapMax).toFixed(1));
-    gateEl.style.setProperty("--gapb", (splitB * gapMax).toFixed(1));
-    gateEl.style.setProperty("--dive", S.dive.toFixed(4));
+    // 这七个变量里 --split / --gap / --gapb 在 p≥0.58 之后完全定住，--dive 那三个
+    // 也各自有定住的一段：值没变就不写，值一样时样式结果一模一样。
+    putVar("--split", S.split.toFixed(4));
+    putVar("--gap", (S.split * gapMax).toFixed(1));
+    putVar("--gapb", (splitB * gapMax).toFixed(1));
+    putVar("--dive", S.dive.toFixed(4));
     var gapNow = Math.max(S.split, splitB) * gapMax;
     // 只有真让开了才有缝：base 为 0 就给 0，布上不多一条缝。
     var slitBase = (gapNow + S.dive * 220) * S.cam * (1 + S.dive * 2.25) / (S.clothCam * (1 + S.dive * 0.5));
@@ -1067,9 +1096,9 @@
     // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
     // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
     var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
-    gateEl.style.setProperty("--hole", (hz * hz).toFixed(4));
+    putVar("--hole", (hz * hz).toFixed(4));
     gateEl.classList.toggle("is-diving", S.dive > 0.002);
-    gateEl.style.setProperty("--fade", clamp((S.dive - 0.5) / 0.5, 0, 1).toFixed(4));
+    putVar("--fade", clamp((S.dive - 0.5) / 0.5, 0, 1).toFixed(4));
     // 门开完了、--gate 也爬上来了，这时候封面那套字才允许回来（否则会闪一下）
     if (S.phase === "open" && !S.finished && g > 0.6) {
       S.finished = true;
@@ -1141,7 +1170,8 @@
           " gate=[" + gateEl.className + "]" +
           " body=[" + document.body.className + "]" +
           " sawGate=" + S.sawGate + " opened=" + S.opened +
-          " eff=" + (gateEl.style.getPropertyValue("--cut") || "-") +
+          // eff 原先是从 DOM 上读 --cut 拿到的；那个变量已不再写，改成和 update() 同式现算
+          " eff=" + ((S.phase === "cut" || S.phase === "open" ? easeInOut(S.cut) : S.cut)).toFixed(4) +
           " split=" + (S.split || 0).toFixed(2) + " dive=" + (S.dive || 0).toFixed(2) +
           " halves=" + gateEl.querySelectorAll(".cake--half").length +
           " clip=" + [].map.call(gateEl.querySelectorAll(".cake--half"), function (h) {

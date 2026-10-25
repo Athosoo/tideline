@@ -281,6 +281,10 @@ if (DIAG.bench) {
 const dom = {
   gallery: $("#gallery"),
   intro: $("#intro"),
+  /* --gate 的两个（也是仅有的两个）消费者，都是元素自己用 var(--gate)：
+     .intro-frame（styles.css:160）与 .intro-vignette（styles.css:413）。 */
+  introFrame: $(".intro-frame"),
+  introVignette: $(".intro-vignette"),
   coverContent: $(".cover-content"),
   scrollCue: $("#scrollCue"),
   scrollTrack: $("#scrollTrack"),
@@ -1140,11 +1144,31 @@ function startSea() {
     const rect = oceanRect();
     const width = Math.max(2, Math.round(rect.width || window.innerWidth));
     const height = Math.max(2, Math.round(rect.height || window.innerHeight));
-    window.OpenSea.createSea({
+    /* 段数在这里（同步、与旧代码同一时刻）取好：applyQuality 之后 quality.level
+       可能已从默认的 "full" 变成 "lite"，那时再读会让 LITE 设备的海面网格从
+       256 段变 160 段 —— 那是另一处行为变化，不混进这次修复。 */
+    const segments = quality.level === "lite" || width < 760 ? 160 : 256;
+
+    /* ── 把海面建造挪出首绘 ────────────────────────────────────────────────
+       注意：实测下来这**不是**「一打开文件就非常卡」的主因（主因是首帧光栅 +
+       GPU 上下文的合成器冻结，见 docs/TODO.md「开屏两段卡顿」）。但它确实是
+       首绘前白付的一笔账，所以照样挪走。
+       createSea() 的同步前奏（sea-entry.js:313 起）会一次性建完整个海面渲染器：
+       420m×420m、256×256 的海面网格（66,049 顶点 / 393,216 索引，纯 JS 循环生成）、
+       205m→7000m 远景裙边环、4000 半径天空球、两棵 TSL 节点图、5 级 bloom 管线。
+       CPU 自耗时 top 全是这一段（get / getTypeLength / getNodeType / build /
+       addNode / buildUpdateNodes …）。而这一刻观众看到的是一整块不透明的台布，
+       海面一个像素都没露出来 —— 这段建造却整个挡在首绘前面。
+       所以只把 createSea 的**调用**挪到第一帧画出去之后；上面那些同步步骤
+       （canvas 后备海、oceanRect() 量测、width/height/segments 取值）位置和顺序
+       一律不动，好让 initQuality() 里对 waterPainter/glOcean 的处理与旧代码逐字
+       一致。推迟期间海面仍在台布后面不可见，animate() 的 if (sea) 守卫照旧兜住
+       seaEngine/waterPainter 为 null —— 观感、时序、可交互性都不变。 */
+    const buildSeaEngine = () => window.OpenSea.createSea({
       canvas: dom.ocean,
       width,
       height,
-      segments: quality.level === "lite" || width < 760 ? 160 : 256,
+      segments,
     }).then((engine) => {
       seaEngine = engine;
       document.body.classList.add("has-sea-bundle");
@@ -1154,6 +1178,14 @@ function startSea() {
       console.warn("[TIDELINE] open-sea engine unavailable, keeping the fallback sea:", err && err.message ? err.message : err);
       document.body.classList.remove("has-sea-bundle");
       if (!waterPainter) useFallbackSea();
+    });
+    /* 双 rAF：第一个回调只登记下一帧，保证这一帧（封面 / 台布）已经绘制出去。
+       早先试过把建海推到 1.2s 之后（封面落定再建），A/B 下来并不更好 —— FCP 反而
+       晚 100ms 左右，而那次性冻结只是从「首绘前」挪到「封面之后」，用户照样看得见。
+       引擎本体不归这个仓库管（不能改 sea.bundle / sea-entry），所以这次保持最小改动：
+       只把建造挪出首绘，不猜它该在哪一秒付账。 */
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(buildSeaEngine);
     });
     return;
   }
@@ -1395,19 +1427,65 @@ function findActiveIndex(camX) {
   return active;
 }
 
+// 这三个值只在换卡 / 滚动时才会变，可这里原来每帧都无条件写：
+// 两次 textContent（换掉文本节点）、一次 transform、一次 .rail-dot 的 left
+// （left 是 layout 属性，会让这条 rail 参与重排）。缓存上一次写进去的字符串，
+// 没变就整段跳过。与 weather.js:59-69 的 setVar、本文件 setGalleryVar 同一手法。
+const railCache = { from: null, to: null, fill: null, dot: null };
+
 function updateRail(activeIndex, period) {
   const count = state.cards.length;
   if (!count) return;
   const active = state.cards[activeIndex];
   const next = state.cards[(activeIndex + 1) % count];
-  dom.railFrom.textContent = active.data.number;
-  dom.railTo.textContent = next.data.number;
+  /* 卡片编号是字符串（"01"…"07"），String() 只为让缓存比较与 textContent 的
+     隐式转换完全对齐 —— 写进去的文本一个字都不变。 */
+  const fromText = String(active.data.number);
+  if (fromText !== railCache.from) {
+    railCache.from = fromText;
+    dom.railFrom.textContent = fromText;
+  }
+  const toText = String(next.data.number);
+  if (toText !== railCache.to) {
+    railCache.to = toText;
+    dom.railTo.textContent = toText;
+  }
   const spacing = Math.max(1, period / count);
   const wrapped = mod(active.home.x - state.camX + period * 0.5, period) - period * 0.5;
   const t = clamp(0.5 - wrapped / spacing, 0, 1);
-  dom.railFill.style.transform = `scaleX(${t.toFixed(4)})`;
-  dom.railDot.style.left = `${(t * 100).toFixed(3)}%`;
+  const fillText = `scaleX(${t.toFixed(4)})`;
+  if (fillText !== railCache.fill) {
+    railCache.fill = fillText;
+    dom.railFill.style.transform = fillText;
+  }
+  // 仍然是 left（不是 translateX）：left 的百分比按容器宽算，translateX 的百分比
+  // 按元素自身宽度算，两者语义不同，硬换算不严谨 —— 这里只做缓存，不动定位方式。
+  const dotText = `${(t * 100).toFixed(3)}%`;
+  if (dotText !== railCache.dot) {
+    railCache.dot = dotText;
+    dom.railDot.style.left = dotText;
+  }
 }
+
+/* --gate 原来写在 #intro 上（整棵封面的根）：自定义属性会继承，等于每一帧都把
+   「台布 + 蛋糕 + 38 支蜡烛 + 刀 + 题字」整棵子树标脏、参与样式重算。而全仓库
+   var(--gate) 只有两个消费者，且都直接写在元素自己身上（.intro-frame
+   styles.css:160、.intro-vignette styles.css:413）→ 只写这两个叶子元素，
+   calc() 的输入逐帧完全一致，计算值也逐帧一致；值没变就连 setProperty 都不调。
+   （weather.js:59-69 是同一个「别写在祖先上」教训的正面样板。） */
+const coverGateCache = { text: null };
+function setCoverGate(value) {
+  const text = value.toFixed(4);
+  if (text === coverGateCache.text) return;
+  coverGateCache.text = text;
+  if (dom.introFrame) dom.introFrame.style.setProperty("--gate", text);
+  if (dom.introVignette) dom.introVignette.style.setProperty("--gate", text);
+}
+
+/* cut 期间 gate 恒定，opacity / transform / pointer-events 也就恒定；
+   同一个字符串重复写仍会把 cover-content 标脏。缓存字符串，没变就不碰 DOM
+   （真正淡出/上浮的帧照旧逐帧写，观感一帧不差）。 */
+const coverWriteCache = { fade: null, lift: null, pointer: null };
 
 function updateScrollState(dt) {
   if (state.focusOpen) return;
@@ -1439,10 +1517,22 @@ function updateScrollState(dt) {
 
   const coverFade = 1 - smootherstep(clamp((state.gate - 0.05) / 0.29));
   const coverLift = (1 - coverFade) * 38;
-  dom.intro.style.setProperty("--gate", state.gate.toFixed(4));
-  dom.coverContent.style.opacity = String(coverFade);
-  dom.coverContent.style.transform = `translate3d(0, ${(-coverLift).toFixed(2)}px, 0)`;
-  dom.intro.style.pointerEvents = state.gate > 0.86 || coverFade <= 0.01 ? "none" : "auto";
+  setCoverGate(state.gate);
+  const coverFadeText = String(coverFade);
+  if (coverFadeText !== coverWriteCache.fade) {
+    coverWriteCache.fade = coverFadeText;
+    dom.coverContent.style.opacity = coverFadeText;
+  }
+  const coverLiftText = `translate3d(0, ${(-coverLift).toFixed(2)}px, 0)`;
+  if (coverLiftText !== coverWriteCache.lift) {
+    coverWriteCache.lift = coverLiftText;
+    dom.coverContent.style.transform = coverLiftText;
+  }
+  const coverPointer = state.gate > 0.86 || coverFade <= 0.01 ? "none" : "auto";
+  if (coverPointer !== coverWriteCache.pointer) {
+    coverWriteCache.pointer = coverPointer;
+    dom.intro.style.pointerEvents = coverPointer;
+  }
 
   // 刀还没走完，这一层就不能撤：撤了布当场消失，看着就是「开门太快」。
   const shouldHideIntro = state.gate > 0.997 && !state.cakeCutting;
@@ -2507,7 +2597,6 @@ function init() {
   initFocus();
   initEvents();
   initImmersive();
-  createParticles();
 
   if (window.matchMedia("(pointer: coarse)").matches) {
     dom.scrollCue.querySelector(".cue-copy small").textContent = "向上滑动 · 切一刀";
