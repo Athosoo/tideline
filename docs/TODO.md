@@ -1126,21 +1126,50 @@ cut 动画不启动，截到的是近乎空白的过渡帧），得走 `_lab/too
 feTurbulence 平铺、五道 `.cloth-crease`、两张 `viewBox="0 0 1440 900"` 大 SVG、`.cloth-light`
 / `.cloth-hem` / `.cloth-thread` / `.cloth-dark`）。
 可选路（都影响观感，需要拍板）：
-- **(A1) 首帧先画「少一档」的布**，等第一帧出去后再把细节层挂上（`content-visibility` 或
-  后加 class 开 `display`）。第一帧更早，但会看到细节「浮现」一次。
-- **(A2) 精简布的层数**（合并 mottle/slub 的混合模式、把 fiber 从 220px 放大到 440px 平铺）。
-  → 质感会变，需要并排截图比。
+- **(A1) 首帧先画「少一档」的布**，等第一帧出去后再把细节层挂上。**已实测无效**：
+  `--css ".cloth>*{display:none !important}"` 时 `animOn` = **1372ms**（基线 1227 量级，
+  最好也就 553）——把细节子层全藏掉**并不让第一帧更早**。说明成本不是"细节层的叠加"，
+  而是「`.cloth` 这棵树在场」本身（它的 `filter: contrast/saturate` 让整块布先成一个
+  surface，再被合成）。这条不用试了。
+- **(A2) 精简布的结构**：让 `.cloth` 那棵树小到能在 16ms 里画完 —— 即减少「整棵树在场」
+  的成本，而不是只删子层。代价是质感，需要并排截图比。
 - **(A3) 不改**，接受 0.7s：它只是一次性的白屏，之后稳定 60fps。
 
-**B. 划开那一下：每帧 33ms。** `setSlit` 每帧换 `#clothSlitPath` 的 `d`，`.cloth` 的
-`clip-path: url(...)` 随之失效 → 十几层全屏重画 + 布自身 `contrast/saturate` surface 重建
-（`styles.css:2733-2738` 作者注释自述 30ms→23ms，就是这块）。可选路：
-- **(B1) `d` 降到 30Hz 更新**（隔帧换）。帧预算减半，但缝的余量 `+12*S.cam = 18.6px`
-  本来只比单帧最大跳变 19.23px 略小，降到 30Hz 要把它放宽到 ~28px，**有露边风险**。
-- **(B2) cut 段隐藏一半布层**（比如只留 weave + dark）。最省，但裂开时布会明显变薄。
-- **(B3) 两半布静态 clip + 只做 transform 滑开**。最省且最稳，但海图纹理会跟着滑（现在是
-  「布不动、只有洞口在动」）。
+**B. 划开那一下：每帧 33ms。** 归因：cut 段每帧要把 `#intro` 里叠着的全屏内容重画一遍，
+成本**一半在 `.cloth`、一半在 `.cake`**（`?slit=` 冻结实验见下）。可选路：
+- **(B1) `d` 降到 30Hz 更新**（隔帧换）。**已实测无效**，见下。
+- **(B2) cut 段隐藏布层**。**已实测**：隐藏**整块** `.cloth` → p50 33.4→16.8（60fps），
+  但只隐藏其中一部分（几个子层 / 全部子层 / 三道混合层 / 两张 SVG / 五道褶 / fiber）**一律没有收益**。
+- **(B3) 两半布静态 clip + 只做 transform 滑开**。**已实测会失败**，见下。
 - **(B4) 不改**，接受 30fps 的一刀：2.6 秒，且中间有大量位移，30fps 未必不可接受。
+
+#### B 段的实测否证（2026-10-25 第二轮，替用户先试 B3）
+
+为了替用户试 B3（两半布静态 clip + transform 滑开），**先不写实现、先量前提**——B3 成不成立
+只取决于一个问题：那 33ms 是「每帧改 `d`」造成的，还是「`.cloth` 上有 clip-path 这件事」
+造成的？三条实验（cut 段 p50，基线 33.4）：
+
+| 实验 | 做法 | p50 |
+|---|---|---|
+| 冻结 `d` | `?slit=99`（`d` 只在第一帧写一次，之后再也不写） | **33.3** |
+| 换成静态 CSS clip | `--css ".cloth{clip-path:polygon(...)!important}"`（不再引用 SVG，也不逐帧改） | **33.3** |
+| 隔帧改 `d` | `?slit=2` | **33.7** |
+| 藏掉整块布 | `--css ".cloth{display:none !important}"` | **16.8** |
+| 藏掉整块蛋糕 | `--css ".cake{display:none !important}"` | **16.7** |
+
+→ **`d` 是不是每帧改，完全不影响帧率**；只要 `.cloth` 还在场、还是那 15 层全屏像素，就 33ms。
+所以 B3（改挂载方式、让 clip 静态）**不会有效**，已放弃，没有写实现。
+
+进一步的分半归因（同一个基线 33.4）：隐藏 `.cloth` → 16.8、隐藏 `.cake` → 16.7，而
+「只隐藏布的一部分子层」全部无效（weave/slub/mottle、fiber、chart、marginalia、五道 crease、
+light/hem/dark/thread/vignette、`.cloth>*` 全空）——因为**布和蛋糕各自就要 ~16ms，谁都没退出预算**，
+必须整块拿掉一个才能把一帧压进 16.7ms 的一个 vsync。同理，以下都被逐一排除（p50 全部回到 33+）：
+`.cloth-dark` / 三道混合层改 `mix-blend-mode:normal`、`.cloth{filter:none}`、
+`.cloth{will-change:transform|opacity}`、`.cloth{contain:paint}`、`.cloth>*{will-change:auto}`、
+`.cake--half{clip-path:none}`、`.cake *{animation-play-state:paused}`。
+
+**结论**：cut 段要到 60fps，必须真的**少画一整个大元素**（布或蛋糕），没有"等价改写"能白拿。
+可选路只剩：把裂开那 2.6s 的布换成简化版（B2 的激进版，观感有明显代价）、或接受 30fps（B4）。
 
 （这一条上还有两个廉价候选没试：`#clothSlit` 的 band 半长 `L = W + H` = 2080px，
 而视口对角线只需 1509px（`cakegate.js:223`），降到 `Math.hypot(W,H)*1.1` 几何等价；

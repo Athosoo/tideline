@@ -70,6 +70,10 @@
   var NOJUMP = params.get("nojump") === "1";
   // 截图用：?top=0.5 把镜头俯视进度钉住，看中间态
   var TOPAT = params.has("top") ? clamp(parseFloat(params.get("top")) || 0, 0, 1) : null;
+  // 量测用：?slit=N 让布上那道缝的 d 每 N 帧才重写一次（默认 1 = 每帧）。
+  // 每帧重写会让 .cloth 的 clip 失效、十几层全屏子层跟着重画 —— 这是「划开那一下卡」
+  // 的结构性成本，隔帧更新能不能把帧预算省回来，得先量出来再说。
+  var SLIT_EVERY = Math.max(1, Math.round(parseFloat(params.get("slit")) || 1));
 
   var hooks = { openArchive: null, reduced: null };
 
@@ -83,6 +87,7 @@
     clothCam: 1,
     // 布身上有没有缺口（= 缝是否闭着）。true 时 .cloth 不挂 clip-path。
     whole: true,
+    slitTick: 0,        // ?slit=N 隔帧更新的计数器
     warm: false,        // 长廊是否已经在布后面预热好
     knifeStarted: false,
     cutQueued: false,
@@ -1092,7 +1097,19 @@
     var slitBase = (gapNow + S.dive * 220) * S.cam * (1 + S.dive * 2.25) / (S.clothCam * (1 + S.dive * 0.5));
     // +12：缝的边要压在蛋糕身下面 —— 两半各自还有 1.3°/1.8° 的歪，在盘沿能错开
     // 十来像素，正正好等宽会露出布丝。这个余量只在缝已经开了之后才加。
-    setSlit(slitBase > 0.5 ? slitBase + 12 * S.cam : 0);
+    var wantSlit = slitBase > 0.5 ? slitBase + 12 * S.cam : 0;
+    if (SLIT_EVERY <= 1) {
+      setSlit(wantSlit);
+    } else if (wantSlit === 0) {
+      // 缝合 / 还没裂开：必须立刻回到整块布，不能等下一轮
+      S.slitTick = 0;
+      setSlit(0);
+    } else if (++S.slitTick % SLIT_EVERY === 0) {
+      // 隔帧重写 d。缝的边会比两半慢最多 (SLIT_EVERY-1) 帧，而慢的那一侧
+      // 压在蛋糕身下面（布在蛋糕后面，见 index.html 的顺序），看不见；
+      // 反过来「洞比两半走得快」才会露出布丝 —— 所以滞后是安全方向。
+      setSlit(wantSlit);
+    }
     // 洞不能跟着下潜线性开：dive 才 0.18 洞就已经 600px，那是「舷窗」，
     // 一张明信片摊在洞里的构图正是要避开的瑕疵。让它憋到镜头快贴上去才开。
     var hz = clamp((S.dive - 0.5) / 0.5, 0, 1);
