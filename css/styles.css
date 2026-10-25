@@ -3354,7 +3354,8 @@ body.is-cake-cursor .cursor {
   visibility: hidden;
 }
 
-/* 侧壁上那个「19」只属于源蛋糕；可见的是两个克隆，各自带着抬到顶面正中的一份。
+/* 顶面上那个「19」只属于源蛋糕；可见的是两个克隆，各自带着自己顶面上的那一份。
+   （两半一分开，字也被切口劈成两半 —— 它本来就在面上，该跟着面走。）
    visibility 在 SVG 里会被子元素继承成一团雾，干脆把源的那份摘掉。 */
 .cake.is-source .cake-number-group {
   display: none;

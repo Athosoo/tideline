@@ -580,8 +580,10 @@
       " a164 " + topRy.toFixed(1) + " 0 0 0 328 0 v-" + wallH.toFixed(1) + " z";
     var wallEdgeD = "M76 " + (topY + wallH).toFixed(1) +
       " a164 " + topRy.toFixed(1) + " 0 0 0 328 0";
-    var numY = 30.2 - 74.2 * u;
-    var numS = 0.9 + 0.1 * u;
+    // 「19」的投影比：它印在顶面上，纵向必须跟着顶面一起压扁（ry/rx）。
+    // 以前这里是一条 numY（30.2 → -44）的位移，把侧壁上的字一路「抬」到顶面正中 ——
+    // 字是横着走的，没跟顶面一起转，所以镜头一推就露馅。现在只做顶面自己的投影。
+    var numK = topRy / TOP.rx;
     // 480 是蛋糕自己的坐标系，落到像素要乘上盒子的布局宽度（不含镜头缩放）
     var box = S.geom.cake || 336;
     // 俯视时蜡烛的「高度」要压扁：以前写 height（--ch）来压，38 支蜡烛每帧重新排版
@@ -604,8 +606,9 @@
       setEllipse(tr.top, 240, topY, 164, topRy);
       setEllipse(tr.topEdge, 240, topY, 164, topRy);
       if (tr.number) {
-        tr.number.setAttribute("transform", "translate(0 " + numY.toFixed(2) +
-          ") scale(1 " + numS.toFixed(3) + ")");
+        // 挂到顶面圆心，再按顶面投影压扁：这组坐标的 (0,0) 就是「19」的正中
+        tr.number.setAttribute("transform", "translate(" + TOP.cx + " " + topY.toFixed(2) +
+          ") scale(1 " + numK.toFixed(4) + ")");
       }
       if (tr.scallop) tr.scallop.setAttribute("d", scallopPath(topY, k));
       var i;

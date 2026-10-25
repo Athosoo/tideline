@@ -444,9 +444,12 @@
             <g id="swirls" class="cake-swirls" fill="none" stroke="#E2CFAC" stroke-width="1.3" opacity=".72"></g>
             <g id="scallop" class="cake-scallop" fill="none" stroke="#FFFCF1" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"></g>
             <g id="beads" class="cake-beads"></g>
-            <!-- 十九斜看时写在侧壁上；俯视时这组被 js 抬到顶面正中 -->
-            <g class="cake-number-group" transform="translate(0 302) scale(1 0.9) translate(0 -302)">
-              <text class="cake-number" x="240" y="302" text-anchor="middle">19</text>
+            <!-- 十九**印在顶面上**：整组挂在顶面圆心，js 每帧写 translate(240, topY) scale(1, k)，
+                 k = 顶面 ry/rx（斜看 0.366 → 正上方 1）。它一开始就是躺着的、跟顶面一起被
+                 压扁的字，镜头抬起来才慢慢站直；侧壁上从来没有字，也就没有「往上滑」这件事。
+                 中心是空的：蜡烛圈 r=104、内圈抹刀圈 r=34，字宽 ~52，正好落在最里圈以内。 -->
+            <g class="cake-number-group" transform="translate(240 190) scale(1 0.366)">
+              <text class="cake-number" x="0" y="0" text-anchor="middle" dominant-baseline="central">19</text>
             </g>
           </svg>
           <div class="cake-candles" id="candles"></div>
