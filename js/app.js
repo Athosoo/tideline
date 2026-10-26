@@ -2422,6 +2422,7 @@ function animate(now) {
     updateScrollState(dt);
   }
   if (window.CakeGate) CakeGate.update(dt, state.gate);
+  if (window.TideAudio) TideAudio.update(dt, window.Weather ? Weather.state : null, state);
   if (corridorLive) applyCardTransforms(now, dt);
   updateCursor(dt);
   if (window.Weather) Weather.update(dt, now);
@@ -2620,6 +2621,9 @@ function init() {
   startSea();
   initQuality();
   if (window.Weather) Weather.init({ quality: quality, reducedMotion: REDUCED_MOTION });
+  /* 声音：只在这里登记（建 AudioContext 要等第一次手势，见 audio.js armGesture）。
+     必须在 Weather.init 之后 —— 耳朵的映射要读 Weather.state 的 seaState / wind。 */
+  if (window.TideAudio) TideAudio.init({});
   setActiveCard(0, true);
 
   if (window.CakeGate) {

@@ -15,3 +15,10 @@ _qa*/
 /1/
 /2/
 /3/
+
+# 背景音乐（用户自己放的 C418 曲子，有版权，不随仓库发布）
+/assets/audio/music/*.mp3
+/assets/audio/music/*.m4a
+/assets/audio/music/*.ogg
+/assets/audio/music/*.wav
+/assets/audio/music/*.flac

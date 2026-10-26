@@ -45,6 +45,13 @@
   var SWIRL_R = [34, 62, 90, 118];
   var DEFAULT_BEARING = -0.60;  // 第一次点在蛋糕中心时，刀从右上方入场
 
+  /* 声音：这里只管「什么时候该响」，音量与合成全在 js/audio.js。
+     没有 audio.js（被裁掉的版本）时全部静默，不报错。 */
+  var sliceCued = false;
+  function cueAudio(name) {
+    if (window.TideAudio) TideAudio.cue(name);
+  }
+
   var clothWrap = document.getElementById("clothWrap");
   var cakeStage = document.getElementById("cakeStage");
   var cakeEl = cakeStage ? cakeStage.querySelector(".cake") : null;
@@ -698,6 +705,7 @@
     prewarm();
     // 镜头推进时刀还没出来，用站点自己的指针；刀飞进来时再藏指针
     document.body.classList.remove("is-cake-cursor");
+    cueAudio("approach");
   }
 
   function requestCut() {
@@ -781,6 +789,7 @@
     gateEl.classList.remove("is-idle");
     document.body.classList.add("is-cake-cursor");
     placeKnife();
+    cueAudio("fly");
   }
 
   function stepFly(dt) {
@@ -889,6 +898,8 @@
     document.body.classList.add("is-cutting");
     // 往后全交给 update()：HOLD 里只有一道亮缝（布纹丝不动），
     // 然后 SLICE 让刀真的划过去，划完才让两半让开，CUT 走完才算 open。
+    sliceCued = false;
+    cueAudio("cut");
   }
 
   /* ---------- 缝合：回封面时台布从切口缝回去 ---------- */
@@ -926,6 +937,8 @@
     }
     // 缝回去之后一切都要从头再写一遍：清空缓存，免得下一刀被「值没变」挡住
     resetStyleCache();
+    sliceCued = false;
+    cueAudio("stitch");
   }
 
   /* ---------- 事件 ---------- */
@@ -1057,6 +1070,8 @@
     // 镜头随后钻进这道缝。划过用 smoothstep：两头轻、中段快，像一刀划过去。
     var p = S.cut;
     var sliceU = clamp(p / SLICE, 0, 1);
+    /* 刀真的开始划过布的那一帧：HOLD 里 p 还是 0，所以 sliceU 一离开 0 就是它 */
+    if (!sliceCued && sliceU > 0) { sliceCued = true; cueAudio("slice"); }
     if (S.phase === "cut" && S.sliceFrom) {
       var stroke = easeInOut(sliceU);
       S.tip.x = S.sliceFrom.x + S.sliceDir.x * S.sliceLen * stroke;
@@ -1072,8 +1087,13 @@
           (sliceU < 1 ? 0.95 : clamp(1 - (p - SLICE) / 0.05, 0, 1)).toFixed(2));
       }
       // 碎屑在刀尖穿过圆心那一刻才崩：早了就成了「一落刀就炸」
-      if (!S.crumbed && stroke >= 0.5) { S.crumbed = true; spawnCrumbs(); }
-      if (sliceU >= 1 && !S.sliced) { S.sliced = true; gateEl.classList.add("is-sliced"); }
+      if (!S.crumbed && stroke >= 0.5) { S.crumbed = true; spawnCrumbs(); cueAudio("crumb"); }
+      if (sliceU >= 1 && !S.sliced) {
+        S.sliced = true;
+        gateEl.classList.add("is-sliced");
+        // 两半让开、缝里涌出真正的海：这是全场最大的一声
+        cueAudio("open");
+      }
     }
     // 劈开要让刀先划完再起 —— 划到一半布就自己让开，那是「没切就开了」。
     // 劈开用 easeInOut（两头慢中间快，像被掰开的），下潜是纯加速。

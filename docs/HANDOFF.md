@@ -56,28 +56,36 @@ GIFT/
 ├── index.html                 页面结构（唯一入口，file:// 直接打开）
 ├── README.md / THIRD-PARTY-NOTICES.md
 ├── css/styles.css             全部样式（地平线变量 --horizon: 26%）
-├── js/                        页面加载的 6 个脚本（文件名不变，勿再散放回根目录）
+├── js/                        页面加载的 7 个脚本（文件名不变，勿再散放回根目录）
 │   ├── clouds.js              【已停止加载 · 冻结】体积云（WebGL2 零依赖；仍是 sync-kernel.mjs 的注入目标，勿删勿改名）
 │   ├── weather.js             天气/时间系统 + 2D 云画布
 │   ├── sea.bundle.js          esbuild 产物（原版海面，IIFE 全局 OpenSea）
 │   ├── ocean.js               手写 WebGL2 后备海面
+│   ├── audio-assets.js        海鸥录音 base64（生成的，见 docs/AUDIO.md；勿手改）
+│   ├── audio.js               声音引擎（IIFE 全局 TideAudio；海浪/海风/海鸥/开屏拟音/音乐）
+│   ├── cakegate.js            开屏蛋糕动画状态机（动作点里调 TideAudio.cue）
 │   ├── app.js                 主逻辑
 │   └── sea-entry.js           bundle 构建源，页面不加载
-├── assets/                    明信片图 + 内嵌字体（进仓库）
+├── assets/                    明信片图 + 内嵌字体 + 月球贴图（进仓库）
+│   └── audio/music/           背景音乐投放目录（音频 gitignore，只留 README）
+├── docs/                      站点文档：HANDOFF / SITE-RULES / AUDIO / TODO
 └── 1/ 2/ 3/                   原始素材（已 gitignore，不发布；本地保留）
 ```
 
 | 文件 | 大小 | 作用 |
 |---|---|---|
-| `index.html` | 24 KB | 结构 + 大气层元素；脚本顺序 **js/weather.js → js/sea.bundle.js → js/ocean.js → js/app.js**（`js/clouds.js` 已不再加载） |
-| `js/app.js` | 84 KB (~2320 行) | 主逻辑：环廊、卡片、聚焦、开门、天气接线、海面后端调度、质量档 |
+| `index.html` | 42 KB | 结构 + 大气层元素；脚本顺序 **js/weather.js → js/sea.bundle.js → js/ocean.js → js/audio-assets.js → js/audio.js → js/cakegate.js → js/app.js**（`js/clouds.js` 已不再加载） |
+| `js/app.js` | 104 KB (~2320 行) | 主逻辑：环廊、卡片、聚焦、开门、天气接线、海面后端调度、质量档 |
 | `css/styles.css` | 74 KB | 全部样式；地平线对齐变量 `--horizon: 26%` |
 | `js/weather.js` | 29 KB | 天气/时间系统：晴雨云、风、闪电、月相；含 2D 云画布绘制 |
+| `js/audio.js` | 61 KB | 声音引擎：5 种声音，程序化合成 + 采样；**行为与参数见 `docs/AUDIO.md`** |
+| `js/audio-assets.js` | 105 KB | 4 段 xeno-canto 海鸥录音（base64 内嵌，CC BY 4.0，署名见 `THIRD-PARTY-NOTICES.md` §5） |
+| `js/cakegate.js` | 56 KB | 开屏蛋糕动画状态机；时间轴常量 `APPROACH/FLY/CUT/HOLD/SLICE` 也是拟音的对齐基准 |
 | `js/sea-entry.js` | 14 KB | **bundle 的构建源**，页面不加载它。原版海面 + TIDELINE 的调色/天气接线 |
 | `js/sea.bundle.js` | 790 KB | esbuild 产物，页面真正加载的是它（IIFE，全局 `OpenSea`） |
 | `js/ocean.js` | 33 KB | **手写 WebGL2 后备海面**（`?nogl=1` 可强制跳过） |
 | `1/ 2/ 3/` | — | 用户的原始素材，**不要动**；已加入 `.gitignore` 并从 git 取消跟踪（本地保留，不随仓库发布） |
-| `assets/` | 232 KB | 明信片图、字体 |
+| `assets/` | 232 KB | 明信片图、字体、月球贴图 |
 | `README.md` | 15 KB | 项目文档：渲染器来源、云盖、调色、三级回落、LITE 对照表 |
 
 ---
@@ -232,6 +240,15 @@ dispose()
   **教训**：`width/height/left/top` 每帧写一次就是一次布局 + 一次重栅格；
   能用 `transform`/`scale`/`translate` 表达的动画，就永远不要碰几何属性。
   `?cake=aim` 可把镜头冻结在俯视姿态，截静态帧做像素比对最省事。
+- **声音系统（`js/audio.js` + `js/audio-assets.js`）**：五种声音——海浪、海风、
+  偶发海鸥、开屏拟音、背景音乐。浪与风是程序化合成的循环 buffer（跟着 `Weather.state`
+  的 `seaState`/`wind`/`gust` 实时变），开屏拟音按 `cakegate.js` 的时间轴常量逐拍对齐，
+  海鸥是 4 段 xeno-canto 真实录音（base64 内嵌，CC BY 4.0），背景音乐由使用者自己放
+  `assets/audio/music/`（有版权，不进仓库）。**M 键静音**，`?audio=0` 一开始就静音。
+  烘焙分片藏在加载屏与封面阅读期，不占首帧。
+  实测：开屏全程 `gate` 0→1 时环境声 `amb` 0.31→0.81 平滑跟随；四段预览混音
+  `peak` 0.47/0.74/0.80/0.60 **无削波**、DC < 0.0005；M 键 `master` 0.997→0.004。
+  **行为、参数、接口、验证、已知限制全部在 `docs/AUDIO.md`** —— 改声音先读它。
 
 ---
 
@@ -293,6 +310,10 @@ rm -rf ./js/vendor
 5. **验证延迟/阻尼类改动时直接置位状态**（绕开滑杆与 ramp），别等它自己爬上来。
 6. **收尾清理**：临时目录（`_qa*/` 已 gitignore）、临时 Chrome profile、本地静态服务器全部删掉。
    上一轮就是因为留了一堆临时垃圾，用户才要在关对话前问"清理干净了吗"。
+7. **声音改动走 `docs/AUDIO.md` §6 的三道**：`audio_bake_test.mjs`（Node 里跑烘焙 + FFT，
+   不启浏览器，最快）→ `audio_smoke.mjs`（真 Chrome + CDP，验 `gate` 曲线、海鸥样本、
+   M 键、静音、混音峰值）→ `renderPreview` 导 WAV 用 `audio_analyze.py` 看频谱 / 直接听。
+   声音是听感问题，脚本只能证明「没坏」，最终判据还是耳朵。
 
 ### 6.1 已知的技术深坑（省你几个小时）
 
@@ -318,6 +339,8 @@ rm -rf ./js/vendor
 | 抓图 | 用 `_wip/verify/shoot.sh`（每次新建 profile、绝对 Windows 路径）；沿用旧 profile 会撞锁静默失败。**但本沙箱根本起不了浏览器**：headless Chrome 报 crashpad `crash server failed to launch` 后自杀、headless Edge 报 `FATAL mojo platform_channel ... 拒绝访问`，所以这里的交互改动只能给脚本证据（见 `WORKLOG.md` 2026-10-22 那两条的「未验」说明） |
 | 类名复用打穿长廊 | 静物那轮（`GIFT@54667a6`）给封面道具写的是**裸选择器** `.postcard` / `.postcard::after` / `.postcard-divider` / `.postcard-line(--a..e)` / `.postcard-stamp` / `.postcard-postmark` / `.postcard-seal`，而长廊卡片自己也挂 `.postcard`。它们在文件末尾、特异性相同，于是把长廊的 `position: absolute; inset: 0` 盖成 `position: relative; aspect-ratio: 1.55` —— 七张竖版卡（槽位 238×357）塌成 238×153 的纸背，还叠上封面的米色渐变与横纹。修法：这 12 条全部前缀 `.prop--postcard`（`css/styles.css:3692-3756`）。**新增任何道具/组件样式前，先 `Select-String '^\.类名'` 看这个类名是否已被别处占用**；共用类名必须靠父级作用域隔离 |
 | 银器画成磨砂塑料 | SVG 渐变默认 `objectBoundingBox`，0→100% 是摊在整个元素盒子上的：细长柄只吃到中间一档，钢就发平。金属件必须 `gradientUnits="userSpaceOnUse"` 并按每一件自己的 y 范围铺，且剖面要有四段（亮边 → 暗带 → 反射光 → 暗轮廓）；匙/叉的「内凹」要明显比柄暗，否则缩略时认不出是餐具（小叉曾因此像一支银笔，2026-10-23 换成勺时一并改掉） |
+| `file://` 下音频三条死路 | ① `fetch`/`XHR` 读本地 wav 一律 `Failed to fetch`；② 本地 `<audio>` 能播，但接 `MediaElementAudioSourceNode` 进 WebAudio 出来是**静音**（origin 为 `null`，被判跨域），所以音乐只能改 `.volume`、不能滤波/分析；③ `AudioWorklet.addModule()` 被拒。结论：环境声只能程序化合成、样本只能 base64 内嵌 `<script>`、音乐只能是本地 `<audio>`。详见 `docs/AUDIO.md` §2 |
+| 声音烘焙绝不能落在首帧 | 合成噪声要几百万次随机 + 二阶滤波，实测首版同步烘一次 2.2 秒。开屏那 1–2 秒本就在付加载屏和 WebGPU 管线的账，再叠烘焙必掉帧。必须 `setTimeout` 分片（每片 ~7 ms）藏进加载屏与封面阅读期 |
 
 ### 6.2 git 习惯
 

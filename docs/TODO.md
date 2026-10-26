@@ -556,6 +556,40 @@
 7. 品牌按钮回封面后 ≤ 1.6s 台布复原，且能再切一次。
 8. 抓图：`?cake=aim` / `?cake=cut` 各一张，肉眼过一遍。
 
+## 8. 声音系统　`[已完成 2026-10-26 · 待真机耳朵验收]`
+
+用户需求（2026-10-26）：**去掉风雨雷电之后，声音只剩海浪、海风、偶发海鸥、开屏拟音**
+（开屏拟音 ≠ 人声旁白，指刀划布、撕拉、吹灭蜡烛那套动作声）+ **一首宁静的背景音乐**（C418）。
+音源策略用户选「混合」：浪与风程序化合成、海鸥用真实录音样本；
+开关用户选「不放界面，只用键盘 M」。
+
+**行为、参数、接口、验证方法、已知限制全部在 `docs/AUDIO.md`**，这里只记进度与待办。
+
+| 项 | 状态 |
+|---|---|
+| `js/audio.js`（声音引擎：程序化合成 + 调度 + ducking） | ✅ |
+| `js/audio-assets.js`（4 段 xeno-canto 海鸥录音，base64 内嵌，CC BY 4.0） | ✅ 署名见 `THIRD-PARTY-NOTICES.md` §5 |
+| `index.html` 接线（`audio-assets.js` → `audio.js` → `cakegate.js` → `app.js`） | ✅ |
+| `js/app.js`：`init()` 在 `Weather.init()` 之后；帧循环调 `update()` | ✅ |
+| `js/cakegate.js`：每个动作点调 `TideAudio.cue()` | ✅ |
+| `assets/audio/music/`（背景音乐投放目录 + `.gitignore` 排除音频） | ✅ 目录与说明已建 |
+| `docs/AUDIO.md`（稳定结论） | ✅ |
+| **用户把 C418 曲子放进 `assets/audio/music/music.*`** | ⏳ **等用户**（版权原因不进仓库） |
+| **真机耳朵验收**（离屏窗口听不到声音，只能用户听） | ⏳ **等用户** |
+
+验证（可复跑）：
+
+```bash
+node _wip/verify/audio_bake_test.mjs        # 烘焙 + FFT，11/11 通过，不启浏览器
+node _wip/verify/audio_smoke.mjs --tag e6   # 真 Chrome + CDP：gate 曲线、海鸥样本、M 键、混音峰值
+```
+
+实测结论：开屏 `gate` 0→1 时环境声 `amb` 0.31→0.81 平滑跟随；四段预览混音 peak
+0.47/0.74/0.80/0.60 无削波、DC < 0.0005；M 键 `master` 0.997→0.004 且落地
+`localStorage`；烘焙 15 片共 5128 ms 全在加载屏与封面期，首帧零烘焙。
+
+---
+
 ## 附：与旧计划的关系
 
 | 旧计划 | 现在 |
