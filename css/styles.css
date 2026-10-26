@@ -442,6 +442,118 @@ img {
 @keyframes cueSpin { to { transform: rotate(360deg); } }
 
 /* ---------------------------------------------------------
+   The boot screen (2026-10-25)
+   ---------------------------------------------------------
+   为什么要有它：首帧要把 #intro 那一叠全屏内容栅格化出来，海面引擎还要建
+   WebGL/WebGPU 上下文（会把整条合成管线冻住 0.5–0.9s）。两笔账加起来 1–2 秒，
+   期间画面是**分几截闪出来**的 —— 用户实测「蛋糕先到、奶油晚一秒才补上」。
+   与其去修那个无法控制的合成时序，不如挡一块板子：等封面真的画完了再揭。
+   这块板只动 opacity / visibility，不参与 layout，也不碰任何动画属性；
+   底色就是 .cloth 自己的那套渐变，所以揭开时没有颜色跳变。 */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse 92% 78% at 50% 44%, #fdf8ec 0%, #f8efdd 42%, #eee0c6 100%),
+    linear-gradient(158deg, #faf3e3 0%, #f2e6d0 58%, #e8d9be 100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  /* 0.9s 而不是 0.3s：板子底下那叠封面的光栅不是一瞬间完成的，淡出要比它慢，
+     才能让「补画」看起来像从纸里浮出来，而不是又闪一下。 */
+  transition: opacity 0.9s var(--ease-out), visibility 0.9s;
+}
+
+.is-booting .boot {
+  opacity: 1;
+  visibility: visible;
+  /* 加载期间不许点穿到底下的封面：那一下点击会被当成「切一刀」。 */
+  pointer-events: auto;
+}
+
+.boot-orbit {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 46px;
+}
+
+/* 轨道与游标都用一个 1px 的 border 圆来画，不用 SVG：SVG 元素的 transform 动画
+   不一定被合成器接走，而板子在的这几秒主线程正忙着建海面 —— 动画必须跑在合成器上，
+   否则用户看到的是一枚卡住的转圈。 */
+.boot-orbit::before,
+.boot-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+}
+
+/* 一整圈很淡的轨道 */
+.boot-orbit::before {
+  border-color: rgba(18, 63, 62, 0.14);
+}
+
+/* 跑起来的那半圈：只有上边和右边着色，整个方块一转就是那截弧在走 */
+.boot-orbit::after {
+  border-top-color: rgba(18, 63, 62, 0.58);
+  border-right-color: rgba(18, 63, 62, 0.58);
+  will-change: transform;
+  animation: bootSpin 1.15s linear infinite;
+}
+
+@keyframes bootSpin { to { transform: rotate(360deg); } }
+
+.boot-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.boot-copy b {
+  font-family: var(--sans);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: rgba(18, 63, 62, 0.62);
+}
+
+.boot-copy small {
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: rgba(18, 63, 62, 0.42);
+}
+
+/* 板子在的时候，封面的入场动画先别跑：等揭开那一帧再开始。
+   否则用户看到的是一段已经播完的动画（题字已经就位、没有推入），
+   那正是「闪出好突兀」的另一半。 */
+.is-booting .cover-header,
+.is-booting .cover-hero,
+.is-booting .cover-footer,
+.is-booting .cover-title__first,
+.is-booting .cover-title__second {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-orbit::after { animation: none; }
+  .boot { transition-duration: 0.2s; }
+}
+
+/* ---------------------------------------------------------
    The shoreline gallery
    --------------------------------------------------------- */
 

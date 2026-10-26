@@ -1134,6 +1134,18 @@ function oceanRect() {
   return oceanBox;
 }
 
+/* 海面引擎「建完了」的信号 —— 开屏加载屏要等它。
+   成功、失败、以及一开始就走兜底海（?nogl=1）这三种情况都算 settled：
+   加载屏绝不能等它没完没了。 */
+let resolveSeaSettled = null;
+const seaSettled = new Promise((resolve) => { resolveSeaSettled = resolve; });
+function markSeaSettled() {
+  if (!resolveSeaSettled) return;
+  const done = resolveSeaSettled;
+  resolveSeaSettled = null;
+  done();
+}
+
 function startSea() {
   if (window.OpenSea && window.OpenSea.createSea && !/[?&]nogl=1/.test(window.location.search)) {
     // Show the cheap canvas sea immediately and upgrade to the 3D renderer when
@@ -1174,10 +1186,12 @@ function startSea() {
       document.body.classList.add("has-sea-bundle");
       engine.setQuality({ scale: quality.level === "lite" ? 0.75 : 1 });
       engine.resize(width, height);
+      markSeaSettled();
     }).catch((err) => {
       console.warn("[TIDELINE] open-sea engine unavailable, keeping the fallback sea:", err && err.message ? err.message : err);
       document.body.classList.remove("has-sea-bundle");
       if (!waterPainter) useFallbackSea();
+      markSeaSettled();
     });
     /* 双 rAF：第一个回调只登记下一帧，保证这一帧（封面 / 台布）已经绘制出去。
        早先试过把建海推到 1.2s 之后（封面落定再建），A/B 下来并不更好 —— FCP 反而
@@ -1190,6 +1204,7 @@ function startSea() {
     return;
   }
   useFallbackSea();
+  markSeaSettled();
 }
 
 // The reference palette. It is written as if it were linear light (the engine
@@ -2618,6 +2633,76 @@ function init() {
 
   state.initialized = true;
   window.requestAnimationFrame(animate);
+  initBootScreen();
+}
+
+/* ── 开屏加载屏 ────────────────────────────────────────────────────────────
+   为什么要有它（2026-10-25）：首帧要把 #intro 那一叠全屏内容栅格化出来，海面引擎
+   还要建 WebGL/WebGPU 上下文（实测会把整条合成管线冻住 0.5–0.9s）。两笔账加起来
+   1–2 秒，期间画面是**分几截闪出来**的 —— 用户实测「蛋糕先到、奶油晚一秒才补上」，
+   也就是「闪出好突兀」。与其去猜合成器的时序，不如挡一块板子，等真画完了再揭。
+
+   判定「画完了」要同时满足三件事：
+     1) 页面 load 完（字体 / 明信片这些子资源就位）；
+     2) 海面引擎 settled（成功、失败、本来就走兜底海都算，不能等它没完没了）；
+     3) 之后再出一帧 —— 说明板子和它底下已经画好的封面同屏出现过一次。
+   再加一条最短停留：不能让板子只闪一下，那样比不加还难看。
+   上限 8s，超了也揭：宁可露一帧不完美，也不能把用户关在板子里（index.html 那边还有
+   一条 9s 兜底，防止这段脚本压根没跑到）。 */
+function initBootScreen() {
+  const root = document.documentElement;
+  if (!root.classList.contains("is-booting")) return;
+
+  const startedAt = performance.now();
+  const minDwell = REDUCED_MOTION.matches ? 200 : 420;
+  /* 硬上限：到点必揭。宁可露一帧不完美，也不能把用户关在板子里。
+     index.html 里有一条更长的兜底定时器，防止这段脚本压根没跑到。 */
+  const hardCap = 8000;
+  let revealed = false;
+
+  const reveal = () => {
+    if (revealed) return;
+    revealed = true;
+    root.classList.remove("is-booting");
+    root.classList.add("is-booted");
+    /* 板子要在淡出的这 0.9s 里继续吃住点击（否则那一下会被封面当成「切一刀」），
+       等它彻底透明了再摘掉节点，免得页面上永远挂着个覆盖层。 */
+    window.setTimeout(() => {
+      const boot = document.getElementById("boot");
+      if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+    }, 1200);
+  };
+
+  const pageLoaded = new Promise((resolve) => {
+    if (document.readyState === "complete") resolve();
+    else window.addEventListener("load", resolve, { once: true });
+  });
+
+  /* 海面引擎 settled **不设预算**：它建造时会把合成管线冻住 0.5–1.7s，这一下要是
+     发生在揭开之后，用户看到的还是「封面先到、别的东西晚一步补上」。加载屏存在的
+     全部意义就是替它挡这一下，所以宁可多等。板子上的转圈是合成器动画，主线程被
+     冻住时它照样转，等得住。 */
+
+  /* 「再过一帧」在超长帧下就是「再等两秒」，所以同时挂一个跟帧无关的兜底：
+     最多再等 700ms 就揭。两个都到不了就交给 hardCap。 */
+  const revealSoon = () => {
+    let fired = false;
+    const go = () => {
+      if (fired || revealed) return;
+      fired = true;
+      reveal();
+    };
+    window.requestAnimationFrame(go);
+    window.setTimeout(go, 700);
+  };
+
+  Promise.all([pageLoaded, seaSettled]).then(() => {
+    const remaining = minDwell - (performance.now() - startedAt);
+    if (remaining > 0) window.setTimeout(revealSoon, remaining);
+    else revealSoon();
+  });
+
+  window.setTimeout(reveal, hardCap);
 }
 
 init();

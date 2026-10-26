@@ -1135,6 +1135,10 @@ feTurbulence 平铺、五道 `.cloth-crease`、两张 `viewBox="0 0 1440 900"` �
   的成本，而不是只删子层。代价是质感，需要并排截图比。
 - **(A3) 不改**，接受 0.7s：它只是一次性的白屏，之后稳定 60fps。
 
+> **2026-10-25 深夜：这三条都不用选了。** 用户拍板改走「开屏加载屏」（§7.24）：
+> 首帧那 0.7–1.1s 与海面建造的那一下，全部挡在一块板子后面，揭开时封面已经画完。
+> A1/A2 是对「怎么让首帧更快」的回答，而板子把问题从「更快」换成了「先别看」。
+
 **B. 划开那一下：每帧 33ms。** 归因：cut 段每帧要把 `#intro` 里叠着的全屏内容重画一遍，
 成本**一半在 `.cloth`、一半在 `.cake`**（`?slit=` 冻结实验见下）。可选路：
 - **(B1) `d` 降到 30Hz 更新**（隔帧换）。**已实测无效**，见下。
@@ -1186,3 +1190,69 @@ node _wip/verify/perf_compare.mjs base1,base2,base3 new1,new2,new3
 # 第一帧到底什么时候来
 node _wip/verify/_probe_sea_timeline.mjs --tag t1
 ```
+
+
+### 7.24 第八轮：开屏加载屏（2026-10-25 深夜，用户 m01127 / m01246 · 代码已落地，待真机验收）
+
+**问题**：用户报「蛋糕上的奶油要打开后一秒才能加载出来」。查下来 DOM 在 585ms 就齐了
+（`#scallop` 19 瓣、`#drips` 15 条、`#beads` 19 颗都在），**延迟全在光栅/合成**：
+`#intro` 那叠全屏内容的第一帧要 0.7–1.1s，海面引擎建 WebGL/WebGPU 上下文又要冻 0.5–1.7s，
+两笔账落在同一两秒里，于是封面是「分几截闪出来」的 —— 蛋糕先到、奶油后到。
+
+**用户拍板（m01246）**：「在打开的时候搞一个简单的纯色背景转圈圈动画，等到一切加载的完美后才进入。」
+所以这一轮不去猜合成器时序，改成挡一块板子。
+
+**实现**（三个文件，无新文件、无构建）
+
+- `index.html`：`<head>` 里一段内联脚本，无借口（`?boot=0` / `?top=` / `?cake=` / `?bench=`）时
+  立刻给 `<html>` 加 `.is-booting`（放在 `.is-lean` 之后、CSS 之前，**第一帧就是板子**，
+  不会先闪一帧封面）；`<body>` 开头是 `.boot` 覆盖层（`.boot-orbit` 细环 + `SETTING THE TABLE`
+  / 正在铺开这张桌布）。还有一条 9s 兜底定时器，防止 `app.js` 没跑到而把用户永久关在板子里。
+- `css/styles.css`：`.boot` 用 `position:fixed; inset:0; z-index:90`，底色直接复用 `.cloth`
+  那一套渐变（`#fdf8ec → #f8efdd → #eee0c6` + `#faf3e3 → #f2e6d0 → #e8d9be`），
+  所以揭开时没有颜色跳变；只动 `opacity` / `visibility`，`transition: opacity .9s`（比底下那叠
+  封面的补画更慢，让补画看起来像从纸里浮出来）。转圈用**两个 1px border 圆**
+  （`::before` 轨道 / `::after` 只有上+右着色）而不是 SVG —— SVG 元素的 transform 动画不一定
+  被合成器接走，而板子在的这几秒主线程正忙着建海面，动画必须跑在合成器上。
+  `@media (prefers-reduced-motion)` 里停掉转圈、把过渡压到 0.2s。
+- `js/app.js`：`initBootScreen()`（`init()` 末尾调用）等到
+  ① `load` 事件、② 海面引擎 settled（新增 `seaSettled` promise：`buildSeaEngine` 的
+  `.then` / `.catch` 与兜底海三条路径都会 `markSeaSettled()`）、③ 再出一帧，
+  然后摘掉 `.is-booting` 加 `.is-booted`，1.2s 后把 `#boot` 节点删掉。
+  最短停留 420ms（`prefers-reduced-motion` 200ms）；硬上限 8s，超了照揭。
+
+**为什么不给「等海面」设预算**：海面建造那一下会把合成管线冻住 0.5–1.7s。它要是发生在
+揭开**之后**，用户看到的还是「先到一半、剩下晚一步补上」。加载屏的全部意义就是替它挡这一下，
+所以宁可多等（板子上的转圈在合成器上，等得住）。实测：机器闲时 reveal ≈ 2.5s，
+忙时（同时跑着一堆重负载进程）≈ 5.2s。
+
+**验收（量出来的）**
+
+| 项 | 结果 |
+|---|---|
+| 板子第一帧就在 | `.is-booting` 在 CSS 之前加；`boot.png` 抓到 700ms 的板子（暖纸底 + 细环 + 两行字） |
+| 海面真的先于揭示 | 采样时间线里 `booting→booted` 与 `sea:true` **同一次采样**（5152 / 5163ms）出现，此前 `sea` 一直是 false |
+| 揭开后封面完整 | `cover.png`：布、蛋糕、**奶油花边 + 流下的奶油**、蜡烛、勺子、明信片、罗盘都在 |
+| 节点会清理 | 揭开后 `#boot` 为 `missing`，`documentElement.className` = `is-booted` |
+| 不影响抓图脚本 | `?top=1` 出图正常（19 在顶面、无板子） |
+| 语法 | `node --check js/app.js` 通过 |
+
+**一个没解释清的观测（记着，别当结论）**：板子在的时候帧产出明显变少
+（同一台机器：无板子 n=165 / p50 33.5ms，有板子 n=9 / p50 200ms），但**海面 settled 的时刻
+几乎一样**（5094ms vs 5163ms）—— 板子没有拖慢加载，只是「没有视觉变化时合成器少出帧」。
+挨个排除过：`.boot` 换纯色底（p50 250）、`#intro{visibility:hidden}`（217）、
+`.boot-orbit{animation:none}`（201）、封面动画不暂停（1701）、`.boot{display:none}`（1685）
+—— 都不是。转圈因此改成 border 圆（合成器动画），主线程被冻住时仍然转。
+
+**怎么关掉**：`?boot=0`。抓图脚本用的 `?top=` / `?cake=` / `?bench=` 自动跳过加载屏。
+
+**真机待验**：离屏窗口里 CSS 动画被挂起，封面题字与蛋糕顶面的「19」在截图上都看不到
+（拿干净树 `4ba208c` 跑同样流程也一样，不是这轮引入的），需要用户在真窗口里看一眼。
+
+**复跑**：
+
+```bash
+node _wip/verify/_probe_boot.mjs --tag b1 --ms 9000 --shots     # 板子 + 封面两张图 + 时间线
+node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
+```
+

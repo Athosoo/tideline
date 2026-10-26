@@ -12,6 +12,24 @@
   <!-- 诊断/省电模式：?lean=1 关掉合成器杀手（backdrop-filter / mix-blend-mode / 颗粒层）。
        用来在真机上二分「卡在渲染管线还是合成层」。必须内联同步、早于首帧。 -->
   <script>if (/[?&]lean=1/.test(location.search)) document.documentElement.classList.add("is-lean");</script>
+  <!-- 开屏加载屏：首帧光栅 + 海面引擎初始化要 1–2 秒，这段时间画面是分几截闪出来的
+       （用户实测：蛋糕先到、奶油晚一秒才补上）。先挂 is-booting，CSS 就会压住封面、
+       把入场动画暂停到揭开那一帧再播。?boot=0 关掉；?top= / ?cake= 是冻结相位的抓图
+       开关，也不能被挡住；?bench=1 是性能自测，同样不拦。 -->
+  <script>
+    (function () {
+      var q = location.search;
+      if (/[?&]boot=0/.test(q) || /[?&](top|cake|bench)=/.test(q)) return;
+      var root = document.documentElement;
+      root.classList.add("is-booting");
+      /* 兜底：万一后面的脚本挂了，也绝不能用一块板子把用户永远关在外面。 */
+      setTimeout(function () {
+        if (!root.classList.contains("is-booting")) return;
+        root.classList.remove("is-booting");
+        root.classList.add("is-booted");
+      }, 9000);
+    })();
+  </script>
   <!-- ?bench=1 自测：预热 3s 后采样 4s，把 FPS / 帧间隔 / 主线程回调 / LoAF / 写入计数画在屏幕上。
        不需要开控制台，截图给我就行。
        读法：JS cb 只包住 animate()；gap = 帧间隔 − JS cb，是 animate 之外的主线程
@@ -67,6 +85,13 @@
   <script defer src="js/app.js"></script>
 </head>
 <body>
+  <!-- 开屏加载屏（2026-10-25）。它挡在 .intro（z-index:50）前面，等封面真的画完了
+       再淡出：底色就是台布自己的那一套渐变，所以揭开时不会有颜色跳变。 -->
+  <div class="boot" id="boot" role="status" aria-live="polite" aria-label="正在准备这张桌布">
+    <span class="boot-orbit" aria-hidden="true"></span>
+    <span class="boot-copy"><b>SETTING THE TABLE</b><small>正在铺开这张桌布</small></span>
+  </div>
+
   <a class="skip-link" href="#gallery" data-open-archive>Skip to the archive</a>
 
   <div class="scroll-track" id="scrollTrack" aria-hidden="true"></div>
