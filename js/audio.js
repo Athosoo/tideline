@@ -39,7 +39,7 @@
 
   if (typeof window === "undefined" && typeof globalThis === "undefined") return;
 
-  var VERSION = "1.0.0";
+  var VERSION = "1.1.0";
 
   /* 32kHz：环境噪声没有 16kHz 以上的内容，拟音的高频也够用；
      比 44.1k 省 27% 的烘焙时间和内存。 */
@@ -51,14 +51,25 @@
     gull: 1.0,
     foley: 0.95,     // 拟音总线（开屏那一刀）
     music: 0.30,     // 音乐基量：C418 那种安静的曲子，0.3 是「垫在下面」
-    musicGallery: 0.18,
+    musicGallery: 0.24,
+    /* 混响：海边不是一个房间，是一条开阔的岸线 —— IR 用程序化生成的
+       2.6s 扩散 + 稀疏早期反射，湿声只补「空间」不糊直接声 */
+    revBed: 0.10,
+    revWind: 0.08,
+    revSwell: 0.20,
+    revSwellFar: 0.46,   // 远处的浪：直达声小、混响大，这才是距离感
+    revGull: 0.34,
   };
-
+  /* 音乐：站点自带的曲子是用户本地放的（不入库）。先按 README 约定的
+     music.* 找，找不到再认用户实际放下的文件名 —— 两种都不必改名。 */
+  /* 用户放下的成品曲：两个格式各一份，谁先能解用谁。
+     后面几个通用名是留给「以后想换曲子直接改名覆盖」的退路。 */
   var MUSIC_SRC = [
-    "assets/audio/music/music.mp3",
+    "assets/audio/music/1-05. Minecraft.mp3",
+    "assets/audio/music/1-05. Minecraft.ogg",
     "assets/audio/music/music.m4a",
     "assets/audio/music/music.ogg",
-    "assets/audio/music/music.wav",
+    "assets/audio/music/music.mp3",
   ];
 
   var STORE_MUTE = "tideline.audio.muted.v1";
@@ -260,11 +271,13 @@
    *   高频「毛边」（2k 左右的空气感）。循环 6s，交叉淡化 0.7s。
    * ------------------------------------------------------------------ */
   function bakeBed(rate) {
-    var LEN = 4.5, XF = 0.6;
+    /* 13.7s，且不是整数秒 —— 4.5s 的旧循环被整段包络自相关一眼抓到
+       （实测 ambient 60s：period 4.50s / strength 0.44），听久了就是「这段背景
+       在转圈」。循环一长，同一段 60s 里只装 4 个周期，自相关就压下去了。 */
+    var LEN = 13.7, XF = 1.1;
     var L = Math.round(LEN * rate);
     var X = Math.round(XF * rate);
     var n = L + X;
-    var beat = envTable(n, 256, function (u) { return 0.78 + 0.22 * Math.sin(u * (LEN + XF) * 0.42 * Math.PI * 2); });
     var chans = [];
     for (var c = 0; c < 2; c++) {
       var rnd = mulberry32(0x51ee + c * 7919);
@@ -279,10 +292,21 @@
       var sub = brownNoise(n, mulberry32(0x77 + c * 31));
       runFilter(sub, coeffs("lowpass", 120, 0.7, rate));
       removeDC(sub);
+      /* 慢起伏只用中频：3/5/8 个周期叠在同一个循环长度上（周期 4.6/2.7/1.7s），
+         接缝严格对齐、彼此不同步。低频与超低频保持恒定 —— 真正的一涨一落交给
+         浪自己（每次都是新排程的），循环层别再自己「呼吸」，那才是最容易被听出
+         重复的地方。 */
+      var ph = c * 1.7;
+      /* 逐样本算 3 条正弦：14.8s 的 buffer 上光 sin 就要 2.8M 次，Node 里烘一轮
+         直接从 1.5s 涨到 4.6s。慢包络不需要那么细的网格，按 48 采样一格插值足够
+         （周期 1.7s 的最细一条也有 1100 格）。 */
+      var beat = envTable(n, 48, function (u) {
+        var w = (u * n / L) * Math.PI * 2;
+        return 0.90 + 0.07 * Math.sin(w * 3 + ph) + 0.02 * Math.sin(w * 5 + 1.9) + 0.01 * Math.sin(w * 8 + 4.1);
+      });
       var mix = new Float32Array(n);
       for (var i = 0; i < n; i++) {
-        var b = beat[i];
-        mix[i] = (low[i] * 0.85 + mid[i] * 0.55 * b + sub[i] * 1.25) * b;
+        mix[i] = low[i] * 0.85 + mid[i] * 0.61 * beat[i] + sub[i] * 1.25;
       }
       chans.push(removeDC(loopify(mix, L, X)));
     }
@@ -296,7 +320,8 @@
    *   只在阵风里出现，靠实时滤波提上来）。
    * ------------------------------------------------------------------ */
   function bakeWind(rate) {
-    var LEN = 6.5, XF = 0.8;
+    /* 9.7s：和 bed 一样避开整数秒与浪的周期，循环感更弱 */
+    var LEN = 9.7, XF = 0.8;
     var L = Math.round(LEN * rate);
     var X = Math.round(XF * rate);
     var n = L + X;
@@ -308,12 +333,13 @@
       runFilter(body, coeffs("bandpass", 620, 0.62, rate));
       var hiss = raw.slice();
       runFilter(hiss, coeffs("highpass", 1800, 0.6, rate));
-      /* 三个不同周期的正弦叠出来的慢起伏 —— 不用 random walk，
-         因为循环 buffer 里的 random walk 一定会在接缝处断层 */
+      /* 三条以「循环长度」为周期的正弦叠出来的慢起伏 —— 不用 random walk，
+         因为循环 buffer 里的 random walk 一定会在接缝处断层。周期要按 L 算
+         （早先按 t 直接乘 0.63/1.37，接缝处包络根本对不上）。 */
       var wander = envTable(n, 512, function (u) {
-        var t = u * (LEN + XF);
-        return 0.55 + 0.30 * Math.sin(t * 0.63 + c * 2.1) +
-          0.10 * Math.sin(t * 1.37 + 1.3) + 0.05 * Math.sin(t * 2.9 + c);
+        var w = (u * n / L) * Math.PI * 2;
+        return 0.62 + 0.18 * Math.sin(w * 2 + c * 2.1) +
+          0.08 * Math.sin(w * 5 + 1.3) + 0.04 * Math.sin(w * 9 + c);
       });
       var mix = new Float32Array(n);
       for (var i = 0; i < n; i++) {
@@ -322,7 +348,10 @@
       }
       chans.push(loopify(mix, L, X));
     }
-    normalize(chans, 0.6);
+    /* 归一化到 0.82 而不是 0.6：慢起伏改平之后 RMS 从 0.137 掉到 0.098（约 3dB），
+       在同一条 windGain 曲线上听着就是「风声变小了」。buffer 峰值抬高补回来，
+       混音里再没有别处需要改。 */
+    normalize(chans, 0.82);
     return { name: "wind", rate: rate, chans: chans };
   }
 
@@ -375,7 +404,70 @@
     removeDC(out);
     normalize([out], cfg.peak || 0.82);
     fadeEdges(out, rate, 12);
-    return { name: "surf", rate: rate, chans: [out] };
+    return { name: "surf", rate: rate, chans: [out], tag: cfg.tag || "mid", bright: cfg.bright, dur: dur };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 烘焙 · 混响脉冲响应（IR）
+   *   程序化生成：指数衰减的立体声噪声 + 一串稀疏早期反射。
+   *   湿声只要「开阔」不要「浴室」：衰减 2.6s、6k 以上先滤掉，
+   *   早期反射按 0.011–0.058s 摆在前面，耳朵靠它判断「岸有多远」。
+   * ------------------------------------------------------------------ */
+  function bakeReverbIR(rate) {
+    var LEN = 2.6;
+    var n = Math.round(LEN * rate);
+    var chans = [];
+    var early = [0.011, 0.017, 0.023, 0.031, 0.044, 0.058, 0.077];
+    for (var c = 0; c < 2; c++) {
+      var rnd = mulberry32(0x6a11 + c * 3301);
+      var ch = new Float32Array(n);
+      for (var i = 0; i < n; i++) {
+        var u = i / n;
+        /* 双指数：先按扩散场掉，尾巴再慢一点 —— 只有一条曲线会像「关门」 */
+        var env = Math.pow(1 - u, 2.2) * (0.55 + 0.45 * Math.exp(-u * 2.4));
+        ch[i] = (rnd() * 2 - 1) * env;
+      }
+      runFilter(ch, coeffs("lowpass", 5200, 0.6, rate));
+      runFilter(ch, coeffs("highpass", 170, 0.6, rate));
+      /* 早期反射：左右错开一点，稀疏、带符号 —— 纯噪声扩散没有方向感 */
+      for (var k = 0; k < early.length; k++) {
+        var idx = Math.round(early[k] * rate * (1 + c * 0.11) + c * 37);
+        if (idx > 0 && idx < n) ch[idx] += (c ? -1 : 1) * Math.pow(0.84, k) * (0.7 - k * 0.06);
+      }
+      removeDC(ch);
+      chans.push(ch);
+    }
+    normalize(chans, 0.5);
+    return { name: "reverb", rate: rate, chans: chans };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 烘焙 · 退水（backwash）
+   *   浪碎了之后水从沙上退回去：一条往下滑的带通噪声，很轻、尾巴长。
+   *   没有这一层，浪会「来了就不走」，听着像循环音效而不是海。
+   * ------------------------------------------------------------------ */
+  function bakeWash(rate, seed, cfg) {
+    var dur = cfg.dur;
+    var n = Math.round(dur * rate);
+    var rnd = mulberry32(seed);
+    var raw = pinkNoise(n, rnd);
+    var body = raw.slice();
+    sweepFilter(body, rate, "bandpass", function (t) {
+      var u = t / dur;
+      return lerp(cfg.hi, cfg.lo, Math.pow(u, 0.7)) * (1 + 0.06 * Math.sin(t * 3.1));
+    }, cfg.q || 0.9, 192);
+    var sub = raw.slice();
+    runFilter(sub, coeffs("lowpass", 240, 0.7, rate));
+    var env = envTable(n, 96, function (u) {
+      /* 起得比浪慢、收得比浪长：水是「慢慢退」的 */
+      return Math.pow(smoothstep(0, 0.18, u), 1.2) * Math.pow(1 - u, 1.5);
+    });
+    var out = new Float32Array(n);
+    for (var i = 0; i < n; i++) out[i] = body[i] * env[i] + sub[i] * env[i] * (cfg.sub || 0.5);
+    removeDC(out);
+    normalize([out], cfg.peak || 0.4);
+    fadeEdges(out, rate, 20);
+    return { name: "wash", rate: rate, chans: [out] };
   }
 
   /* ------------------------------------------------------------------ *
@@ -620,18 +712,29 @@
     return [
       function () { return bakeBed(rate); },
       function () { return bakeWind(rate); },
+      function () { return bakeReverbIR(rate); },
+      /* 近岸：亮、短、脆（礁石边上碎开的那一道） */
       function () {
-        return bakeSurf(rate, 0x11a1, { dur: 3.9, peakAt: 0.30, bright: 1150, dark: 320, q: 0.9, foam: 0.26, sub: 1.35, tailPow: 2.3 });
+        return bakeSurf(rate, 0x11a1, { dur: 3.9, peakAt: 0.30, bright: 1150, dark: 320, q: 0.9, foam: 0.26, sub: 1.35, tailPow: 2.3, tag: "near" });
       },
       function () {
-        return bakeSurf(rate, 0x22b2, { dur: 4.5, peakAt: 0.26, bright: 900, dark: 290, q: 0.8, foam: 0.20, sub: 1.5, tailPow: 2.0 });
+        return bakeSurf(rate, 0x33c3, { dur: 3.6, peakAt: 0.34, bright: 1350, dark: 360, q: 1.0, foam: 0.30, sub: 1.15, tailPow: 2.5, tag: "near" });
       },
       function () {
-        return bakeSurf(rate, 0x33c3, { dur: 3.6, peakAt: 0.34, bright: 1350, dark: 360, q: 1.0, foam: 0.30, sub: 1.15, tailPow: 2.5 });
+        return bakeSurf(rate, 0x55e5, { dur: 3.2, peakAt: 0.38, bright: 1500, dark: 400, q: 1.1, foam: 0.34, sub: 1.0, tailPow: 2.7, tag: "near" });
+      },
+      /* 远处：暗、长、厚（隔着一段水面的那一排） */
+      function () {
+        return bakeSurf(rate, 0x22b2, { dur: 4.5, peakAt: 0.26, bright: 900, dark: 290, q: 0.8, foam: 0.20, sub: 1.5, tailPow: 2.0, tag: "far" });
       },
       function () {
-        return bakeSurf(rate, 0x44d4, { dur: 4.8, peakAt: 0.24, bright: 830, dark: 270, q: 0.75, foam: 0.18, sub: 1.6, tailPow: 2.1 });
+        return bakeSurf(rate, 0x44d4, { dur: 4.8, peakAt: 0.24, bright: 830, dark: 270, q: 0.75, foam: 0.18, sub: 1.6, tailPow: 2.1, tag: "far" });
       },
+      function () {
+        return bakeSurf(rate, 0x66f6, { dur: 5.4, peakAt: 0.22, bright: 760, dark: 250, q: 0.7, foam: 0.16, sub: 1.7, tailPow: 1.9, tag: "far" });
+      },
+      function () { return bakeWash(rate, 0x71a1, { dur: 2.6, hi: 900, lo: 260, q: 0.85, sub: 0.55, peak: 0.42 }); },
+      function () { return bakeWash(rate, 0x72a2, { dur: 3.2, hi: 1100, lo: 220, q: 0.75, sub: 0.65, peak: 0.38 }); },
       function () { return bakeWhoosh(rate); },
       function () { return bakeSlice(rate); },
       function () { return bakeTear(rate); },
@@ -650,13 +753,15 @@
     var layers = {};
     var surf = [];
     var gull = [];
+    var wash = [];
     for (var i = 0; i < steps.length; i++) {
       var r = steps[i]();
       if (r.name === "surf") surf.push(r);
       else if (r.name === "gull") gull.push(r);
+      else if (r.name === "wash") wash.push(r);
       else layers[r.name] = r;
     }
-    return { rate: BAKE_RATE, layers: layers, surf: surf, gull: gull };
+    return { rate: BAKE_RATE, layers: layers, surf: surf, gull: gull, wash: wash };
   }
 
   /* ------------------------------------------------------------------ *
@@ -730,6 +835,8 @@
     music: { el: null, level: 0, target: 0, available: false, tried: 0, playing: false },
     seeded: false,
     preview: false,
+    lastPick: {},          // 每种一次性声音上一次挑了哪支，避免连着重复
+    swellPlan: null,       // 浪的组成状态（组内第几道 / 声像 / 强度）
   };
 
   /* ------------------------------------------------------------------ *
@@ -752,10 +859,43 @@
     G.master.gain.value = 0;
     G.master.connect(G.limiter);
 
-    /* 环境声总线和拟音分开：音乐 ducking 只压环境，压不到开屏那一刀 */
+    /* 环境总线上的「音色整形」：+2dB 低频给胸口那一下，-2.5dB 高频把
+       嘶声压回去 —— 合成噪声最容易在 6k 以上变得刺耳，而海本来是柔的。 */
     G.amb = ctx.createGain();
     G.amb.gain.value = 0;
-    G.amb.connect(G.master);
+    G.ambLow = ctx.createBiquadFilter();
+    G.ambLow.type = "lowshelf";
+    G.ambLow.frequency.value = 150;
+    G.ambLow.gain.value = 2.0;
+    G.ambHigh = ctx.createBiquadFilter();
+    G.ambHigh.type = "highshelf";
+    G.ambHigh.frequency.value = 5600;
+    G.ambHigh.gain.value = -2.5;
+    G.amb.connect(G.ambLow);
+    G.ambLow.connect(G.ambHigh);
+    G.ambHigh.connect(G.master);
+
+    /* 混响：一条并联的湿声支路。IR 在 installBuffers 里挂上（要 ctx 采样率）。
+       返回端再过一道低通 —— 混响的高频是「糊」的主要来源。 */
+    G.revSend = ctx.createGain();
+    G.revSend.gain.value = 1;
+    G.conv = ctx.createConvolver();
+    G.conv.normalize = true;
+    G.revLow = ctx.createBiquadFilter();
+    G.revLow.type = "lowpass";
+    G.revLow.frequency.value = 4200;
+    G.revLow.Q.value = 0.4;
+    G.revLow2 = ctx.createBiquadFilter();
+    G.revLow2.type = "highpass";
+    G.revLow2.frequency.value = 190;
+    G.revLow2.Q.value = 0.5;
+    G.revReturn = ctx.createGain();
+    G.revReturn.gain.value = 0.85;
+    G.revSend.connect(G.conv);
+    G.conv.connect(G.revLow);
+    G.revLow.connect(G.revLow2);
+    G.revLow2.connect(G.revReturn);
+    G.revReturn.connect(G.amb);
 
     G.sea = ctx.createGain();
     G.sea.gain.value = LEVEL.sea;
@@ -820,6 +960,40 @@
     }
   }
 
+  /* 左右「此消彼长」的慢速摆动：海面会在左右之间呼吸，
+     这是立体感里最不容易做假的一半 —— 纯静态的去相关听起来只是「宽」，
+     没有「在动」。每个通道挂一只 0.02–0.05Hz 的正弦，相位相反。 */
+  function stereoWiden(ctx, srcNode, dest, depth, fL, fR) {
+    var sp = ctx.createChannelSplitter(2);
+    var mg = ctx.createChannelMerger(2);
+    var gl = ctx.createGain();
+    gl.gain.value = 1;
+    var gr = ctx.createGain();
+    gr.gain.value = 1;
+    srcNode.connect(sp);
+    sp.connect(gl, 0, 0);
+    gl.connect(mg, 0, 0);
+    sp.connect(gr, 1, 0);
+    gr.connect(mg, 0, 1);
+    mg.connect(dest);
+    var ol = ctx.createOscillator();
+    ol.type = "sine";
+    ol.frequency.value = fL;
+    var or = ctx.createOscillator();
+    or.type = "sine";
+    or.frequency.value = fR;
+    var dl = ctx.createGain();
+    dl.gain.value = depth;
+    var dr = ctx.createGain();
+    dr.gain.value = -depth;
+    ol.connect(dl);
+    dl.connect(gl.gain);
+    or.connect(dr);
+    dr.connect(gr.gain);
+    try { ol.start(0); or.start(0); } catch (e) { /* 老浏览器 */ }
+    return mg;
+  }
+
   function installBuffers(ctx, G, A) {
     G.buffers = {};
     for (var k in A.layers) {
@@ -827,6 +1001,27 @@
     }
     G.buffers.surf = A.surf.map(function (s) { return toAudioBuffer(ctx, s); });
     G.buffers.gull = A.gull.map(function (s) { return toAudioBuffer(ctx, s); });
+    G.buffers.wash = (A.wash || []).map(function (s) { return toAudioBuffer(ctx, s); });
+    /* 浪按远近分组：近岸的短而脆，远处的长而闷，播的时候按距离挑 */
+    G.surfNear = [];
+    G.surfFar = [];
+    for (var q = 0; q < A.surf.length; q++) {
+      var lb = G.buffers.surf[q];
+      if (A.surf[q].tag === "near") G.surfNear.push(lb);
+      else G.surfFar.push(lb);
+    }
+    if (!G.surfNear.length) G.surfNear = G.buffers.surf;
+    if (!G.surfFar.length) G.surfFar = G.buffers.surf;
+
+    /* 混响 IR：bake 时按 32k 生成；ConvolverNode 的 buffer 允许和 ctx 采样率
+       不同（规范要求重采样），万一某家浏览器抛错就现场按 ctx 采样率再生一份。 */
+    if (G.conv && A.layers.reverb) {
+      try {
+        G.conv.buffer = toAudioBuffer(ctx, A.layers.reverb);
+      } catch (e) {
+        try { G.conv.buffer = toAudioBuffer(ctx, bakeReverbIR(ctx.sampleRate)); } catch (e2) { /* 放弃湿声 */ }
+      }
+    }
 
     /* 海浪底噪：循环，常驻一个 source */
     G.bedSrc = ctx.createBufferSource();
@@ -840,7 +1035,12 @@
     G.bedGain.gain.value = 0;
     G.bedSrc.connect(G.bedFilter);
     G.bedFilter.connect(G.bedGain);
-    G.bedGain.connect(G.sea);
+    G.bedWide = stereoWiden(ctx, G.bedGain, G.sea, 0.16, 0.031, 0.047);
+    /* 底噪也送一点进混响：整片海是「在一个空间里」的，不是贴脸的干声 */
+    G.bedSend = ctx.createGain();
+    G.bedSend.gain.value = LEVEL.revBed;
+    G.bedGain.connect(G.bedSend);
+    G.bedSend.connect(G.revSend);
     G.bedSrc.start(0);
 
     /* 海风：循环 + 带通（阵风时把中心频率提上去） */
@@ -855,7 +1055,11 @@
     G.windGain.gain.value = 0;
     G.windSrc.connect(G.windFilter);
     G.windFilter.connect(G.windGain);
-    G.windGain.connect(G.wind);
+    G.windWide = stereoWiden(ctx, G.windGain, G.wind, 0.22, 0.019, 0.024);
+    G.windSend = ctx.createGain();
+    G.windSend.gain.value = LEVEL.revWind;
+    G.windGain.connect(G.windSend);
+    G.windSend.connect(G.revSend);
     G.windSrc.start(0);
     return G;
   }
@@ -863,39 +1067,217 @@
   /* ------------------------------------------------------------------ *
    * 播放：一阵浪 / 一声鸥 / 一个拟音
    * ------------------------------------------------------------------ */
-  function playSwell(G, t, gain, pan, rateJitter) {
+  /* 不连着放同一支变体：四支样本随机挑，连续三次撞同一支的概率不小，
+     耳朵一旦认出「又是它」整段就废了。 */
+  function pickNoRepeat(list, key, rnd) {
+    if (!list || !list.length) return null;
+    var r = rnd ? rnd() : Math.random();
+    var i = Math.min(list.length - 1, (r * list.length) | 0);
+    if (list.length > 1 && state.lastPick[key] === i) i = (i + 1 + ((r * 977) | 0) % (list.length - 1)) % list.length;
+    state.lastPick[key] = i;
+    return list[i];
+  }
+
+  /* 一道浪。
+     o: { pan0, pan1, near, rate, reverb, rnd }
+     · 近岸 / 远处用不同的样本组 + 不同的实时低通（远 = 高频被空气吃掉）
+     · 声像从 pan0 扫到 pan1：浪头是横着推过来的，不是钉在一个点上
+     · 远处送更多混响：距离感靠「直达声/混响比」，不是靠音量 */
+  function playSwell(G, t, gain, o) {
     if (!G || !G.buffers || !G.buffers.surf.length) return;
     var ctx = G.ctx;
-    var buf = G.buffers.surf[(Math.random() * G.buffers.surf.length) | 0];
+    o = o || {};
+    var rnd = o.rnd || Math.random;
+    var near = o.near !== false;
+    var buf = pickNoRepeat(near ? G.surfNear : G.surfFar, "surf", rnd) || G.buffers.surf[0];
     var src = ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = rateJitter || (0.93 + Math.random() * 0.15);
+    var rate = o.rate || ((near ? 0.95 : 0.9) + rnd() * 0.14);
+    src.playbackRate.value = rate;
+    var hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = near ? 85 : 130;
+    hp.Q.value = 0.6;
+    var lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    /* 远处的浪没有 1.5k 以上的东西；近岸的留到 8k 让泡沫「沙」出来 */
+    lp.frequency.value = near ? 8000 : 1450 + rnd() * 700;
+    lp.Q.value = 0.5;
     var g = ctx.createGain();
     g.gain.value = gain;
     var p = ctx.createStereoPanner();
-    p.pan.value = pan;
-    src.connect(g); g.connect(p); p.connect(G.sea);
+    var pan0 = clamp(o.pan0 == null ? 0 : o.pan0, -1, 1);
+    var pan1 = clamp(o.pan1 == null ? pan0 : o.pan1, -1, 1);
+    var sweepAt = t + buf.duration / Math.max(0.5, rate) * (0.55 + rnd() * 0.25);
+    p.pan.setValueAtTime(pan0, t);
+    p.pan.linearRampToValueAtTime(pan1, sweepAt);
+    src.connect(hp);
+    hp.connect(lp);
+    lp.connect(g);
+    g.connect(p);
+    p.connect(G.sea);
+    if (G.revSend) {
+      var s = ctx.createGain();
+      s.gain.value = near ? LEVEL.revSwell : LEVEL.revSwellFar;
+      g.connect(s);
+      s.connect(G.revSend);
+    }
     src.start(t);
     state.counters.swells++;
   }
 
+  /* 一声鸥。
+     鸟在天上：用 HRTF 的 3D 声源做一次「飞过」——两声之间从一侧移到另一侧，
+     高度也变。比 StereoPanner 的固定声像真实得多（那是「贴在墙上的鸟」）。 */
   function playGull(G, t, gain, pan) {
     if (!G || !G.buffers) return;
-    /* 真实录音解码好了就用它；没有（裁掉 audio-assets.js / 解码失败）就用烘焙的合成声音 */
     var list = state.gullBuffers && state.gullBuffers.length ? state.gullBuffers : G.buffers.gull;
     if (!list || !list.length) return;
     var ctx = G.ctx;
-    var buf = list[(Math.random() * list.length) | 0];
+    var buf = pickNoRepeat(list, "gull", Math.random);
     var src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = 0.94 + Math.random() * 0.13;
     var g = ctx.createGain();
     g.gain.value = gain;
-    var p = ctx.createStereoPanner();
-    p.pan.value = pan;
-    src.connect(g); g.connect(p); p.connect(G.gull);
+    var side = pan >= 0 ? 1 : -1;
+    var dur = buf.duration / Math.max(0.6, src.playbackRate.value);
+    var node;
+    if (ctx.createPanner) {
+      var pn = ctx.createPanner();
+      pn.panningModel = "HRTF";
+      pn.distanceModel = "inverse";
+      pn.refDistance = 4;
+      pn.rolloffFactor = 0.55;
+      pn.maxDistance = 80;
+      var x0 = side * (5 + Math.random() * 7);
+      var x1 = -x0 * (0.7 + Math.random() * 0.6);
+      var y0 = 3.5 + Math.random() * 4;
+      var y1 = y0 + 1.5 + Math.random() * 3;
+      var z0 = -6 - Math.random() * 8;
+      var z1 = z0 + 3 + Math.random() * 7;
+      var ramp = Math.max(0.2, dur * 0.9);
+      if (pn.positionX) {
+        pn.positionX.setValueAtTime(x0, t);
+        pn.positionX.linearRampToValueAtTime(x1, t + ramp);
+        pn.positionY.setValueAtTime(y0, t);
+        pn.positionY.linearRampToValueAtTime(y1, t + ramp);
+        pn.positionZ.setValueAtTime(z0, t);
+        pn.positionZ.linearRampToValueAtTime(z1, t + ramp);
+      } else if (pn.setPosition) {
+        pn.setPosition(x0, y0, z0);
+      }
+      node = pn;
+    } else {
+      var p = ctx.createStereoPanner();
+      p.pan.setValueAtTime(clamp(pan, -1, 1), t);
+      node = p;
+    }
+    src.connect(g);
+    g.connect(node);
+    node.connect(G.gull);
+    if (G.revSend) {
+      var s = ctx.createGain();
+      s.gain.value = LEVEL.revGull;
+      g.connect(s);
+      s.connect(G.revSend);
+    }
     src.start(t);
     state.counters.gulls++;
+  }
+
+  /* 退水：浪头过去之后，水从沙上退回海里 */
+  function playWash(G, t, gain, pan, rnd) {
+    if (!G || !G.buffers || !G.buffers.wash || !G.buffers.wash.length) return;
+    var ctx = G.ctx;
+    rnd = rnd || Math.random;
+    var buf = pickNoRepeat(G.buffers.wash, "wash", rnd);
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 0.9 + rnd() * 0.2;
+    var g = ctx.createGain();
+    g.gain.value = gain;
+    var p = ctx.createStereoPanner();
+    p.pan.value = clamp(pan, -1, 1);
+    src.connect(g);
+    g.connect(p);
+    p.connect(G.sea);
+    if (G.revSend) {
+      var s = ctx.createGain();
+      s.gain.value = LEVEL.revSwell * 0.8;
+      g.connect(s);
+      s.connect(G.revSend);
+    }
+    src.start(t);
+    state.counters.washes = (state.counters.washes || 0) + 1;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 浪的「计划」：纯函数（不碰 AudioContext），这样能单测随机性
+   *   真实海面不是等间隔的「滴滴」：总是三五道一组，一组比一组高，
+   *   然后歇一会儿再来。plan 在组内推进 build，出组后随机起新组。
+   * ------------------------------------------------------------------ */
+  function makeSwellPlan() {
+    return { left: 0, build: 1, pan: 0, lastDelay: 6 };
+  }
+
+  function planSwell(plan, sea, rnd) {
+    rnd = rnd || Math.random;
+    var inSet = plan.left > 0;
+    var near;
+    if (inSet) {
+      plan.left--;
+      plan.build = Math.min(1.3, plan.build + 0.09 + rnd() * 0.12);
+      near = rnd() < 0.68;
+    } else {
+      plan.build = 0.6 + rnd() * 0.22;
+      plan.pan = (rnd() * 2 - 1) * 0.6;
+      /* 34%：起一组 2–5 道 */
+      if (rnd() < 0.34) plan.left = 1 + ((rnd() * 4) | 0);
+      near = rnd() < 0.48;
+    }
+    var gain = (near ? 1.0 : 0.6) * (0.5 + 0.5 * sea) * plan.build * (0.74 + rnd() * 0.42);
+    var pan0 = inSet ? plan.pan * 0.9 : plan.pan;
+    var pan1 = -pan0 * (0.3 + rnd() * 0.6);
+    var step = {
+      near: near,
+      gain: gain,
+      pan0: pan0,
+      pan1: pan1,
+      follow: null,
+      wash: null,
+      delay: 0,
+    };
+    /* 同一组的余波：跟一道更小的，慢半拍、挪到另一边 */
+    if (rnd() < (near ? 0.5 : 0.32)) {
+      step.follow = { at: 0.9 + rnd() * 1.7, gain: gain * (0.3 + rnd() * 0.24), pan: -pan1 * (0.5 + rnd() * 0.6), near: rnd() < 0.3 };
+    }
+    if (rnd() < (near ? 0.62 : 0.42)) {
+      step.wash = { at: 1.5 + rnd() * 2.2, gain: gain * (0.16 + rnd() * 0.14), pan: pan1 * 0.8 };
+    }
+    var base = clamp(13.0 - 7.2 * sea, 4.6, 13.0);
+    var delay;
+    if (inSet || plan.left > 0) {
+      delay = base * (0.4 + rnd() * 0.3);
+    } else {
+      delay = base * (0.85 + rnd() * 0.55);
+      /* 平潮：偶尔真的安静一会儿（真实海面有「歇一口气」的时候） */
+      if (rnd() < 0.15) delay *= 1.5 + rnd() * 0.7;
+    }
+    step.delay = delay;
+    plan.lastDelay = delay;
+    return step;
+  }
+
+  function applySwellStep(G, t, step, amb, rnd) {
+    if (!G || amb <= 0.02) return;
+    playSwell(G, t, step.gain * amb, { pan0: step.pan0, pan1: step.pan1, near: step.near, rnd: rnd });
+    if (step.follow) {
+      playSwell(G, t + step.follow.at, step.follow.gain * amb, { pan0: step.follow.pan, pan1: -step.follow.pan * 0.4, near: step.follow.near, rnd: rnd });
+    }
+    if (step.wash) {
+      playWash(G, t + step.wash.at, step.wash.gain * amb, step.wash.pan, rnd);
+    }
   }
 
   /* 拟音表：name → (G, t, detail) */
@@ -969,12 +1351,15 @@
     function tryNext() {
       if (i >= MUSIC_SRC.length) { m.available = false; return; }
       m.tried++;
-      el.src = MUSIC_SRC[i++];
+      el.src = encodeURI(MUSIC_SRC[i++]);
       try { el.load(); } catch (e) { /* 旧浏览器 */ }
     }
     el.addEventListener("error", tryNext);
     el.addEventListener("canplaythrough", function () {
       if (!m.available) m.available = true;
+      /* 解锁那一刻 play() 可能早于解码完成（当时代码里还是上一个失败的 src），
+         那次会被拒；等能放了再要一次，别指望每帧轮询。 */
+      if (!m.playing && !state.muted) startMusic();
     });
     el.addEventListener("playing", function () { m.playing = true; });
     el.addEventListener("pause", function () { m.playing = false; });
@@ -1173,7 +1558,7 @@
    * ------------------------------------------------------------------ */
   function startBake() {
     var steps = bakeSteps();
-    var layers = {}, surf = [], gull = [];
+    var layers = {}, surf = [], gull = [], wash = [];
     var i = 0;
     var t0 = (typeof performance !== "undefined" ? performance.now() : Date.now());
     function step() {
@@ -1182,6 +1567,7 @@
         var r = steps[i++]();
         if (r.name === "surf") surf.push(r);
         else if (r.name === "gull") gull.push(r);
+        else if (r.name === "wash") wash.push(r);
         else layers[r.name] = r;
         state.counters.bakeSteps = i;
         if ((typeof performance !== "undefined" ? performance.now() : Date.now()) > budgetEnd) break;
@@ -1189,7 +1575,7 @@
       if (i < steps.length) {
         scheduleIdle(step);
       } else {
-        state.assets = { rate: BAKE_RATE, layers: layers, surf: surf, gull: gull };
+        state.assets = { rate: BAKE_RATE, layers: layers, surf: surf, gull: gull, wash: wash };
         state.counters.bakeMs = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - t0);
         state.ready = true;
         if (state.ctx && state.G && !state.G.buffers) installBuffers(state.ctx, state.G, state.assets);
@@ -1202,12 +1588,23 @@
     scheduleIdle(step);
   }
 
-  /* 空闲档：requestIdleCallback 有就用（真的不会抢帧），没有就 setTimeout(0) */
+  /* 空闲档：先试 requestIdleCallback，但它一开始「排队等超时」（海面永远占着
+     帧、等不到真空闲）就切 setTimeout(0)。实测：20 步全按 rIC 的 400ms 超时落地
+     = 10.1s 才烘完，加载屏卡 9.9s；切到 setTimeout 后 ≈1.8s。烘焙期间的顿挫藏在
+     加载屏后面，看不见；加载屏揭得太晚才是看得见的毛病。 */
+  var idleLag = 0;
   function scheduleIdle(fn) {
-    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(function () { fn(); }, { timeout: 400 });
+    var t0 = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    function run() {
+      var lag = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
+      if (lag > 55) idleLag++;
+      else if (idleLag > 0) idleLag--;
+      fn();
+    }
+    if (idleLag < 3 && typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(run, { timeout: 80 });
     } else {
-      setTimeout(fn, 0);
+      setTimeout(run, 0);
     }
   }
 
@@ -1238,7 +1635,6 @@
     var mix = state.mix;
     /* 底噪：海越涌越厚，低频越压得住；滤波器跟着海况开一点 */
     mix.sea = 0.55 + 0.85 * sea;
-    mix.swell = 0.34 + 0.5 * sea;
     mix.wind = 0.03 + 0.5 * wind * (0.55 + 0.45 * gust);
     mix.windFreq = 380 + 1150 * wind * (0.6 + 0.4 * gust);
     mix.bedFreq = 1500 + 1800 * sea;
@@ -1265,22 +1661,24 @@
     G.windFilter.frequency.setTargetAtTime(mix.windFreq, now, 0.4);
 
     /* --- 浪：提前 0.35s 排程，别在帧边界上卡 --- */
-    var period = clamp(13.0 - 7.2 * sea, 4.6, 13.0);
     var ahead = now + 0.35;
-    if (state.nextSwell < now - 1.0) state.nextSwell = now + 0.2;   // 页面切走过：别补播
+    if (state.nextSwell < now - 1.0) {
+      state.nextSwell = now + 0.2;   // 页面切走过：别补播
+      state.swellPlan = null;
+    }
+    if (!state.swellPlan) state.swellPlan = makeSwellPlan();
     var guard = 0;
     while (state.nextSwell < ahead && guard++ < 8) {
       var t = state.nextSwell;
       if (mix.amb > 0.02) {
-        var g = mix.swell * (0.72 + Math.random() * 0.5);
-        var pan = (Math.random() * 2 - 1) * 0.42;
-        playSwell(G, t, g, pan);
-        /* 偶尔再来一道小的，跟在前一道后面 1.4–3s：真实海面不会一拍一拍 */
-        if (Math.random() < 0.42) {
-          playSwell(G, t + 1.4 + Math.random() * 1.8, g * 0.42, -pan * 0.8);
-        }
+        var step = planSwell(state.swellPlan, sea, Math.random);
+        applySwellStep(G, t, step, mix.amb, Math.random);
+      } else {
+        /* 封面闭着的时候也要推进时间轴，否则一打开会补播一串 */
+        state.nextSwell = t + 6;
+        continue;
       }
-      state.nextSwell = t + period * (0.82 + Math.random() * 0.4);
+      state.nextSwell = t + state.swellPlan.lastDelay;
     }
 
     /* --- 海鸥：白天、长廊里、偶尔一声 --- */
@@ -1331,7 +1729,35 @@
    *   spec: { seconds, rate, script, env, master }
    *   script: 'ambient' | 'opening' | 'layers'
    * ------------------------------------------------------------------ */
+  /* 同一时刻只许有一个离屏上下文活着。Chrome 单页面只给 6 个 OfflineAudioContext，
+     而 close() 是异步的：上一条还没关完就开下一条，攒到第 5、6 条时 startRendering()
+     就再也不 resolve（实测 space / ambient60 轮流超时，单跑却都是几百毫秒）。
+     所以这里串成一条链：前一次的 close 落定之后才建下一个。 */
+  var renderPending = Promise.resolve();
+
   function renderPreview(spec) {
+    var p = renderPending.then(function () { return renderOne(spec); });
+    /* 链上只留「完成」信号，不把错误往下传 —— 一次超时不该拖死后面的渲染 */
+    renderPending = p.then(function () { return null; }, function () { return null; });
+    return p;
+  }
+
+  /* 关掉一个离屏上下文，但**不无限等**：Chrome 实测有 close() 的 promise
+     不 resolve 的情况（此时若在链上 await，下一次渲染根本不会开始，验证脚本
+     就看到一条 inner-timeout）。这里 2s 封顶，正常情况 close 是毫秒级。 */
+  function closeCtx(ctx) {
+    return new Promise(function (res) {
+      var done = false;
+      function fin() { if (!done) { done = true; res(); } }
+      var cp = null;
+      try { if (ctx.close) cp = ctx.close(); } catch (e) { return fin(); }
+      if (cp && typeof cp.then === "function") cp.then(fin, fin);
+      else return fin();
+      setTimeout(fin, 2000);
+    });
+  }
+
+  function renderOne(spec) {
     spec = spec || {};
     var seconds = clamp(spec.seconds || 12, 0.5, 60);
     var rate = spec.rate || BAKE_RATE;
@@ -1360,15 +1786,14 @@
       G.windFilter.frequency.setValueAtTime(380 + 1150 * env.wind, t0);
     }
 
-    function scheduleSwells(t0, t1, amb, sea) {
-      var period = clamp(13.0 - 7.2 * sea, 4.6, 13.0);
-      var rnd = mulberry32(0xabc1);
+    function scheduleSwells(t0, t1, amb, sea, seed) {
+      var rnd = mulberry32(seed == null ? 0xabc1 : seed);
+      var plan = makeSwellPlan();
       var t = t0 + 0.35;
       while (t < t1) {
-        var g = (0.34 + 0.5 * sea) * (0.72 + rnd() * 0.5) * amb;
-        playSwell(G, t, g, (rnd() * 2 - 1) * 0.42, 0.93 + rnd() * 0.15);
-        if (rnd() < 0.42) playSwell(G, t + 1.4 + rnd() * 1.8, g * 0.42, (rnd() * 2 - 1) * 0.3, 0.95 + rnd() * 0.1);
-        t += period * (0.82 + rnd() * 0.4);
+        var step = planSwell(plan, sea, rnd);
+        applySwellStep(G, t, step, amb, rnd);
+        t += step.delay;
       }
     }
 
@@ -1407,9 +1832,9 @@
         playGull(G, gt2, 0.18 + g2() * 0.1, (g2() * 2 - 1) * 0.7);
       }
     } else if (script === "layers") {
-      /* 一层一层摆出来，方便对照听：bed / wind / surf / whoosh / slice / tear / puff */
-      var names = ["bed", "wind", "surf", "whoosh", "slice", "tear", "puff", "thump", "crumbs", "relight"];
-      var slot = 2.0;
+      /* 一层一层摆出来，方便对照听 */
+      var names = ["bed", "wind", "surf", "wash", "whoosh", "slice", "tear", "puff", "thump", "crumbs", "relight"];
+      var slot = 2.4;
       G.amb.gain.setValueAtTime(1, 0);
       G.bedGain.gain.setValueAtTime(0, 0);
       G.windGain.gain.setValueAtTime(0, 0);
@@ -1424,16 +1849,36 @@
           G.windGain.gain.setValueAtTime(0.4, at);
           G.windGain.gain.setValueAtTime(0, at + slot - 0.3);
         } else if (nm === "surf") {
-          playSwell(G, at, 0.9, 0, 1);
-          playSwell(G, at + 1.1, 0.5, 0.3, 1.06);
+          var lr = mulberry32(0x5150);
+          playSwell(G, at, 0.9, { pan0: -0.8, pan1: 0.7, near: true, rnd: lr });
+          playSwell(G, at + 1.1, 0.5, { pan0: 0.6, pan1: -0.5, near: false, rnd: lr });
+        } else if (nm === "wash") {
+          playWash(G, at, 0.8, -0.3);
         } else {
           playOneShot(G, nm, at, 0.9, 0, 1);
         }
         meta.cues.push({ at: at, name: nm });
       }
+    } else if (script === "space") {
+      /* 只测空间：左右各一道浪、一声从右飞到左的鸥、一点底噪 */
+      var sr = mulberry32(0x5aced);
+      G.amb.gain.setValueAtTime(1, 0);
+      G.bedGain.gain.setValueAtTime(0.42, 0);
+      G.windGain.gain.setValueAtTime(0.06, 0);
+      G.bedFilter.frequency.setValueAtTime(1500 + 1800 * env.seaState, 0);
+      playSwell(G, 0.6, 0.9, { pan0: -0.95, pan1: -0.8, near: true, rnd: sr });
+      meta.cues.push({ at: 0.6, name: "swell-left" });
+      playSwell(G, 3.2, 0.9, { pan0: 0.95, pan1: 0.8, near: true, rnd: sr });
+      meta.cues.push({ at: 3.2, name: "swell-right" });
+      playGull(G, 6.0, 0.55, 0.9);
+      meta.cues.push({ at: 6.0, name: "gull-right" });
+      playGull(G, 8.6, 0.55, -0.9);
+      meta.cues.push({ at: 8.6, name: "gull-left" });
+      playWash(G, 10.4, 0.6, 0.5, sr);
+      meta.cues.push({ at: 10.4, name: "wash" });
     }
 
-    return ctx.startRendering().then(function (rendered) {
+    var done = ctx.startRendering().then(function (rendered) {
       var chans = [rendered.getChannelData(0), rendered.getChannelData(1)];
       var peak = 0, sum = 0, sq = 0, n = 0;
       for (var c = 0; c < chans.length; c++) {
@@ -1449,13 +1894,38 @@
       meta.peak = +peak.toFixed(4);
       meta.dc = +(sum / n).toFixed(6);
       meta.rms = +Math.sqrt(sq / n).toFixed(4);
+      /* 立体感指标：L/R 相关系数（越低越宽）+ 侧/中能量比。
+         这两个数比「听起来宽不宽」可靠，验证脚本靠它们判回归。 */
+      var sl = chans[0], srr = chans[1];
+      var dot = 0, el = 0, er = 0;
+      for (var q = 0; q < sl.length; q++) {
+        dot += sl[q] * srr[q];
+        el += sl[q] * sl[q];
+        er += srr[q] * srr[q];
+      }
+      var denom = Math.sqrt(el * er) || 1;
+      meta.corr = +(dot / denom).toFixed(3);
+      var midE = 0, sideE = 0;
+      for (var q2 = 0; q2 < sl.length; q2++) {
+        var m2 = (sl[q2] + srr[q2]) * 0.5, s2 = (sl[q2] - srr[q2]) * 0.5;
+        midE += m2 * m2;
+        sideE += s2 * s2;
+      }
+      meta.side = +(sideE / (midE + sideE || 1)).toFixed(3);
       meta.wavBytes = wav.length;
       return { base64: toBase64(wav), meta: meta };
+    });
+    /* 等 close 落定（最多 2s）再 resolve：调用方拿到的「完成」应当是上下文
+       已经关掉的完成，否则下一条渲染又会撞上数量上限（见 renderPreview 注释）。 */
+    return done.then(function (res) {
+      return closeCtx(ctx).then(function () { return res; });
+    }, function (err) {
+      return closeCtx(ctx).then(function () { throw err; });
     });
   }
 
   function scheduleSwellAt(G, t, gain, pan, sea) {
-    playSwell(G, t, gain, pan, 0.94 + Math.random() * 0.12);
+    playSwell(G, t, gain, { pan0: pan, pan1: pan * 0.6, near: Math.random() < 0.5 });
   }
 
   /* ------------------------------------------------------------------ *
@@ -1483,6 +1953,19 @@
       windGain: G && G.windGain ? +G.windGain.gain.value.toFixed(3) : null,
       master: G && G.master ? +G.master.gain.value.toFixed(3) : null,
       surfBuffers: G && G.buffers ? G.buffers.surf.length : 0,
+      surface: G && G.surfNear ? { near: G.surfNear.length, far: G.surfFar.length } : null,
+      wash: G && G.buffers && G.buffers.wash ? G.buffers.wash.length : 0,
+      reverb: !!(G && G.conv && G.conv.buffer),
+      /* 循环层的**循环长度**（秒）。这是「会不会被听出转圈」的唯一决定量：
+         任何循环 buffer 的包络自相关在「正好等于循环长度」的滞后上必然接近 1
+         （等于信号和自己比），所以拿自相关去判「有没有周期性」永远会命中它 ——
+         量出来的是循环长度本身，不是听感。听感的判据是「这个长度有多长」：
+         4.5s 会被耳朵锁住，13.7s 抓不住。验证脚本靠这两个数盯着别缩回去。 */
+      loops: state.assets ? {
+        bed: +((state.assets.layers.bed.chans[0].length) / state.assets.rate).toFixed(2),
+        wind: +((state.assets.layers.wind.chans[0].length) / state.assets.rate).toFixed(2),
+      } : null,
+      swellPlan: state.swellPlan ? { left: state.swellPlan.left, build: +state.swellPlan.build.toFixed(2) } : null,
       gullSource: state.gullSource,
       gullSamples: state.gullBuffers ? state.gullBuffers.length : 0,
       counters: {
@@ -1526,6 +2009,10 @@
       bakeStepFns: bakeSteps,
       encodeWav: encodeWav,
       toBase64: toBase64,
+      /* 计划器是纯函数，Node 里可以直接跑几千次验随机性 */
+      planSwell: planSwell,
+      makeSwellPlan: makeSwellPlan,
+      bakeReverbIR: bakeReverbIR,
     },
   };
 

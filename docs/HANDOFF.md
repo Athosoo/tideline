@@ -78,7 +78,7 @@ GIFT/
 | `js/app.js` | 104 KB (~2320 行) | 主逻辑：环廊、卡片、聚焦、开门、天气接线、海面后端调度、质量档 |
 | `css/styles.css` | 74 KB | 全部样式；地平线对齐变量 `--horizon: 26%` |
 | `js/weather.js` | 29 KB | 天气/时间系统：晴雨云、风、闪电、月相；含 2D 云画布绘制 |
-| `js/audio.js` | 61 KB | 声音引擎：5 种声音，程序化合成 + 采样；**行为与参数见 `docs/AUDIO.md`** |
+| `js/audio.js` | 82 KB (~2000 行) | 声音引擎：5 类声音 / 24 段素材（20 段程序化烘焙 + 4 段海鸥录音）；混响、退水、随机排程、HRTF 海鸥；**行为与参数见 `docs/AUDIO.md`** |
 | `js/audio-assets.js` | 105 KB | 4 段 xeno-canto 海鸥录音（base64 内嵌，CC BY 4.0，署名见 `THIRD-PARTY-NOTICES.md` §5） |
 | `js/cakegate.js` | 56 KB | 开屏蛋糕动画状态机；时间轴常量 `APPROACH/FLY/CUT/HOLD/SLICE` 也是拟音的对齐基准 |
 | `js/sea-entry.js` | 14 KB | **bundle 的构建源**，页面不加载它。原版海面 + TIDELINE 的调色/天气接线 |
@@ -240,14 +240,18 @@ dispose()
   **教训**：`width/height/left/top` 每帧写一次就是一次布局 + 一次重栅格；
   能用 `transform`/`scale`/`translate` 表达的动画，就永远不要碰几何属性。
   `?cake=aim` 可把镜头冻结在俯视姿态，截静态帧做像素比对最省事。
-- **声音系统（`js/audio.js` + `js/audio-assets.js`）**：五种声音——海浪、海风、
+- **声音系统（`js/audio.js` + `js/audio-assets.js`）**：五类声音——海浪、海风、
   偶发海鸥、开屏拟音、背景音乐。浪与风是程序化合成的循环 buffer（跟着 `Weather.state`
-  的 `seaState`/`wind`/`gust` 实时变），开屏拟音按 `cakegate.js` 的时间轴常量逐拍对齐，
-  海鸥是 4 段 xeno-canto 真实录音（base64 内嵌，CC BY 4.0），背景音乐由使用者自己放
-  `assets/audio/music/`（有版权，不进仓库）。**M 键静音**，`?audio=0` 一开始就静音。
-  烘焙分片藏在加载屏与封面阅读期，不占首帧。
-  实测：开屏全程 `gate` 0→1 时环境声 `amb` 0.31→0.81 平滑跟随；四段预览混音
-  `peak` 0.47/0.74/0.80/0.60 **无削波**、DC < 0.0005；M 键 `master` 0.997→0.004。
+  的 `seaState`/`wind`/`gust` 实时变），拍岸不是定时器而是**随机排程**（`planSwell`：
+  34% 概率起一组 2–5 道、组内逐道变高、15% 概率「歇一口气」），跟在后面的还有
+  **退水层**；开屏拟音按 `cakegate.js` 的时间轴常量逐拍对齐；海鸥是 4 段 xeno-canto
+  真实录音（base64 内嵌，CC BY 4.0），用 **HRTF 3D 声源「飞过」**；背景音乐由使用者
+  自己放 `assets/audio/music/`（有版权，不进仓库；`1-05. Minecraft.mp3/.ogg` 都认）。
+  **M 键静音**，`?audio=0` 一开始就静音。烘焙分片藏在加载屏与封面阅读期，不占首帧。
+  实测（`_wip/shots/audio/s12`，29/29 通过）：烘焙 **1002 ms**；`gate` 0→1 时
+  `amb` **0.329→0.816**（目标曲线 0.22→1.0，阻尼跟随）；`ambient` 混音 L/R 相关
+  **0.065**、侧能量 **46.8%**（`space` 段 0.059 / 47.1%）；五段预览混音
+  peak 全部 < 0.85、DC < 0.001；M 键 `master` 0.996→0.004 且落地 `localStorage`。
   **行为、参数、接口、验证、已知限制全部在 `docs/AUDIO.md`** —— 改声音先读它。
 
 ---
@@ -310,9 +314,12 @@ rm -rf ./js/vendor
 5. **验证延迟/阻尼类改动时直接置位状态**（绕开滑杆与 ramp），别等它自己爬上来。
 6. **收尾清理**：临时目录（`_qa*/` 已 gitignore）、临时 Chrome profile、本地静态服务器全部删掉。
    上一轮就是因为留了一堆临时垃圾，用户才要在关对话前问"清理干净了吗"。
-7. **声音改动走 `docs/AUDIO.md` §6 的三道**：`audio_bake_test.mjs`（Node 里跑烘焙 + FFT，
-   不启浏览器，最快）→ `audio_smoke.mjs`（真 Chrome + CDP，验 `gate` 曲线、海鸥样本、
-   M 键、静音、混音峰值）→ `renderPreview` 导 WAV 用 `audio_analyze.py` 看频谱 / 直接听。
+7. **声音改动走 `docs/AUDIO.md` §6 的四道**：`audio_bake_test.mjs`（Node 里跑烘焙 + FFT，
+   不启浏览器，最快）→ `audio_random_test.mjs`（纯 Node 跑 5000 步 `planSwell`，验随机性是
+   真的随机：间隔 std、声像分布、10 分钟指纹重复 0 次）→ `audio_smoke.mjs`
+   （真 Chrome + CDP，验 `gate` 曲线、海鸥样本、M 键、静音、立体声指标、烘焙耗时；
+   加 `--long` 再验 60 s 环境声的循环周期性）→ `renderPreview` 导 WAV 用
+   `audio_analyze.py` 看频谱 / 直接听。
    声音是听感问题，脚本只能证明「没坏」，最终判据还是耳朵。
 
 ### 6.1 已知的技术深坑（省你几个小时）
@@ -341,6 +348,10 @@ rm -rf ./js/vendor
 | 银器画成磨砂塑料 | SVG 渐变默认 `objectBoundingBox`，0→100% 是摊在整个元素盒子上的：细长柄只吃到中间一档，钢就发平。金属件必须 `gradientUnits="userSpaceOnUse"` 并按每一件自己的 y 范围铺，且剖面要有四段（亮边 → 暗带 → 反射光 → 暗轮廓）；匙/叉的「内凹」要明显比柄暗，否则缩略时认不出是餐具（小叉曾因此像一支银笔，2026-10-23 换成勺时一并改掉） |
 | `file://` 下音频三条死路 | ① `fetch`/`XHR` 读本地 wav 一律 `Failed to fetch`；② 本地 `<audio>` 能播，但接 `MediaElementAudioSourceNode` 进 WebAudio 出来是**静音**（origin 为 `null`，被判跨域），所以音乐只能改 `.volume`、不能滤波/分析；③ `AudioWorklet.addModule()` 被拒。结论：环境声只能程序化合成、样本只能 base64 内嵌 `<script>`、音乐只能是本地 `<audio>`。详见 `docs/AUDIO.md` §2 |
 | 声音烘焙绝不能落在首帧 | 合成噪声要几百万次随机 + 二阶滤波，实测首版同步烘一次 2.2 秒。开屏那 1–2 秒本就在付加载屏和 WebGPU 管线的账，再叠烘焙必掉帧。必须 `setTimeout` 分片（每片 ~7 ms）藏进加载屏与封面阅读期 |
+| `requestIdleCallback` 在不停重绘的页面上等于 `setTimeout(400)` | 海面 rAF 永不空闲，`rIC({timeout:400})` 每片都等满 400 ms 超时：20 片 = **10.1 s** 首屏白等（实测 bakeMs 10101）。修法：记实际滞后，`lag > 55ms` 累计 3 次后判定「这页不会有空闲」，此后改 `setTimeout(run, 0)`，超时降到 80 ms。改完 **1010 ms** |
+| 离线渲染串行会静默挂死 | `OfflineAudioContext` 不 `close()` 时 Chrome 单页上限 6 个，第 5~6 段 `startRendering()` 永不 resolve（CDP 卡满 60 s 超时）。每次渲染完必须 `ctx.close()`。`audio_smoke.mjs` 还每段包了页内 20 s `Promise.race` 护栏，避免一段挂死带走整轮 |
+| 循环 buffer 的「呼吸」会被听成转圈 | `bakeBed` 的原版用 `0.78 + 0.22*sin(...)` 调制**整段**包络（含低频），2.1 s 一拍、4.5 s 一循环 —— 循环太短且内部有节奏，听感就是背景在转圈。修法：循环长度拉到 **13.7 s**，节拍只调制**中频**（低频与超低频恒定，一涨一落交给随机排程的浪），且节拍取「以循环长度为周期的整数谐波」（3 条，周期 4.6/2.7/1.7 s，相位按声道错开）。同类陷阱：`bakeWind` 的 `wander` 相位必须按 L 算，否则接缝处根本对不上（旧代码注释还谎称是周期性的） |
+| 用包络自相关判「有没有转圈」是错的 | 任何循环 buffer 在**滞后 = 循环长度**处必然接近 1（那一段信号就是它自己）。bed 单独铺 60 s 实测：13.7 s 处 strength **0.773**，恰好等于该滞后的重叠帧比例 926/1200；把 bed 的慢起伏整个删掉，数字一位不变 —— 量到的是循环长度，不是听感。**正确判据是两层**：①循环长度 ≥ 8 s（`debugState().loops`，量原因）②1.5–8 s 耳朵区间内无强峰（量结果）。2026-10-26 因此改过 `audio_smoke.mjs --long` 的判据 |
 
 ### 6.2 git 习惯
 

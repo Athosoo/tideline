@@ -558,35 +558,54 @@
 
 ## 8. 声音系统　`[已完成 2026-10-26 · 待真机耳朵验收]`
 
-用户需求（2026-10-26）：**去掉风雨雷电之后，声音只剩海浪、海风、偶发海鸥、开屏拟音**
+用户需求（2026-10-26 第一条）：**去掉风雨雷电之后，声音只剩海浪、海风、偶发海鸥、开屏拟音**
 （开屏拟音 ≠ 人声旁白，指刀划布、撕拉、吹灭蜡烛那套动作声）+ **一首宁静的背景音乐**（C418）。
 音源策略用户选「混合」：浪与风程序化合成、海鸥用真实录音样本；
 开关用户选「不放界面，只用键盘 M」。
+
+用户需求（2026-10-26 第二条）：「音效可以再优化，一是立体感，二是怡人，拟真，
+具备一定随机性，而不是重复」→ 这一轮做了四件事：
+**随机排程**（不是定时器）、**退水层**、**混响 + 远近分层**、**HRTF 3D 海鸥**。
 
 **行为、参数、接口、验证方法、已知限制全部在 `docs/AUDIO.md`**，这里只记进度与待办。
 
 | 项 | 状态 |
 |---|---|
-| `js/audio.js`（声音引擎：程序化合成 + 调度 + ducking） | ✅ |
+| `js/audio.js`（声音引擎 ~2000 行：烘焙 / 随机排程 / 混响 / 立体声 / 调度 / ducking） | ✅ |
 | `js/audio-assets.js`（4 段 xeno-canto 海鸥录音，base64 内嵌，CC BY 4.0） | ✅ 署名见 `THIRD-PARTY-NOTICES.md` §5 |
+| 24 段素材：20 段程序化烘焙（bed 13.7s / wind 9.7s / 混响 IR 2.6s / 6 段拍岸 / 2 段退水 / 7 段拟音 / 2 段合成海鸥）+ 4 段海鸥录音 | ✅ |
 | `index.html` 接线（`audio-assets.js` → `audio.js` → `cakegate.js` → `app.js`） | ✅ |
 | `js/app.js`：`init()` 在 `Weather.init()` 之后；帧循环调 `update()` | ✅ |
 | `js/cakegate.js`：每个动作点调 `TideAudio.cue()` | ✅ |
-| `assets/audio/music/`（背景音乐投放目录 + `.gitignore` 排除音频） | ✅ 目录与说明已建 |
+| `assets/audio/music/`（背景音乐投放目录 + `.gitignore` 排除音频） | ✅ |
+| **用户已放下 C418 曲子**：`1-05. Minecraft.mp3` + `1-05. Minecraft.ogg` | ✅ 两格式都实测能解码，mp3 优先 |
 | `docs/AUDIO.md`（稳定结论） | ✅ |
-| **用户把 C418 曲子放进 `assets/audio/music/music.*`** | ⏳ **等用户**（版权原因不进仓库） |
 | **真机耳朵验收**（离屏窗口听不到声音，只能用户听） | ⏳ **等用户** |
 
-验证（可复跑）：
+验证（可复跑，四道，见 `docs/AUDIO.md` §6）：
 
 ```bash
-node _wip/verify/audio_bake_test.mjs        # 烘焙 + FFT，11/11 通过，不启浏览器
-node _wip/verify/audio_smoke.mjs --tag e6   # 真 Chrome + CDP：gate 曲线、海鸥样本、M 键、混音峰值
+node _wip/verify/audio_bake_test.mjs                    # 烘焙 + FFT，13/13，不启浏览器
+node _wip/verify/audio_random_test.mjs                  # 浪的随机性 9/9，纯 Node 5000 步
+node _wip/verify/audio_smoke.mjs --tag <tag>            # 真 Chrome + CDP：gate 曲线、海鸥样本、M 键、立体声
+node _wip/verify/audio_smoke.mjs --tag <tag> --long     # 再加 60s 环境声，判循环长度与耳朵区间
+python _wip/verify/audio_analyze.py <wav> --png …       # 频谱 / 周期性 / 直接听
 ```
 
-实测结论：开屏 `gate` 0→1 时环境声 `amb` 0.31→0.81 平滑跟随；四段预览混音 peak
-0.47/0.74/0.80/0.60 无削波、DC < 0.0005；M 键 `master` 0.997→0.004 且落地
-`localStorage`；烘焙 15 片共 5128 ms 全在加载屏与封面期，首帧零烘焙。
+实测结论：
+
+- **烘焙**：Node 里 13/13、1929 ms；浏览器里 `bakeMs` ≈ 1.1 s（自适应分片：
+  `requestIdleCallback` 拿不到空闲就降级 `setTimeout`）。首帧零烘焙。
+- **立体感**：`ambient` 混音 L/R 相关 **0.059**、侧能量 **47%**（早先固定 panner 版本是
+  1.0 / 0，一听就是单声道）。
+- **随机性**：5000 步间隔 std/mean = 4.22/7.96 s、p10:p90 = 2.92、`|pan|>0.3` 占 48%、
+  10 分钟 87 道浪、12 连击指纹重复 **0** 次。
+- **不转圈**：循环长度 bed **13.7 s** / wind **9.7 s**（≥ 8 s 是判据）；60 s 环境声在
+  「耳朵能锁住的 1.5–8 s 区间」内最强峰只有 strength **0.14**（< 0.3）。
+  （**注意**：20 s 内找最强峰那种量法在 13.7 s 处会读到 0.33 —— 那是循环长度本身，
+  任何循环 buffer 在那里都接近 1，不是听感问题；原因见 `docs/AUDIO.md` §3.3。）
+- **音乐**：`{available:true, playing:true, src:"1-05. Minecraft.mp3", tried:1}`。
+- **M 键**：`master` 0.997→0.004，落地 `localStorage`。
 
 ---
 
