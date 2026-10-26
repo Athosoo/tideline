@@ -594,9 +594,9 @@ python _wip/verify/audio_analyze.py <wav> --png …       # 频谱 / 周期性 /
 
 实测结论：
 
-- **烘焙**：Node 里 13/13、1929 ms；浏览器里 `bakeMs` ≈ 1.1 s（自适应分片：
+- **烘焙**：Node 里 13/13、1929 ms；浏览器里 `bakeMs` ≈ 1.0 s（自适应分片：
   `requestIdleCallback` 拿不到空闲就降级 `setTimeout`）。首帧零烘焙。
-- **立体感**：`ambient` 混音 L/R 相关 **0.059**、侧能量 **47%**（早先固定 panner 版本是
+- **立体感**：`ambient` 混音 L/R 相关 **0.065**、侧能量 **46.8%**（早先固定 panner 版本是
   1.0 / 0，一听就是单声道）。
 - **随机性**：5000 步间隔 std/mean = 4.22/7.96 s、p10:p90 = 2.92、`|pan|>0.3` 占 48%、
   10 分钟 87 道浪、12 连击指纹重复 **0** 次。
@@ -605,7 +605,7 @@ python _wip/verify/audio_analyze.py <wav> --png …       # 频谱 / 周期性 /
   （**注意**：20 s 内找最强峰那种量法在 13.7 s 处会读到 0.33 —— 那是循环长度本身，
   任何循环 buffer 在那里都接近 1，不是听感问题；原因见 `docs/AUDIO.md` §3.3。）
 - **音乐**：`{available:true, playing:true, src:"1-05. Minecraft.mp3", tried:1}`。
-- **M 键**：`master` 0.997→0.004，落地 `localStorage`。
+- **M 键**：`master` 0.996→0.004，落地 `localStorage`。
 
 ---
 
