@@ -346,9 +346,12 @@ rm -rf ./js/vendor
 
 - 仓库 `E:\DeepSeekplay\GIFT`，remote `ssh://git@github.com/Athosoo/tideline.git`，ssh 可用。
   身份是全局的（Athos：`Athos <3672324408@qq.com>`）。
-- 分支：`main` 是当前交付物（2026-10-22 已快进到 `7edd107`），日常在 `feat/soft-clouds` 上做，
-  做完 `git merge --ff-only` 进 `main` 并把两条都推上去。GitHub Pages **未部署**（404）。
-- **每完成一步就提交一次**，提交信息写清"改了什么 + 为什么"（看 `7edd107`、`806de56` 的风格）。
+- 分支：`main` 是当前交付物，日常在 `feat/<主题>` 上做，做完 ff 进 `main` 并把两条都推上去。
+  GitHub Pages **未部署**（404）。**git 规矩只有一份**：工作区根 `GIT_CONVENTIONS.md`
+  （提交信息格式、分支模型、worktree、落地流程、绝不入库）；本文件不重复抄。
+  → `E:\DeepSeekplay\GIT_CONVENTIONS.md`
+- **每完成一步就提交一次**（比根文档的「小而频繁」更硬，用户 2026-10-22 要求过），
+  提交信息：中文祈使句标题 + 空行 + 为什么。
 - `.gitignore` 已经处理：系统/编辑器垃圾、`_qa*/`、`*.log`。
 - `.gitattributes`：`* text=auto eol=lf`、二进制标记、`sea.bundle.js -diff linguist-generated`。
 
