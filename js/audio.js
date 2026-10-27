@@ -46,16 +46,20 @@
   var BAKE_RATE = 32000;
 
   var LEVEL = {
-    sea: 0.9,        // 海的总线
+    sea: 0.82,       // 海的总线
     wind: 1.0,
     gull: 1.0,
     foley: 0.95,     // 拟音总线（开屏那一刀）
-    music: 0.30,     // 音乐基量：C418 那种安静的曲子，0.3 是「垫在下面」
-    musicGallery: 0.24,
+    /* 音乐：用户第一轮反馈「没音乐」时实测元素音量只有 0.078 —— 一首安静的
+       钢琴曲垫在 0.17 RMS 的海浪底下等于不存在。音频文件的 volume 是乘出来的
+       线性幅度，爬升到位也听不见，所以这里不是「调一点点」，是按「清楚听见、
+       但不盖过浪」重定：封面 0.52 / 长廊 0.62 附近。 */
+    music: 0.70,
+    musicGallery: 0.58,
     /* 混响：海边不是一个房间，是一条开阔的岸线 —— IR 用程序化生成的
        2.6s 扩散 + 稀疏早期反射，湿声只补「空间」不糊直接声 */
-    revBed: 0.10,
-    revWind: 0.08,
+    revBed: 0.09,
+    revWind: 0.07,
     revSwell: 0.20,
     revSwellFar: 0.46,   // 远处的浪：直达声小、混响大，这才是距离感
     revGull: 0.34,
@@ -292,21 +296,15 @@
       var sub = brownNoise(n, mulberry32(0x77 + c * 31));
       runFilter(sub, coeffs("lowpass", 120, 0.7, rate));
       removeDC(sub);
-      /* 慢起伏只用中频：3/5/8 个周期叠在同一个循环长度上（周期 4.6/2.7/1.7s），
-         接缝严格对齐、彼此不同步。低频与超低频保持恒定 —— 真正的一涨一落交给
-         浪自己（每次都是新排程的），循环层别再自己「呼吸」，那才是最容易被听出
-         重复的地方。 */
-      var ph = c * 1.7;
-      /* 逐样本算 3 条正弦：14.8s 的 buffer 上光 sin 就要 2.8M 次，Node 里烘一轮
-         直接从 1.5s 涨到 4.6s。慢包络不需要那么细的网格，按 48 采样一格插值足够
-         （周期 1.7s 的最细一条也有 1100 格）。 */
-      var beat = envTable(n, 48, function (u) {
-        var w = (u * n / L) * Math.PI * 2;
-        return 0.90 + 0.07 * Math.sin(w * 3 + ph) + 0.02 * Math.sin(w * 5 + 1.9) + 0.01 * Math.sin(w * 8 + 4.1);
-      });
+      /* 慢起伏：**没有**。这里曾经用 3/5/8 条以「循环长度」为周期的正弦叠出
+         4.6 / 2.7 / 1.7s 的呼吸，听感上就是「沙沙声在转圈」—— 因为循环 buffer
+         里任何起伏的周期都必然是 L/k，而 L/k 落在 1.7–4.6s 正好是人耳能锁住的
+         区间（60s 包络自相关在 4.65s 处 0.42，验证脚本一直报这件事）。
+         真正的教训是：**循环层不许自带起伏**；大小起伏交给随机排程的浪 + surge
+         （见 update()），那两条时间轴上永远不重复。 */
       var mix = new Float32Array(n);
       for (var i = 0; i < n; i++) {
-        mix[i] = low[i] * 0.85 + mid[i] * 0.61 * beat[i] + sub[i] * 1.25;
+        mix[i] = low[i] * 0.85 + mid[i] * 0.61 + sub[i] * 1.25;
       }
       chans.push(removeDC(loopify(mix, L, X)));
     }
@@ -333,24 +331,19 @@
       runFilter(body, coeffs("bandpass", 620, 0.62, rate));
       var hiss = raw.slice();
       runFilter(hiss, coeffs("highpass", 1800, 0.6, rate));
-      /* 三条以「循环长度」为周期的正弦叠出来的慢起伏 —— 不用 random walk，
-         因为循环 buffer 里的 random walk 一定会在接缝处断层。周期要按 L 算
-         （早先按 t 直接乘 0.63/1.37，接缝处包络根本对不上）。 */
-      var wander = envTable(n, 512, function (u) {
-        var w = (u * n / L) * Math.PI * 2;
-        return 0.62 + 0.18 * Math.sin(w * 2 + c * 2.1) +
-          0.08 * Math.sin(w * 5 + 1.3) + 0.04 * Math.sin(w * 9 + c);
-      });
+      /* 慢起伏：同样**没有**（理由见 bakeBed 那段注释）—— 9.7s 循环上的
+         2/5/9 次谐波周期是 4.85 / 1.94 / 1.08s，全在人耳能锁住的区间里，
+         而且每 9.7s 一模一样。风的强弱现在由 update() 里的 env.wind / gust
+         （天气系统每帧给的真实值）和 surge 一起推。 */
       var mix = new Float32Array(n);
       for (var i = 0; i < n; i++) {
         /* 嘶声只留一点点：多给「风」听着像吹风机 —— 实测 0.16 时质心 3.3kHz */
-        mix[i] = (body[i] * 0.95 + hiss[i] * 0.055) * wander[i];
+        mix[i] = body[i] * 0.95 + hiss[i] * 0.055;
       }
       chans.push(loopify(mix, L, X));
     }
-    /* 归一化到 0.82 而不是 0.6：慢起伏改平之后 RMS 从 0.137 掉到 0.098（约 3dB），
-       在同一条 windGain 曲线上听着就是「风声变小了」。buffer 峰值抬高补回来，
-       混音里再没有别处需要改。 */
+    /* 归一化到 0.82：起伏改平之后 RMS 会掉，在同一条 windGain 曲线上听着
+       就是「风声变小了」，抬 buffer 峰值补回来。 */
     normalize(chans, 0.82);
     return { name: "wind", rate: rate, chans: chans };
   }
@@ -823,10 +816,15 @@
     muted: false,
     visible: true,
     ambTarget: 0,          // 0 封着 · 0.22 封面 · 1 长廊
-    mix: { amb: 0, sea: 0.9, swell: 0.5, wind: 0.1, windFreq: 500, gull: 1 },
+    mix: { amb: 0, sea: 0.9, swell: 0.5, wind: 0.1, windFreq: 500, gull: 1, surge: 0.7 },
     nextSwell: 0,
     nextGull: 0,
     duck: 0,
+    /* 起伏：surge 是「这一阵海大不大」的慢包络（0.25–1.35），
+       target 每 9–22 秒随机换一档，刚起的那道近岸浪会把它顶上去几秒。 */
+    surge: { v: 0.7, target: 0.7, base: 0.7, bump: 0, bumpUntil: 0, hold: 0 },
+    /* 近几秒有没有浪在响（0–1.2）：底噪跟着它退下去，浪之间才有「水退」的空档 */
+    activity: 0,
     counters: { swells: 0, gulls: 0, cues: {}, bakeMs: 0, bakeSteps: 0 },
     /* 海鸥：先有合成样本兜底（烘焙时就绪），真实录音解码完再顶上去 */
     gullBuffers: null,
@@ -846,21 +844,26 @@
     var G = {};
     G.ctx = ctx;
 
-    /* 限幅器兜底：合成音叠在一起很容易顶到 0dBFS 以上，削波在耳机上很难听 */
+    /* 限幅器兜底：合成音叠在一起很容易顶到 0dBFS 以上，削波在耳机上很难听。
+       但**阈值别压得太低**：旧版 threshold −4dB / ratio 20:1，等于把所有大浪的
+       峰都削到同一个高度 —— 60s 环境声实测峰高 CV 只有 0.167，听感就是用户说的
+       「没有大小起伏」：浪再大也大不过那道天花板。改成 −1.5dB / 6:1 / knee 4dB：
+       只在真的要破 0dBFS 时才动手，浪之间的强弱差才留得下来。 */
     G.limiter = ctx.createDynamicsCompressor();
-    G.limiter.threshold.value = -4;
-    G.limiter.knee.value = 0;
-    G.limiter.ratio.value = 20;
-    G.limiter.attack.value = 0.002;
-    G.limiter.release.value = 0.18;
+    G.limiter.threshold.value = -1.5;
+    G.limiter.knee.value = 4;
+    G.limiter.ratio.value = 6;
+    G.limiter.attack.value = 0.006;
+    G.limiter.release.value = 0.25;
     G.limiter.connect(ctx.destination);
 
     G.master = ctx.createGain();
     G.master.gain.value = 0;
     G.master.connect(G.limiter);
 
-    /* 环境总线上的「音色整形」：+2dB 低频给胸口那一下，-2.5dB 高频把
-       嘶声压回去 —— 合成噪声最容易在 6k 以上变得刺耳，而海本来是柔的。 */
+    /* 环境总线上的「音色整形」：+2dB 低频给胸口那一下，-3.8dB 高频把
+       嘶声压回去 —— 合成噪声最容易在 6k 以上变得刺耳，而海本来是柔的。
+       第一版只削 -2.5dB，用户第一句反馈就是「有点吵」，所以再往下压。 */
     G.amb = ctx.createGain();
     G.amb.gain.value = 0;
     G.ambLow = ctx.createBiquadFilter();
@@ -870,10 +873,17 @@
     G.ambHigh = ctx.createBiquadFilter();
     G.ambHigh.type = "highshelf";
     G.ambHigh.frequency.value = 5600;
-    G.ambHigh.gain.value = -2.5;
+    G.ambHigh.gain.value = -3.8;
+    /* 起伏的总闸：一条极慢的增益，由「海况档位 + 刚起的那道浪」推上去、
+       几秒内落回来。旧的底噪把低频与超低频钉死不变（为了消掉 4.5s 循环
+       周期），结果整片海是一条直线 —— 用户第二个反馈就是「没有大小起伏」。
+       起伏不该由固定 LFO 造，要由随机排程的真实浪事件造。 */
+    G.ambSurge = ctx.createGain();
+    G.ambSurge.gain.value = 1;
     G.amb.connect(G.ambLow);
     G.ambLow.connect(G.ambHigh);
-    G.ambHigh.connect(G.master);
+    G.ambHigh.connect(G.ambSurge);
+    G.ambSurge.connect(G.master);
 
     /* 混响：一条并联的湿声支路。IR 在 installBuffers 里挂上（要 ctx 采样率）。
        返回端再过一道低通 —— 混响的高频是「糊」的主要来源。 */
@@ -1221,6 +1231,22 @@
     return { left: 0, build: 1, pan: 0, lastDelay: 6 };
   }
 
+  /* 海况档位的走势：**随机游走 + 偶尔整片换挡**，不是每次独立抽签。
+     每次独立抽（早前版本）看着也随机，但一「抽」就管 5–14 秒，60 秒只有几档，
+     一段 60s 全抽到低档是真的会发生的 —— 实测两段同参数渲染的 p50 差 7.4dB，
+     等于每次打开页面海的大小都不一样。游走让 60 秒的平均值稳定在 0.7 附近，
+     而单档落差（0.20–1.40）仍在，大浪小浪的分量不会丢。 */
+  function nextSurge(prev, rnd) {
+    if (rnd() < 0.15) return 0.20 + Math.pow(rnd(), 1.4) * 1.20; /* 偶尔整片换挡 */
+    /* 乘性抖动 + 向 0.70 回归（离散 OU）。早前那种 `prev * (0.72+rnd*0.62)` 的
+       乘子均值 1.03，等于每一步都往上漂一点 —— 60 秒足够顶到上限 1.4 并钉住，
+       实测一段 60s 渲染从头到尾只有 6.7dB 的起伏（另一段 9.7dB），正是「平」。
+       回归项让 60 秒的平均值稳定，抖动量 0.8 又保证单次能走到 0.3–1.1。 */
+    var t = prev * Math.exp((rnd() - 0.5) * 0.80);
+    t = t + (0.70 - t) * 0.35;
+    return t < 0.20 ? 0.20 : (t > 1.40 ? 1.40 : t);
+  }
+
   function planSwell(plan, sea, rnd) {
     rnd = rnd || Math.random;
     var inSet = plan.left > 0;
@@ -1232,11 +1258,14 @@
     } else {
       plan.build = 0.6 + rnd() * 0.22;
       plan.pan = (rnd() * 2 - 1) * 0.6;
-      /* 34%：起一组 2–5 道 */
-      if (rnd() < 0.34) plan.left = 1 + ((rnd() * 4) | 0);
+      /* 45%：起一组 2–4 道（浪是一组一组来的，单发更像「随机点声」） */
+      if (rnd() < 0.45) plan.left = 1 + ((rnd() * 3) | 0);
       near = rnd() < 0.48;
     }
-    var gain = (near ? 1.0 : 0.6) * (0.5 + 0.5 * sea) * plan.build * (0.74 + rnd() * 0.42);
+    /* 增益的跨度就是「大小起伏」：上一版 0.74–1.16 起伏只有 1.57 倍，
+       听感上每道浪都差不多大。放宽到 0.55–1.40，再叠上海况档位，
+       最大的浪能比最小的浪响一倍多。 */
+    var gain = (near ? 1.0 : 0.6) * (0.5 + 0.5 * sea) * plan.build * (0.55 + rnd() * 1.15);
     var pan0 = inSet ? plan.pan * 0.9 : plan.pan;
     var pan1 = -pan0 * (0.3 + rnd() * 0.6);
     var step = {
@@ -1255,14 +1284,22 @@
     if (rnd() < (near ? 0.62 : 0.42)) {
       step.wash = { at: 1.5 + rnd() * 2.2, gain: gain * (0.16 + rnd() * 0.14), pan: pan1 * 0.8 };
     }
-    var base = clamp(13.0 - 7.2 * sea, 4.6, 13.0);
+    /* 间隔略放宽（上一版 10.6s 起步）：浪之间要留出「安静」的空档，
+       否则一道接一道糊成连续白噪 —— 用户说的「吵」有一半是这个。 */
+    var base = clamp(13.6 - 7.2 * sea, 5.0, 13.6);
     var delay;
     if (inSet || plan.left > 0) {
-      delay = base * (0.4 + rnd() * 0.3);
+      /* 组内间隔：0.35–0.75 × base（base 在 sea=0.38 时约 10.9s → 3.8–8.2s）。
+         上一版为了「别像节拍器」把组内间隔劈成 0.18–0.42 / 0.72–1.34 双峰，
+         结果短的那半把 3–5s 长的浪尾叠成一片：60s 渲染的响度时间线从 30s 起
+         就钉在 −27dB 一动不动（实测），比节拍器更像「一堵墙」。间隔要让每道
+         浪的尾巴落干净，才有「一道过去、下一道再来」的起伏。 */
+      delay = base * (0.32 + rnd() * 0.28);
     } else {
-      delay = base * (0.85 + rnd() * 0.55);
-      /* 平潮：偶尔真的安静一会儿（真实海面有「歇一口气」的时候） */
-      if (rnd() < 0.15) delay *= 1.5 + rnd() * 0.7;
+      /* 两组之间真的歇一会儿：1.3–2.5 × base（14–27s），偶尔再拉长。
+         没有这个空档，整片海就是连续白噪，用户说的「平」有一半是它。 */
+      delay = base * (0.75 + rnd() * 0.75);
+      if (rnd() < 0.15) delay *= 1.4 + rnd() * 0.6;
     }
     step.delay = delay;
     plan.lastDelay = delay;
@@ -1359,14 +1396,30 @@
       if (!m.available) m.available = true;
       /* 解锁那一刻 play() 可能早于解码完成（当时代码里还是上一个失败的 src），
          那次会被拒；等能放了再要一次，别指望每帧轮询。 */
+      m.blocked = false;
       if (!m.playing && !state.muted) startMusic();
     });
-    el.addEventListener("playing", function () { m.playing = true; });
+    el.addEventListener("playing", function () { m.playing = true; m.blocked = false; });
     el.addEventListener("pause", function () { m.playing = false; });
     m.el = el;
     tryNext();
     if (document.body) document.body.appendChild(el);
     else document.addEventListener("DOMContentLoaded", function () { document.body.appendChild(el); }, { once: true });
+
+    /* 自动播放这道门：文件秒加载完，而用户第一次点屏幕可能是十秒之后。
+       在那之前 play() 会被拒 —— 只丢一次「被拒」的标记就永远不重试，音乐
+       整场沉默（用户第一轮反馈「没音乐」有一半是这个，另一半是音量太小）。
+       所以每次手势都清掉标记再要一次播放，代价只是一次 play() 调用。 */
+    function retry() {
+      if (!m.available || state.muted) return;
+      m.blocked = false;
+      if (!m.playing) startMusic();
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("pointerdown", retry, true);
+      window.addEventListener("keydown", retry, true);
+      window.addEventListener("touchstart", retry, true);
+    }
   }
 
   function startMusic() {
@@ -1550,6 +1603,7 @@
     loadSampleGulls();
     state.nextSwell = ctx.currentTime + 1.2;
     state.nextGull = ctx.currentTime + 6 + Math.random() * 8;
+    state.music.blocked = false;
     startMusic();
   }
 
@@ -1633,11 +1687,32 @@
     }
 
     var mix = state.mix;
-    /* 底噪：海越涌越厚，低频越压得住；滤波器跟着海况开一点 */
-    mix.sea = 0.55 + 0.85 * sea;
-    mix.wind = 0.03 + 0.5 * wind * (0.55 + 0.45 * gust);
-    mix.windFreq = 380 + 1150 * wind * (0.6 + 0.4 * gust);
-    mix.bedFreq = 1500 + 1800 * sea;
+    /* --- 起伏（用户反馈「没有大小起伏」）---
+       不是加一条 0.2Hz 的 LFO —— 那会立刻变成「有规律的呼吸」，比平的还假。
+       做法是两层随机：①每 9–22 秒换一次海况档位（0.28–1.13），
+       ②刚起的那道近岸浪把档位顶上去、几秒内落回来。于是声音的大小由
+       真实的浪事件决定，而浪的间隔本身是随机的（见 planSwell）。 */
+    var S = state.surge;
+    if (state.t > S.hold) {
+      S.base = nextSurge(S.base, Math.random);
+      S.hold = state.t + 5 + Math.random() * 9;
+    }
+    /* 档位 = 慢游走的 base **加上** 浪顶起来的临时 bump。
+       早前是「S.target = max(S.target, 浪的强度) + hold」—— 那是个棘轮：
+       每道大浪把档位往上推一格，游走又从那格继续走，谁也落不下来。实测
+       60s 里 p10 只比中位数低 1.8dB，等于一直「中等偏响」，正是用户说的「平」。
+       现在 bump 到期就消失，落回 base，安静的空档才是真的空。 */
+    S.target = state.t < S.bumpUntil ? Math.max(S.base, S.bump) : S.base;
+    S.v = damp(S.v, S.target, 0.42, dt);
+    mix.surge = S.v;
+
+    /* 底噪：海越涌越厚，低频越压得住；滤波器跟着海况开一点。
+       基量比上一版整体压下来（.42→.33、wind .5→.35）——「吵」是因为
+       低频与嘶声一直顶在那儿占满了动态余量，压下来才有地方起伏。 */
+    mix.sea = 0.50 + 0.75 * sea;
+    mix.wind = 0.02 + 0.28 * wind * (0.55 + 0.45 * gust);
+    mix.windFreq = 300 + 900 * wind * (0.6 + 0.4 * gust);
+    mix.bedFreq = 1150 + 1300 * sea + 420 * (S.v - 0.7);
 
     /* 环境总音量（封面 0.22 → 长廊 1.0），阻尼过去 */
     mix.amb = damp(mix.amb, state.ambTarget, 0.9, dt);
@@ -1655,10 +1730,20 @@
 
     /* --- 环境图 --- */
     G.amb.gain.setTargetAtTime(mix.amb, now, 0.12);
-    G.bedGain.gain.setTargetAtTime(mix.amb > 0.001 ? 0.42 * mix.sea : 0, now, 0.2);
+    /* 底噪跟着「刚刚有没有浪」退下去 —— 真实海滩是浪拍上来、嘶声漫开、再退下去，
+       底噪恒定的话，安静的空档会被它顶住（实测 60s 里 p10 只比中位数低 3dB，
+       用户要的「大小起伏」听着仍然不够）。activity 在每道浪起时被打到 0.85×增益，
+       之后约 3 秒衰减回来。 */
+    state.activity = damp(state.activity, 0, 0.30, dt);
+    var bedBreath = clamp(0.40 + 0.95 * state.activity + 0.20 * (S.v - 0.7), 0.30, 1.30);
+    G.bedGain.gain.setTargetAtTime(
+      mix.amb > 0.001 ? 0.25 * mix.sea * bedBreath : 0, now, 0.2);
     G.bedFilter.frequency.setTargetAtTime(mix.bedFreq, now, 0.3);
     G.windGain.gain.setTargetAtTime(mix.amb > 0.001 ? mix.wind : 0, now, 0.25);
     G.windFilter.frequency.setTargetAtTime(mix.windFreq, now, 0.4);
+    /* 起伏总闸：0.20–1.69（约 14.7dB 的摆动）。跟得慢（0.5s 时间常数），
+       因为海是「涌」上来的，不是抽上去的。 */
+    if (G.ambSurge) G.ambSurge.gain.setTargetAtTime(0.35 + 0.85 * mix.surge, now, 0.5);
 
     /* --- 浪：提前 0.35s 排程，别在帧边界上卡 --- */
     var ahead = now + 0.35;
@@ -1673,6 +1758,12 @@
       if (mix.amb > 0.02) {
         var step = planSwell(state.swellPlan, sea, Math.random);
         applySwellStep(G, t, step, mix.amb, Math.random);
+        /* 这道浪有多大，接下来几秒的海面就有多大 —— 起伏跟着真实事件走 */
+        state.activity = Math.max(state.activity, Math.min(1.2, step.gain * 0.85));
+        if (step.near && step.gain > 0.28) {
+          S.bump = Math.max(state.t < S.bumpUntil ? S.bump : 0, clamp(0.45 + 1.2 * step.gain, 0, 1.28));
+          S.bumpUntil = Math.max(S.bumpUntil, state.t + 1.8 + Math.random() * 2.4);
+        }
       } else {
         /* 封面闭着的时候也要推进时间轴，否则一打开会补播一串 */
         state.nextSwell = t + 6;
@@ -1757,11 +1848,31 @@
     });
   }
 
+  /* 等烘焙落定（页面里的分片烘焙是异步的，首帧之前不一定完成）。
+     轮询而不是回调：烘焙只有 20 步，轮询成本可以忽略，而回调要改一堆地方。 */
+  function waitForBake(limitMs) {
+    var t0 = Date.now();
+    return new Promise(function (res, rej) {
+      (function tick() {
+        if (state.assets) return res(state.assets);
+        if (state.bakeFailed) return rej(new Error("bake-failed: " + state.bakeFailed));
+        if (Date.now() - t0 > limitMs) return rej(new Error("bake-not-ready after " + limitMs + "ms"));
+        setTimeout(tick, 120);
+      })();
+    });
+  }
+
   function renderOne(spec) {
     spec = spec || {};
     var seconds = clamp(spec.seconds || 12, 0.5, 60);
     var rate = spec.rate || BAKE_RATE;
-    var A = state.assets || bakeAll();
+    /* 没烘完就同步烘一轮会**把主线程按住几十秒**（离屏 Chrome + swiftshader 上
+       实测 >90s，验证脚本只看到 inner-timeout，根因根本看不出来）。这里改成
+       等页面自己那份分片烘焙落定；等不到就明确报错，别静默卡住。 */
+    if (!state.assets) {
+      return waitForBake(90000).then(function () { return renderOne(spec); });
+    }
+    var A = state.assets;
     var OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OC) return Promise.reject(new Error("OfflineAudioContext unavailable"));
     var ctx = new OC(2, Math.round(seconds * rate), rate);
@@ -1775,32 +1886,96 @@
     var env = spec.env || { seaState: 0.38, wind: 0.34, gust: 0.6, sunElevation: 12, isNight: false };
     var script = spec.script || "ambient";
     var meta = { script: script, seconds: seconds, rate: rate, cues: [] };
+    /* 起伏：离线和实时用同一条「海况档位」随机走，种子固定 —— 这样两段
+       离线渲染既量得出来、又能互相比较，而在页面上是 Math.random。 */
+    var surgeSeed = mulberry32(spec.seed == null ? 0x51a7c3 : spec.seed);
+    /* 换种子要换「整段」，不能只换起伏：swell 排程 / 海鸥时刻也得跟着变，
+       否则两段 60s 的浪点一模一样，验证「不重复」就成了自己骗自己。 */
+    function seedFor(k) { return spec.seed == null ? k : ((spec.seed >>> 0) ^ k); }
+    /* ---- 先排出浪的时间表，再让海况档位跟着浪走 ----
+       实时那条链是 update()：每帧先走档位，排到近岸大浪时把档位顶上去按住几秒
+       （见 update() 里 S.hold / step.gain 那段）。离线渲染早前只排浪、不顶档位 ——
+       量出来的 60s 缺了「起一道大浪、整片海跟着大几秒」这层，拿它去调「有没有
+       大小起伏」，调的其实不是一个东西。现在两段按同一套走。 */
+    function planSwells(t0, t1, sea, rnd) {
+      var out = [], plan = makeSwellPlan(), t = t0 + 0.35;
+      while (t < t1) {
+        out.push({ t: t, step: planSwell(plan, sea, rnd) });
+        t += out[out.length - 1].step.delay;
+      }
+      return out;
+    }
+
+    function surgeCurve(swells, t1, rnd) {
+      var out = [], acts = [], v = 0.7, base = 0.7, bump = 0, bumpUntil = 0, hold = 0, kicks = 0;
+      var act = 0, ai = 0, si = 0;
+      for (var ts = 0; ts < t1; ts += 0.25) {
+        while (si < swells.length && swells[si].t <= ts) {
+          var w = swells[si].step;
+          if (w.near && w.gain > 0.28) {
+            bump = Math.max(ts < bumpUntil ? bump : 0, clamp(0.45 + 1.2 * w.gain, 0, 1.28));
+            bumpUntil = Math.max(bumpUntil, swells[si].t + 1.8 + rnd() * 2.4);
+            kicks++;
+          }
+          si++;
+        }
+        if (ts > hold) {
+          base = nextSurge(base, rnd);
+          hold = ts + 5 + rnd() * 9;
+        }
+        var target = ts < bumpUntil ? Math.max(base, bump) : base;
+        v = damp(v, target, 0.42, 0.25);
+        act = act * Math.exp(-0.25 / 3.33);
+        while (ai < swells.length && swells[ai].t <= ts) {
+          act = Math.max(act, Math.min(1.2, swells[ai].step.gain * 0.85));
+          ai++;
+        }
+        out.push(v);
+        acts.push(act);
+      }
+      out.kicks = kicks;
+      out.acts = acts;
+      return out;
+    }
+
+    function bakeAmbientTimeline(t0, t1, amb, sea, swellSeed, playSeed) {
+      var swells = planSwells(t0, t1, sea, mulberry32(swellSeed));
+      var curve = surgeCurve(swells, t1, mulberry32((swellSeed ^ 0x9e3779b9) >>> 0));
+      for (var i = 0; i < curve.length; i++) {
+        var at = t0 + i * 0.25;
+        if (G.ambSurge) G.ambSurge.gain.setValueAtTime(0.35 + 0.85 * curve[i], at);
+        /* 底噪跟着同一档起伏走（实时那边是 setTargetAtTime 跟 S.v）：
+           底噪恒定会把安静的空档顶住，起伏听着就不够。 */
+        if (G.bedGain) {
+          var bb = clamp(0.40 + 0.95 * curve.acts[i] + 0.20 * (curve[i] - 0.7), 0.30, 1.30);
+          G.bedGain.gain.setValueAtTime(0.25 * (0.50 + 0.75 * sea) * bb, at);
+        }
+      }
+      var pr = mulberry32(playSeed == null ? 0x51ce : playSeed);
+      for (var j = 0; j < swells.length; j++) applySwellStep(G, swells[j].t, swells[j].step, amb, pr);
+      meta.swells = swells.length;
+      meta.kicks = curve.kicks;
+      meta.surge = +curve[curve.length - 1].toFixed(3);
+    }
 
     /* 环境声的离线推演：和 update() 同一套映射，只是时间轴上一次性排完 */
     function ramps(t0, t1, amb0, amb1, sea) {
       G.amb.gain.setValueAtTime(amb0, t0);
       if (amb1 !== amb0) G.amb.gain.linearRampToValueAtTime(amb1, t1);
-      G.bedGain.gain.setValueAtTime(0.42 * (0.55 + 0.85 * sea), t0);
-      G.bedFilter.frequency.setValueAtTime(1500 + 1800 * sea, t0);
-      G.windGain.gain.setValueAtTime(0.03 + 0.5 * env.wind * (0.55 + 0.45 * env.gust), t0);
-      G.windFilter.frequency.setValueAtTime(380 + 1150 * env.wind, t0);
+      G.bedGain.gain.setValueAtTime(0.25 * (0.50 + 0.75 * sea), t0);
+      G.bedFilter.frequency.setValueAtTime(1150 + 1300 * sea, t0);
+      G.windGain.gain.setValueAtTime(0.02 + 0.32 * env.wind * (0.55 + 0.45 * env.gust), t0);
+      G.windFilter.frequency.setValueAtTime(300 + 900 * env.wind, t0);
     }
 
     function scheduleSwells(t0, t1, amb, sea, seed) {
-      var rnd = mulberry32(seed == null ? 0xabc1 : seed);
-      var plan = makeSwellPlan();
-      var t = t0 + 0.35;
-      while (t < t1) {
-        var step = planSwell(plan, sea, rnd);
-        applySwellStep(G, t, step, amb, rnd);
-        t += step.delay;
-      }
+      bakeAmbientTimeline(t0, t1, amb, sea, seed == null ? 0xabc1 : seed, (seed == null ? 0xabc1 : seed) ^ 0xb0b);
     }
 
     if (script === "ambient") {
       ramps(0, 0.9, 0.22, 1.0, env.seaState);
-      scheduleSwells(0, seconds, 1.0, env.seaState);
-      var grnd = mulberry32(0x5e11);
+      scheduleSwells(0, seconds, 1.0, env.seaState, seedFor(0xabc1));
+      var grnd = mulberry32(seedFor(0x5e11));
       for (var gt = 4 + grnd() * 6; gt < seconds - 1.2; gt += 12 + grnd() * 14) {
         playGull(G, gt, 0.2 + grnd() * 0.12, (grnd() * 2 - 1) * 0.7);
         meta.cues.push({ at: gt, name: "gull" });
@@ -1812,7 +1987,7 @@
       var cutAt = 1.95;
       ramps(0, 0.2, 0, 0.22, env.seaState);
       ramps(click, click + 0.8, 0.22, 0.3, env.seaState);
-      scheduleSwells(0, seconds, 0.3, env.seaState);
+      scheduleSwells(0, seconds, 0.3, env.seaState, seedFor(0xabc1));
       CUES.approach(G, click + 0.02);
       CUES.fly(G, click + 0.525);
       meta.cues.push({ at: click + 0.525, name: "fly" });
@@ -1826,7 +2001,7 @@
       meta.cues.push({ at: cutAt + 0.28 + 2.6, name: "open" });
       ramps(cutAt + 0.2, cutAt + 0.6, 0.3, 0.62, env.seaState);
       ramps(cutAt + 0.28 + 2.6, cutAt + 0.28 + 3.2, 0.62, 1.0, env.seaState);
-      scheduleSwells(0, seconds, 1.0, env.seaState);
+      scheduleSwells(0, seconds, 1.0, env.seaState, seedFor(0xabc1));
       var g2 = mulberry32(0x77aa);
       for (var gt2 = 7 + g2() * 5; gt2 < seconds - 1.2; gt2 += 14 + g2() * 16) {
         playGull(G, gt2, 0.18 + g2() * 0.1, (g2() * 2 - 1) * 0.7);
@@ -1843,10 +2018,10 @@
         var at = 0.2 + k * slot;
         var nm = names[k];
         if (nm === "bed") {
-          G.bedGain.gain.setValueAtTime(0.42, at);
+          G.bedGain.gain.setValueAtTime(0.30, at);
           G.bedGain.gain.setValueAtTime(0, at + slot - 0.3);
         } else if (nm === "wind") {
-          G.windGain.gain.setValueAtTime(0.4, at);
+          G.windGain.gain.setValueAtTime(0.28, at);
           G.windGain.gain.setValueAtTime(0, at + slot - 0.3);
         } else if (nm === "surf") {
           var lr = mulberry32(0x5150);
@@ -1878,7 +2053,33 @@
       meta.cues.push({ at: 10.4, name: "wash" });
     }
 
-    var done = ctx.startRendering().then(function (rendered) {
+    /* startRendering() 在离屏 Chrome 里偶发「永远不 resolve」（实测同一条 spec
+       单跑 261ms、连跑时某一段 90s 不动）。旧代码就这样把整轮验证挂死，验证脚本
+       只能看到一条 inner-timeout、也不知道卡在哪一步。这里做两件事：
+       ① 记 stage，出错时能报出「卡在哪个阶段」；
+       ② 加看门狗：超时就 reject，让调用方重试，而不是无声挂住。 */
+    state.renderStage = "startRendering";
+    var done = new Promise(function (res, rej) {
+      var settled = false;
+      var budget = Math.max(15000, Math.round(seconds * 2000));
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        rej(new Error("render-timeout@" + state.renderStage + " " + budget + "ms"));
+      }, budget);
+      ctx.startRendering().then(function (rendered) {
+        state.renderStage = "encode";
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        res(rendered);
+      }, function (e) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        rej(e);
+      });
+    }).then(function (rendered) {
       var chans = [rendered.getChannelData(0), rendered.getChannelData(1)];
       var peak = 0, sum = 0, sq = 0, n = 0;
       for (var c = 0; c < chans.length; c++) {
@@ -1949,6 +2150,8 @@
       wind: +state.mix.wind.toFixed(3),
       windFreq: Math.round(state.mix.windFreq),
       duck: +state.duck.toFixed(3),
+      surge: { v: +state.surge.v.toFixed(3), target: +state.surge.target.toFixed(3) },
+      surgeGain: G && G.ambSurge ? +G.ambSurge.gain.value.toFixed(3) : null,
       bedGain: G && G.bedGain ? +G.bedGain.gain.value.toFixed(3) : null,
       windGain: G && G.windGain ? +G.windGain.gain.value.toFixed(3) : null,
       master: G && G.master ? +G.master.gain.value.toFixed(3) : null,
@@ -1980,6 +2183,8 @@
         available: m.available,
         playing: m.playing,
         volume: m.el ? +m.el.volume.toFixed(3) : 0,
+        target: +m.target.toFixed(3),
+        level: +musicLevel().toFixed(3),
         src: m.el ? (m.el.getAttribute("src") || "").split("/").pop() : "",
         tried: m.tried,
         blocked: !!m.blocked,
@@ -2012,6 +2217,8 @@
       /* 计划器是纯函数，Node 里可以直接跑几千次验随机性 */
       planSwell: planSwell,
       makeSwellPlan: makeSwellPlan,
+      nextSurge: nextSurge,
+      muSeeded: mulberry32,
       bakeReverbIR: bakeReverbIR,
     },
   };
