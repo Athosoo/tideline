@@ -128,9 +128,9 @@ python -m http.server 4173
 
 ## 添加新的明信片
 
-1. 把正反面图片放进 `assets/postcards/`。
-   - 竖版卡保持 `2:3` 画幅（例如 `03-front.png`、`03-back.png`）。
-   - 横版卡保持 `3:2` 画幅（例如 `04-front.png`、`04-back.png`）。
+1. 把正反面图片放进 `assets/postcards/`，文件名全小写 `NN-front.png` / `NN-back.png`。
+   - 竖版卡保持 `2:3` 画幅（例如 `04-front.png`，100×150）。
+   - 横版卡保持 `3:2` 画幅（例如 `03-front.png`，150×100）。
 2. 打开 `js/app.js`，在文件顶部的 `POSTCARDS` 数组中追加一项：
 
 ```js
@@ -144,6 +144,8 @@ python -m http.server 4173
   date: "2026",
   accent: "#c96e53",
   pixel: false,                 // 像素图设为 true；高分辨率插画设为 false
+  pixelWidth: 150,              // 像素图必填：原图像素宽（长廊缩放会按整数倍对齐，保证像素不糊）
+  pixelHeight: 100,             // 像素图必填：原图像素高
   landscape: false,             // 横版卡设为 true（长廊里竖放，放大时转成横版）
   front: "assets/postcards/03-front.png",
   back: "assets/postcards/03-back.png",
@@ -152,9 +154,12 @@ python -m http.server 4173
 
 页面会自动生成新卡片、调整环形周期、更新计数并把它加入随机构图。长廊的周期由数组长度推导，所以增加或删除卡片都不需要改滚动逻辑。
 
-> 当前 `01`、`02` 两张原图只有 100×150 / 120×180 像素，因此在 Focus 视窗里会保留明显的像素颗粒。如果之后拿到更高分辨率的母版，把 `pixel` 设为 `false`（或删掉该字段）就能得到更细腻的放大效果。
+> 改完在**工作区根**跑一次 `node _wip/verify/postcards_smoke.mjs`：查每张卡的正反面是否存在、
+> PNG 实际像素是否等于 `pixelWidth/Height`、画幅是否与 `landscape` 一致、`index.html` 的引用是否命中。
+
+> `01`、`02`、`04` 三张是像素原图（120×180 / 100×150 / 100×150），因此在 Focus 视窗里会保留明显的像素颗粒。如果之后拿到更高分辨率的母版，把 `pixel` 设为 `false`（或删掉该字段）就能得到更细腻的放大效果。
 >
-> `04`—`07` 是四张占位卡（SVG，含两张横版）；`03` 已替换为你加入的横版卡（150×100 PNG）。直接替换 `front` / `back` 即可换成正式素材。
+> `03` 是横版像素卡（150×100 PNG，`landscape: true`）；`05`—`07` 仍是三张占位卡（SVG）。替换占位卡时改 `front` / `back`、画幅与 `pixel` 三处即可。
 
 ## 设计结构
 
@@ -163,7 +168,7 @@ python -m http.server 4173
 - `js/app.js`：随机漂浮算法、环形滚动镜头、Canvas 海面、卡片交互和翻转逻辑。
 - `js/weather.js`：天气与时间仿真（太阳/月亮位置、云/雨/风暴/雷电、系统时间与 Open-Meteo 读取、离线气候学降级）。
 - `assets/fonts/fonts.css`：内嵌字体，保证 `file://` 直接打开时排版完整。
-- `assets/postcards/`：明信片素材（`01`、`02` 为原图，`03`—`07` 为占位 SVG）。
+- `assets/postcards/`：明信片素材（`01`、`02`、`03`、`04` 为正式图，`05`—`07` 为占位 SVG）。
 - `js/clouds.js`、`js/ocean.js`、`js/sea.bundle.js`、`js/sea-entry.js`：体积云层、自写回落海面、原版海面 bundle 与它的构建源（分别见上文各节）。
 - `1/`, `2/`, `3/`：保留在本地的原始素材目录，不影响页面运行；已加入 `.gitignore`，不随仓库发布。
 
