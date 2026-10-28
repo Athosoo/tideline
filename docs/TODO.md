@@ -1323,3 +1323,15 @@ node _wip/verify/_probe_boot.mjs --tag b1 --ms 9000 --shots     # 板子 + 封�
 node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 ```
 
+---
+
+### 2026-10-28 · 中文排版落地（04 已全中文）
+
+- `POSTCARDS[04]` 的标题 / meta / short / quote / quoteCn / date / backAlt 全换成中文（「赤日」）。
+- 汉字改由内嵌宋体子集渲染（`TIDELINE Song` = Noto Serif SC 子集，OFL 1.1），不再依赖系统字体；
+  中文卡由 `hasCjk()` 挂 `.is-cn`，单独一套版式（无斜体、正字距、行高 1.18+）。
+- 维护流程：改中文文案 → `python _wip/verify/cjk_font.py build` → `check` →
+  `node _wip/verify/postcards_smoke.mjs`。**漏了 build，新字会回落到系统字体。**
+
+**待确认**：01 / 02 / 03 / 05—07 是否也一起换成中文？流程已就绪，只差文案。
+

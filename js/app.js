@@ -57,13 +57,13 @@ const POSTCARDS = [
   },
   {
     number: "04",
-    title: "Card 04",
-    meta: "PORTRAIT · NEW",
-    short: "Arms raised to a red sun",
-    quote: "“The horizon is wider when you stop counting.”",
-    quoteCn: "「不再计数的时候，海平线会更宽。」",
-    date: "2026",
-    backAlt: "明信片背面：04",
+    title: "赤日",
+    meta: "岩石海岸 · 竖版",
+    short: "把太阳举过头顶",
+    quote: "「把太阳举过头顶，海就退了一步。」",
+    quoteCn: "岩石上开着不合季节的花。",
+    date: "二〇二六",
+    backAlt: "明信片背面：赤日",
     accent: "#c96e53",
     pixel: true,
     pixelWidth: 100,
@@ -118,6 +118,12 @@ const POSTCARDS = [
     back: "assets/postcards/07-back.svg",
   },
 ];
+
+// 中文卡单独排：CJK 没有斜体、也不吃负字距，CSS 那边靠 .is-cn 换一套版式。
+const CJK = /[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/;
+function hasCjk(text) {
+  return CJK.test(text || "");
+}
 
 const PERSPECTIVE = 1500;
 const FINE_POINTER = window.matchMedia("(pointer: fine)").matches;
@@ -1413,6 +1419,7 @@ function setActiveCard(index, force = false) {
     dom.currentNumber.textContent = card.data.number;
     dom.currentTitle.textContent = card.data.title;
     dom.currentMeta.textContent = card.data.short;
+    dom.currentCard.classList.toggle("is-cn", hasCjk(card.data.title));
     dom.currentCard.classList.remove("is-switching");
   };
 
@@ -1724,6 +1731,10 @@ function setFocusContent(card) {
   dom.focusBack.alt = data.backAlt || `${data.title}，明信片背面`;
   dom.focus.classList.toggle("is-pixel", Boolean(data.pixel));
   dom.focus.classList.toggle("is-landscape", Boolean(data.landscape));
+  dom.focus.classList.toggle(
+    "is-cn",
+    hasCjk(data.title) || hasCjk(data.quote) || hasCjk(data.short),
+  );
   dom.focus.style.setProperty("--card-accent", data.accent);
   dom.focusCard.setAttribute("aria-label", `${data.title}，明信片正面，点击翻面`);
   dom.focusCard.setAttribute("aria-pressed", "false");
