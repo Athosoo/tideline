@@ -167,7 +167,7 @@ python -m http.server 4173
 - `css/styles.css`：封面双门、海上光线、卡片实体边缘、聚焦界面与响应式样式。
 - `js/app.js`：随机漂浮算法、环形滚动镜头、Canvas 海面、卡片交互和翻转逻辑。
 - `js/weather.js`：天气与时间仿真（太阳/月亮位置、云/雨/风暴/雷电、系统时间与 Open-Meteo 读取、离线气候学降级）。
-- `assets/fonts/fonts.css`：内嵌字体，保证 `file://` 直接打开时排版完整。
+- `assets/fonts/fonts.css`：内嵌字体（拉丁 + 中文宋体子集），保证 `file://` 直接打开时排版完整。
 - `assets/postcards/`：明信片素材（`01`、`02`、`03`、`04` 为正式图，`05`—`07` 为占位 SVG）。
 - `js/clouds.js`、`js/ocean.js`、`js/sea.bundle.js`、`js/sea-entry.js`：体积云层、自写回落海面、原版海面 bundle 与它的构建源（分别见上文各节）。
 - `1/`, `2/`, `3/`：保留在本地的原始素材目录，不影响页面运行；已加入 `.gitignore`，不随仓库发布。
@@ -198,7 +198,26 @@ python -m http.server 4173
 
 ### 字体
 
-Cormorant Garamond、Manrope，均采用 SIL Open Font License 1.1；页面中的字体已转换为内嵌 woff2，离线打开也能保持完整排版。
+| 用途 | 字体 | 许可证 |
+| --- | --- | --- |
+| 拉丁衬线（标题、引文） | Cormorant Garamond | SIL OFL 1.1 |
+| 拉丁无衬线（界面标签） | Manrope | SIL OFL 1.1 |
+| 中文 | Noto Serif SC 子集，内嵌名 `TIDELINE Song` | SIL OFL 1.1 |
+
+三者都 base64 内嵌在 `assets/fonts/fonts.css`，离线双击也能完整排版。
+
+中文以前靠系统回退（Songti SC / STSong / Noto Serif SC），换台机器字面就不一样；现在裁成
+站点真正用到的那两百来个字内嵌进去（每档字重约 45 KB woff，两档 300/400），
+`css/styles.css` 里 `--serif` 把 `TIDELINE Song` 排在拉丁字体之后做 CJK 回落，`--cjk` 给明确
+要宋体的地方。**改了中文文案必须重建子集**，否则新字会悄悄回落到系统字体：
+
+```bash
+python _wip/verify/cjk_font.py build   # 需要本机有 C:\Windows\Fonts\NotoSerifSC-VF.ttf
+python _wip/verify/cjk_font.py check   # 只校验：源码里的中文，内嵌字体是否全覆盖
+```
+
+中文卡（`hasCjk()` 判定）会挂 `.is-cn`，单独换一套版式：汉字没有斜体、不吃负字距、
+行高放到 1.18 以上。细节见 `docs/HANDOFF.md` §2 末尾。
 
 ### 贡献者
 

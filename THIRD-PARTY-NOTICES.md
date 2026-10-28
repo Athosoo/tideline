@@ -74,12 +74,33 @@ THE SOFTWARE.
 
 ## 3. 字体
 
-| 字体 | 许可证 |
-| --- | --- |
-| Cormorant Garamond | SIL Open Font License 1.1 |
-| Manrope | SIL Open Font License 1.1 |
+| 字体 | 用途 | 许可证 |
+| --- | --- | --- |
+| Cormorant Garamond | 拉丁衬线 | SIL Open Font License 1.1 |
+| Manrope | 拉丁无衬线 | SIL Open Font License 1.1 |
+| Noto Serif SC | 中文（子集） | SIL Open Font License 1.1 |
 
-两者均已转换为 woff2 内嵌在 `assets/fonts/`，随页面离线分发。
+上游分别见 <https://github.com/CatharsisFonts/Cormorant>、<https://github.com/sharanda/manrope>、
+<https://github.com/notofonts/noto-cjk>。
+
+三者都已内嵌在 `assets/fonts/` 随页面离线分发：拉丁两款是 woff2（可变字重，原样转换），
+中文是 **Noto Serif SC 可变字重的子集**（见下）。
+
+**中文子集（2026-10-28）**：Noto Serif SC 的可变字重母版（`NotoSerifSC-VF.ttf`，wght 200–900）
+按站点实际用到的中文字符裁成两档静态字重（300 / 400），每档约 45 KB woff，base64 内嵌在
+`assets/fonts/fonts.css`，CSS 内字体名取 **`TIDELINE Song`**（子集属 OFL 意义上的 Modified
+Version，重命名以示与上游区分；Noto 的 OFL 文本没有 Reserved Font Name 限制）。
+
+- 生成 / 校验：`python _wip/verify/cjk_font.py build` / `check`（脚本在**工作区根仓库**，
+  源字体用本机 `C:\Windows\Fonts\NotoSerifSC-VF.ttf`；`brotli` 不可用，故输出 woff 而非 woff2）。
+- 子集只含**会上屏**的字符（注释里的一律剔除），因此新增中文文案后必须重建，
+  否则新字会回落到系统字体。
+- OFL 1.1 全文：<https://openfontlicense.org/open-font-license-official-text/>。按 OFL 要求，
+  本文件即为版权声明与许可标识，字体随页面分发、未单独售卖。
+
+**中文子集补充说明**：子集只保留上屏字符，所以若站点新增中文文案而没重建字体，那些新字会
+回落到系统字体（能看，但每台机器字面不同）。这是刻意的取舍 —— 全量 Noto Serif SC 一档字重
+就 17 MB，内嵌不现实。
 
 ---
 

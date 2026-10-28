@@ -85,8 +85,22 @@ GIFT/
 | `js/sea.bundle.js` | 790 KB | esbuild 产物，页面真正加载的是它（IIFE，全局 `OpenSea`） |
 | `js/ocean.js` | 33 KB | **手写 WebGL2 后备海面**（`?nogl=1` 可强制跳过） |
 | `1/ 2/ 3/` | — | 用户的原始素材，**不要动**；已加入 `.gitignore` 并从 git 取消跟踪（本地保留，不随仓库发布） |
-| `assets/` | 232 KB | 明信片图、字体、月球贴图 |
+| `assets/` | 368 KB | 明信片图、字体、月球贴图（不含 gitignore 掉的本机音乐） |
+| `assets/fonts/fonts.css` | 253 KB | 内嵌字体：Cormorant ×2 + Manrope（拉丁，woff2）+ Noto Serif SC 子集两档（中文，woff）。**`CJK-SUBSET` 区由 `_wip/verify/cjk_font.py` 生成，勿手改** |
 | `README.md` | 15 KB | 项目文档：渲染器来源、云盖、调色、三级回落、LITE 对照表 |
+
+> **中文排版（2026-10-28 起）**：汉字不再靠系统字体。`assets/fonts/fonts.css` 末尾的
+> `CJK-SUBSET` 区是 Noto Serif SC 的子集（CSS 名 `TIDELINE Song`，两档字重 300/400，
+> 各约 45 KB woff，OFL 1.1 见 `THIRD-PARTY-NOTICES.md` §3）；`css/styles.css` 顶部的
+> `--serif` 把它排在拉丁字体之后做 CJK 回落，`--cjk` 给明确要宋体的地方（封面
+> `.cover-lede .cn`、`.focus-note .cn`）。
+>
+> - **中文卡**：`js/app.js` 的 `hasCjk()` 给 `.focus` / `.current-card` 挂 `.is-cn`，CSS 文件末尾
+>   那一节换一套版式 —— 汉字没有斜体（别让它合成歪斜）、不吃负字距、行高 1.18 以上。
+> - **改了中文文案必须重建子集**：`python _wip/verify/cjk_font.py build`（源字体在本机
+>   `C:\Windows\Fonts\NotoSerifSC-VF.ttf`；`brotli` 没装所以输出 woff 不是 woff2），
+>   再 `python _wip/verify/cjk_font.py check` 确认源码里的中文全有字形。不重建 = 新字回落到
+>   系统字体，一台机器一个样。
 
 ---
 

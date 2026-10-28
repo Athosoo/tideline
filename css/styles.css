@@ -17,8 +17,11 @@
   --coral: #c96e53;
   --line: rgba(18, 63, 62, 0.2);
   --line-light: rgba(247, 242, 230, 0.26);
-  --serif: "Cormorant", "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC", "Noto Serif SC", serif;
+  --serif: "Cormorant", "Iowan Old Style", "Palatino Linotype", Palatino, "TIDELINE Song", "Noto Serif SC", "Songti SC", STSong, serif;
   --sans: "Manrope", "Avenir Next", "Segoe UI", "Noto Sans SC", sans-serif;
+  /* 内嵌中文：Noto Serif SC 的子集（见 assets/fonts/fonts.css 的 CJK-SUBSET 区）。
+     --serif 里已经插在拉丁字体之后做 CJK 回落；这里单独留一份，给明确要中文宋体的地方。 */
+  --cjk: "TIDELINE Song", "Noto Serif SC", "Songti SC", STSong, serif;
   --ease-out: cubic-bezier(0.22, 0.9, 0.24, 1);
   --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
   --gate: 0;
@@ -329,7 +332,7 @@ img {
 .cover-lede .cn {
   padding-left: clamp(28px, 4.6vw, 74px);
   border-left: 1px solid rgba(18, 63, 62, 0.15);
-  font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+  font-family: var(--cjk);
   font-size: 11px;
   line-height: 1.9;
   letter-spacing: 0.13em;
@@ -1667,7 +1670,7 @@ body.is-lite .quality-toggle { color: rgba(247, 242, 230, 0.95); }
 .focus-note .cn {
   margin: 11px 0 0;
   color: rgba(247, 242, 230, 0.47);
-  font-family: "Noto Serif SC", "Songti SC", STSong, serif;
+  font-family: var(--cjk);
   font-size: 9px;
   letter-spacing: 0.12em;
   line-height: 1.8;
@@ -3908,4 +3911,50 @@ body.is-cake-cursor .cursor {
   34%  { opacity: 0.9; transform: scale(0.62, 0.86); }
   62%  { opacity: 0.55; transform: scale(1.12, 1.02); }
   100% { opacity: 1; transform: scale(1, 1); }
+}
+
+/* =========================================================
+   中文卡：is-cn
+   app.js 的 hasCjk() 给中文卡挂 .is-cn。以下几条是孤立的覆盖，放在文件末尾，
+   这样后面所有媒体查询里对 .focus-title / .current-title 的字号覆盖都不会把它们顶掉
+   （选择器权重 0,3,0 > 0,1,0）。要点：汉字没有斜体（别合成歪斜）、不吃负字距
+   （会挤成一团）、行高要放到 1.2 以上（拉丁那套 0.82 是给大写字母用的）。
+   ========================================================= */
+
+.focus.is-cn .focus-title {
+  max-width: 86%;
+  letter-spacing: 0.08em;
+  line-height: 1.18;
+}
+
+.focus.is-cn .focus-meta {
+  font-family: var(--cjk);
+  font-size: 9.5px;
+  letter-spacing: 0.24em;
+}
+
+.focus.is-cn .focus-note > p:first-child {
+  font-family: var(--cjk);
+  font-style: normal;
+  font-size: clamp(17px, 1.55vw, 22px);
+  line-height: 1.85;
+  letter-spacing: 0.06em;
+}
+
+.focus.is-cn .focus-note .cn {
+  font-size: 10px;
+  letter-spacing: 0.17em;
+  line-height: 2;
+}
+
+.current-card.is-cn .current-title {
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+}
+
+.current-card.is-cn .current-meta {
+  font-family: var(--cjk);
+  font-style: normal;
+  font-size: 12px;
+  letter-spacing: 0.12em;
 }
