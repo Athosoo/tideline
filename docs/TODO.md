@@ -1325,13 +1325,16 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 
 ---
 
-### 2026-10-28 · 中文排版落地（04 已全中文）
+### 2026-10-28 · 中文排版落地（01—04 已全中文）
 
-- `POSTCARDS[04]` 的标题 / meta / short / quote / quoteCn / date / backAlt 全换成中文（「赤日」）。
+- 前四张卡的七个字段（标题 / meta / short / quote / quoteCn / date / backAlt）全换成中文：
+  01「晨读」、02「浮在光里」、03「荣耀向你俯首」（用户指定主文案）、04「赤日」。
 - 汉字改由内嵌宋体子集渲染（`TIDELINE Song` = Noto Serif SC 子集，OFL 1.1），不再依赖系统字体；
   中文卡由 `hasCjk()` 挂 `.is-cn`，单独一套版式（无斜体、正字距、行高 1.18+）。
+- 四个字以上的标题按栏宽缩字号（`.is-cn-mid` / `.is-cn-long` + `.focus-aside` 的容器查询），
+  保证「荣耀向你俯首」这类六个字的短语在一行里，不用改 CSS 就能加更长的标题。
 - 维护流程：改中文文案 → `python _wip/verify/cjk_font.py build` → `check` →
   `node _wip/verify/postcards_smoke.mjs`。**漏了 build，新字会回落到系统字体。**
 
-**待确认**：01 / 02 / 03 / 05—07 是否也一起换成中文？流程已就绪，只差文案。
+**待确认**：05—07（仍是英文占位 SVG）要不要也配中文？
 

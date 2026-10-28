@@ -6,13 +6,13 @@
 const POSTCARDS = [
   {
     number: "01",
-    title: "Morning Reading",
-    meta: "26.11.2022 · 06:55",
-    short: "A check-in at first light",
-    quote: "“A quiet check-in at first light.”",
-    quoteCn: "「把清晨的第一页，留给彼此。」",
-    date: "2022",
-    backAlt: "明信片背面：POSTCARD / Take a Photo Together",
+    title: "晨读",
+    meta: "校园 · 清晨六点五十五",
+    short: "六点五十五分的合照",
+    quote: "「清晨的第一页，我们一人读一半。」",
+    quoteCn: "风把书页吹开的时候，天刚好亮。",
+    date: "二〇二二",
+    backAlt: "明信片背面：晨读",
     accent: "#c96e53",
     pixel: true,
     pixelWidth: 120,
@@ -23,13 +23,13 @@ const POSTCARDS = [
   },
   {
     number: "02",
-    title: "Along the Seaside",
-    meta: "UNPOSTED · SHORELINE STUDY",
-    short: "A little blue daydream",
-    quote: "“Drive you along the seaside…”",
-    quoteCn: "「沿海而行，让风替我们说话。」",
-    date: "UNDATED",
-    backAlt: "明信片背面：Drive you along the seaside……",
+    title: "浮在光里",
+    meta: "水面 · 竖版",
+    short: "一只猫浮在蓝色的午后",
+    quote: "「别急着上岸，水面正托着一整个下午。」",
+    quoteCn: "芦苇与鸢尾替它看着岸。",
+    date: "未标日期",
+    backAlt: "明信片背面：浮在光里",
     accent: "#609aa3",
     pixel: true,
     pixelWidth: 100,
@@ -40,13 +40,13 @@ const POSTCARDS = [
   },
   {
     number: "03",
-    title: "Card 03",
-    meta: "LANDSCAPE · NEW",
-    short: "A new card joins the tide",
-    quote: "“A new card joins the drift.”",
-    quoteCn: "「新的一张，加入漂流。」",
-    date: "2026",
-    backAlt: "明信片背面：03",
+    title: "荣耀向你俯首",
+    meta: "色块构成 · 横版",
+    short: "所有颜色都为你起身",
+    quote: "「你站定的地方，所有颜色都朝你俯身。」",
+    quoteCn: "红与黄伏下去，蓝与绿退到两边。",
+    date: "二〇二六",
+    backAlt: "明信片背面：荣耀向你俯首",
     accent: "#609aa3",
     pixel: true,
     pixelWidth: 150,
@@ -1735,6 +1735,11 @@ function setFocusContent(card) {
     "is-cn",
     hasCjk(data.title) || hasCjk(data.quote) || hasCjk(data.short),
   );
+  // 四个字以上的中文标题按栏宽缩字号（CSS 里的 .is-cn-mid / .is-cn-long），
+  // 否则「浮在光里」在宽屏上断行、「荣耀向你俯首」会被拆成两行
+  const titleLen = Array.from(data.title || "").length;
+  dom.focus.classList.toggle("is-cn-mid", hasCjk(data.title) && titleLen === 4);
+  dom.focus.classList.toggle("is-cn-long", hasCjk(data.title) && titleLen >= 5);
   dom.focus.style.setProperty("--card-accent", data.accent);
   dom.focusCard.setAttribute("aria-label", `${data.title}，明信片正面，点击翻面`);
   dom.focusCard.setAttribute("aria-pressed", "false");

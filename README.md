@@ -207,7 +207,7 @@ python -m http.server 4173
 三者都 base64 内嵌在 `assets/fonts/fonts.css`，离线双击也能完整排版。
 
 中文以前靠系统回退（Songti SC / STSong / Noto Serif SC），换台机器字面就不一样；现在裁成
-站点真正用到的那两百来个字内嵌进去（每档字重约 45 KB woff，两档 300/400），
+站点真正用到的那两百来个字内嵌进去（每档字重约 55 KB woff，两档 300/400），
 `css/styles.css` 里 `--serif` 把 `TIDELINE Song` 排在拉丁字体之后做 CJK 回落，`--cjk` 给明确
 要宋体的地方。**改了中文文案必须重建子集**，否则新字会悄悄回落到系统字体：
 

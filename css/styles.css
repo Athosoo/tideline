@@ -1578,6 +1578,7 @@ body.is-lite .quality-toggle { color: rgba(247, 242, 230, 0.95); }
   top: 50%;
   z-index: 3;
   width: clamp(240px, 26vw, 365px);
+  container-type: inline-size; /* 给 .is-cn-long 的标题算字号用（cqw） */
   transform: translateY(-50%);
   color: var(--foam);
   text-shadow: 0 1px 18px rgba(1, 21, 25, 0.25);
@@ -3925,6 +3926,19 @@ body.is-cake-cursor .cursor {
   max-width: 86%;
   letter-spacing: 0.08em;
   line-height: 1.18;
+}
+
+/* 四个字以上的中文标题在窄栏里要能排成一行（「浮在光里」按原字号在 1440 宽下会断行，
+   「荣耀向你俯首」更会被拆成两行）。字号跟栏宽走：.focus-aside 声明了容器查询，
+   4 字用 16cqw、5 字以上用 13cqw，刚好让字加字距落在 86% 的 max-width 里。 */
+.focus.is-cn-mid .focus-title {
+  font-size: clamp(30px, 16cqw, 62px);
+  letter-spacing: 0.07em;
+}
+
+.focus.is-cn-long .focus-title {
+  font-size: clamp(24px, 13cqw, 50px);
+  letter-spacing: 0.05em;
 }
 
 .focus.is-cn .focus-meta {
