@@ -1668,15 +1668,6 @@ body.is-lite .quality-toggle { color: rgba(247, 242, 230, 0.95); }
   color: rgba(249, 245, 233, 0.86);
 }
 
-.focus-note .cn {
-  margin: 11px 0 0;
-  color: rgba(247, 242, 230, 0.47);
-  font-family: var(--cjk);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  line-height: 1.8;
-}
-
 .focus-side-indicator {
   display: flex;
   align-items: center;
@@ -3953,12 +3944,6 @@ body.is-cake-cursor .cursor {
   font-size: clamp(17px, 1.55vw, 22px);
   line-height: 1.85;
   letter-spacing: 0.06em;
-}
-
-.focus.is-cn .focus-note .cn {
-  font-size: 10px;
-  letter-spacing: 0.17em;
-  line-height: 2;
 }
 
 .current-card.is-cn .current-title {

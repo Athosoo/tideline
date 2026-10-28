@@ -85,26 +85,29 @@ GIFT/
 | `js/sea.bundle.js` | 790 KB | esbuild 产物，页面真正加载的是它（IIFE，全局 `OpenSea`） |
 | `js/ocean.js` | 33 KB | **手写 WebGL2 后备海面**（`?nogl=1` 可强制跳过） |
 | `1/ 2/ 3/` | — | 用户的原始素材，**不要动**；已加入 `.gitignore` 并从 git 取消跟踪（本地保留，不随仓库发布） |
-| `assets/` | 392 KB | 明信片图、字体、月球贴图（不含 gitignore 掉的本机音乐） |
-| `assets/fonts/fonts.css` | 279 KB | 内嵌字体：Cormorant ×2 + Manrope（拉丁，woff2）+ Noto Serif SC 子集两档（中文，woff）。**`CJK-SUBSET` 区由 `_wip/verify/cjk_font.py` 生成，勿手改** |
+| `assets/` | 369 KB | 明信片图、字体、月球贴图（不含 gitignore 掉的本机音乐） |
+| `assets/fonts/fonts.css` | 256 KB | 内嵌字体：Cormorant ×2 + Manrope（拉丁，woff2）+ Noto Serif SC 子集两档（中文，woff）。**`CJK-SUBSET` 区由 `_wip/verify/cjk_font.py` 生成，勿手改** |
 | `README.md` | 15 KB | 项目文档：渲染器来源、云盖、调色、三级回落、LITE 对照表 |
 
 > **中文排版（2026-10-28 起）**：汉字不再靠系统字体。`assets/fonts/fonts.css` 末尾的
 > `CJK-SUBSET` 区是 Noto Serif SC 的子集（CSS 名 `TIDELINE Song`，两档字重 300/400，
-> 各约 55 KB woff，OFL 1.1 见 `THIRD-PARTY-NOTICES.md` §3）；`css/styles.css` 顶部的
+> 各约 46 KB woff，OFL 1.1 见 `THIRD-PARTY-NOTICES.md` §3）；`css/styles.css` 顶部的
 > `--serif` 把它排在拉丁字体之后做 CJK 回落，`--cjk` 给明确要宋体的地方（封面
-> `.cover-lede .cn`、`.focus-note .cn`）。
+> `.cover-lede .cn`）。
 >
 > - **中文卡**：`js/app.js` 的 `hasCjk()` 给 `.focus` / `.current-card` 挂 `.is-cn`，CSS 文件末尾
 >   那一节换一套版式 —— 汉字没有斜体（别让它合成歪斜）、不吃负字距、行高 1.18 以上。
->   01—04 已经是中文卡（04「赤日」、03「荣耀向你俯首」、02「浮在光里」、01「晨读」），
+>   01—04 已经是中文卡（04「赤日」、03「荣耀向你俯首」、02「海岸边」、01「晨读」），
 >   05—07 还是英文占位，哪张换成中文都会自动挂上。
 > - **长标题按栏宽缩字号**：四个字挂 `.is-cn-mid`（16cqw），五个字以上挂 `.is-cn-long`
 >   （13cqw），单位是 `.focus-aside` 上的容器查询宽度，所以 1280 宽和 375 宽的手机上都排成一行。
 >   判定在 `setFocusContent()` 里，改标题长度不用动 CSS。
+> - **卡片只有一行引文**：`quoteCn`（副句）已全部删掉 —— 聚焦面板的 `.focus-note` 现在只有
+>   `<p id="focusQuote">` 一个子元素，`index.html` 里不再有 `#focusQuoteCn`，`dom` 里也没有对应引用。
+>   加卡时不要再写 `quoteCn` 字段（写了也没人读）。
 > - **改了中文文案必须重建子集**：`python _wip/verify/cjk_font.py build`（源字体在本机
 >   `C:\Windows\Fonts\NotoSerifSC-VF.ttf`；`brotli` 没装所以输出 woff 不是 woff2），
->   再 `python _wip/verify/cjk_font.py check` 确认源码里的中文全有字形（当前 259 个字符）。
+>   再 `python _wip/verify/cjk_font.py check` 确认源码里的中文全有字形（当前 219 个字符）。
 >   不重建 = 新字回落到系统字体，一台机器一个样。
 
 ---

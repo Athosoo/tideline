@@ -87,7 +87,7 @@ THE SOFTWARE.
 中文是 **Noto Serif SC 可变字重的子集**（见下）。
 
 **中文子集（2026-10-28）**：Noto Serif SC 的可变字重母版（`NotoSerifSC-VF.ttf`，wght 200–900）
-按站点实际用到的中文字符裁成两档静态字重（300 / 400），每档约 55 KB woff，base64 内嵌在
+按站点实际用到的中文字符裁成两档静态字重（300 / 400），每档约 46 KB woff，base64 内嵌在
 `assets/fonts/fonts.css`，CSS 内字体名取 **`TIDELINE Song`**（子集属 OFL 意义上的 Modified
 Version，重命名以示与上游区分；Noto 的 OFL 文本没有 Reserved Font Name 限制）。
 

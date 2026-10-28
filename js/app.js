@@ -10,7 +10,6 @@ const POSTCARDS = [
     meta: "校园 · 清晨六点五十五",
     short: "六点五十五分的合照",
     quote: "「清晨的第一页，我们一人读一半。」",
-    quoteCn: "风把书页吹开的时候，天刚好亮。",
     date: "二〇二二",
     backAlt: "明信片背面：晨读",
     accent: "#c96e53",
@@ -23,13 +22,12 @@ const POSTCARDS = [
   },
   {
     number: "02",
-    title: "浮在光里",
+    title: "海岸边",
     meta: "水面 · 竖版",
-    short: "一只猫浮在蓝色的午后",
-    quote: "「别急着上岸，水面正托着一整个下午。」",
-    quoteCn: "芦苇与鸢尾替它看着岸。",
-    date: "未标日期",
-    backAlt: "明信片背面：浮在光里",
+    short: "浪里白猫",
+    quote: "「礁石边长了一朵花，消磨了白昼。」",
+    date: "二〇二五",
+    backAlt: "明信片背面：海岸边",
     accent: "#609aa3",
     pixel: true,
     pixelWidth: 100,
@@ -44,7 +42,6 @@ const POSTCARDS = [
     meta: "色块构成 · 横版",
     short: "所有颜色都为你起身",
     quote: "「你站定的地方，所有颜色都朝你俯身。」",
-    quoteCn: "红与黄伏下去，蓝与绿退到两边。",
     date: "二〇二六",
     backAlt: "明信片背面：荣耀向你俯首",
     accent: "#609aa3",
@@ -61,7 +58,6 @@ const POSTCARDS = [
     meta: "岩石海岸 · 竖版",
     short: "把太阳举过头顶",
     quote: "「把太阳举过头顶，海就退了一步。」",
-    quoteCn: "岩石上开着不合季节的花。",
     date: "二〇二六",
     backAlt: "明信片背面：赤日",
     accent: "#c96e53",
@@ -78,7 +74,6 @@ const POSTCARDS = [
     meta: "PORTRAIT · PLACEHOLDER",
     short: "Salt and light",
     quote: "“Salt on the air, light on the water.”",
-    quoteCn: "「空气里有盐，水面有光。」",
     date: "PLACEHOLDER",
     backAlt: "占位明信片背面：05",
     accent: "#7fb7b3",
@@ -93,7 +88,6 @@ const POSTCARDS = [
     meta: "LANDSCAPE · PLACEHOLDER",
     short: "The long way round",
     quote: "“We took the long way, and the sea came too.”",
-    quoteCn: "「我们绕了远路，海也跟着来了。」",
     date: "PLACEHOLDER",
     backAlt: "占位明信片背面：06",
     accent: "#609aa3",
@@ -108,7 +102,6 @@ const POSTCARDS = [
     meta: "PORTRAIT · PLACEHOLDER",
     short: "The last ferry",
     quote: "“The last ferry leaves a line of light.”",
-    quoteCn: "「末班渡轮留下一道亮线。」",
     date: "PLACEHOLDER",
     backAlt: "占位明信片背面：07",
     accent: "#c96e53",
@@ -337,7 +330,6 @@ const dom = {
   focusTitle: $("#focusTitle"),
   focusMeta: $("#focusMeta"),
   focusQuote: $("#focusQuote"),
-  focusQuoteCn: $("#focusQuoteCn"),
   focusDate: $("#focusDate"),
   sideMarker: $("#sideMarker"),
 };
@@ -1725,7 +1717,6 @@ function setFocusContent(card) {
   dom.focusTitle.textContent = data.title;
   dom.focusMeta.textContent = data.meta;
   dom.focusQuote.textContent = data.quote;
-  dom.focusQuoteCn.textContent = data.quoteCn;
   dom.focusDate.textContent = data.date;
   dom.focusFront.alt = `${data.title}，明信片正面`;
   dom.focusBack.alt = data.backAlt || `${data.title}，明信片背面`;

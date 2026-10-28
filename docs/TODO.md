@@ -1327,8 +1327,11 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 
 ### 2026-10-28 · 中文排版落地（01—04 已全中文）
 
-- 前四张卡的七个字段（标题 / meta / short / quote / quoteCn / date / backAlt）全换成中文：
-  01「晨读」、02「浮在光里」、03「荣耀向你俯首」（用户指定主文案）、04「赤日」。
+- 前四张卡的文案全换成中文（标题 / meta / short / quote / date / backAlt 六个字段）：
+  01「晨读」、02「海岸边」（用户指定：副行「浪里白猫」、引文「礁石边长了一朵花，消磨了白昼」、
+  日期二〇二五）、03「荣耀向你俯首」（用户指定主文案）、04「赤日」。
+- **副句（`quoteCn`）全部删掉**：聚焦面板的 `.focus-note` 只剩一行引文，`#focusQuoteCn`
+  与 `dom.focusQuoteCn` 一并移除；加卡不用再写这个字段。
 - 汉字改由内嵌宋体子集渲染（`TIDELINE Song` = Noto Serif SC 子集，OFL 1.1），不再依赖系统字体；
   中文卡由 `hasCjk()` 挂 `.is-cn`，单独一套版式（无斜体、正字距、行高 1.18+）。
 - 四个字以上的标题按栏宽缩字号（`.is-cn-mid` / `.is-cn-long` + `.focus-aside` 的容器查询），
