@@ -385,6 +385,19 @@ rm -rf ./js/vendor
 
 ### 6.2 git 习惯
 
+**git 规矩只有一份：`E:\DeepSeekplay\.dsh\GIT_CONVENTIONS.md`**
+（[从站点仓库看](../../.dsh/GIT_CONVENTIONS.md)）—— 提交粒度 §1、提交信息 §2、分支模型（含实验
+室例外）§3、评审与合并 §4、版本发布 §5、变更日志 §6、三个仓库与远程 §7、worktree §8、落地流程
+§9、绝不入库 §10、事故恢复 §12。**本文件不重复抄**；冲突时以那份为准。
+
+本仓库的那几项事实（remote、提交身份、"两条都推"、`.gitignore` / `.gitattributes` 现状）现在
+只在 `.dsh` 那份的 §7 与 §10.2 里维护 —— 改配置就改那边，不要在这里再抄一遍。
+
+<details>
+<summary>合并前原文（2026-10-30 存档，已失效）—— HANDOFF.md §6.2</summary>
+
+### 6.2 git 习惯
+
 - 仓库 `E:\DeepSeekplay\GIFT`，remote `ssh://git@github.com/Athosoo/tideline.git`，ssh 可用。
   身份是全局的（Athos：`Athos <3672324408@qq.com>`）。
 - 分支：`main` 是当前交付物，日常在 `feat/<主题>` 上做，做完 ff 进 `main` 并把两条都推上去。
@@ -395,6 +408,8 @@ rm -rf ./js/vendor
   提交信息：中文祈使句标题 + 空行 + 为什么。
 - `.gitignore` 已经处理：系统/编辑器垃圾、`_qa*/`、`*.log`。
 - `.gitattributes`：`* text=auto eol=lf`、二进制标记、`sea.bundle.js -diff linguist-generated`。
+
+</details>
 
 ### 6.3 测开屏帧率（2026-10 那轮的做法，可复用）
 
