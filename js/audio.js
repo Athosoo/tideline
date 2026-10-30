@@ -45,17 +45,31 @@
      比 44.1k 省 27% 的烘焙时间和内存。 */
   var BAKE_RATE = 32000;
 
+  /* 「进长廊」的进入 / 退出速率（1/s）。进入要慢 —— 用户 2026-10-30 的原话是
+     「需要一个渐强的海浪声进入过程」；退出要快一点，滚回封面时不该还拖着一片海。 */
+  var ENTER_IN = 0.42;
+  var ENTER_OUT = 1.1;
+  /* 音乐渐入时长（秒）：和开屏动画同长（approach 1.05 + fly 1.0 + cut 2.6 ≈ 4.6s），
+     布裂开、长廊满屏的时候音乐刚好爬满。 */
+  var MUSIC_FADE_IN = 4.2;
+
   var LEVEL = {
     sea: 0.82,       // 海的总线
     wind: 1.0,
     gull: 1.0,
     foley: 0.95,     // 拟音总线（开屏那一刀）
     /* 音乐：用户第一轮反馈「没音乐」时实测元素音量只有 0.078 —— 一首安静的
-       钢琴曲垫在 0.17 RMS 的海浪底下等于不存在。音频文件的 volume 是乘出来的
-       线性幅度，爬升到位也听不见，所以这里不是「调一点点」，是按「清楚听见、
-       但不盖过浪」重定：封面 0.52 / 长廊 0.62 附近。 */
+       钢琴曲垫在 0.17 RMS 的海浪底下等于不存在，所以这里是按「清楚听见」重定的，
+       不是「调一点点」。2026-10-30 起音乐不再跟着海浪走：开屏 0.70、进长廊 0.62
+       （浪一进来音乐让 1dB，两股声音才不顶在一起）。 */
     music: 0.70,
-    musicGallery: 0.58,
+    musicGallery: 0.62,
+    /* 长廊里环境声的总音量。实测（_wip/verify/audio_balance.mjs，2026-10-30）：
+       取 1.0 时 40s 的 1s 窗 RMS 是 p10 0.018 / p50 0.029 / p90 0.050，而音乐原样
+       RMS 0.039、按 0.70 播放的有效 RMS 0.027 —— p50 已经是音乐的 1.04 倍、
+       p90 1.84 倍，这正是用户说的「浪声压过音乐」。0.57 把海的三层一起压下去：
+       p50 ≈ 0.59×（大部分时间低于音乐）、p90 ≈ 1.05×、峰 ≈ 1.75×（峰值可以高于）。 */
+    ambHall: 0.57,
     /* 混响：海边不是一个房间，是一条开阔的岸线 —— IR 用程序化生成的
        2.6s 扩散 + 稀疏早期反射，湿声只补「空间」不糊直接声 */
     revBed: 0.09,
@@ -815,7 +829,8 @@
     t: 0,
     muted: false,
     visible: true,
-    ambTarget: 0,          // 0 封着 · 0.22 封面 · 1 长廊
+    ambTarget: 0,          // 总线目标 = ambHall × ambEnter（幕布锁着时恒为 0）
+    ambEnter: 0,           // 长廊进入包络 0→1（开屏动画期一直是 0）
     mix: { amb: 0, sea: 0.9, swell: 0.5, wind: 0.1, windFreq: 500, gull: 1, surge: 0.7 },
     nextSwell: 0,
     nextGull: 0,
@@ -830,7 +845,12 @@
     gullBuffers: null,
     gullSource: "synth",
     samplesTried: false,
-    music: { el: null, level: 0, target: 0, available: false, tried: 0, playing: false },
+    music: { el: null, level: 0, target: 0, available: false, tried: 0, playing: false,
+      /* fadeAt / fadeOn：真正出声那一刻的 state.t 与「渐入已启动」标志 ——
+         不能只靠 fadeAt != 0 判断，因为第一声 playing 事件可能发生在 state.t
+         还是 0 的时候（实测就是这么踩的：音乐在播，渐入却永远停在 0）。
+         started：是否已经把游标拨回 0。 */
+      fadeAt: 0, fadeOn: false, started: false },
     seeded: false,
     preview: false,
     lastPick: {},          // 每种一次性声音上一次挑了哪支，避免连着重复
@@ -1399,7 +1419,12 @@
       m.blocked = false;
       if (!m.playing && !state.muted) startMusic();
     });
-    el.addEventListener("playing", function () { m.playing = true; m.blocked = false; });
+    el.addEventListener("playing", function () {
+      m.playing = true; m.blocked = false;
+      /* 渐入从**真正出声**那一帧起算：canplaythrough 早于 play() 成功，按那个
+         时刻算的话，被自动播放策略挡住的那几秒会白爬一段。 */
+      if (!m.fadeOn) { m.fadeOn = true; m.fadeAt = state.t; }
+    });
     el.addEventListener("pause", function () { m.playing = false; });
     m.el = el;
     tryNext();
@@ -1426,6 +1451,12 @@
     var m = state.music;
     if (!m.el) return;
     if (state.muted) return;
+    /* 「从头播放」：第一次真正开播时把游标拨回 0。音乐是给开屏准备的，不该在
+       页面刚加载、用户还在犹豫的时候偷偷放过一段（用户 2026-10-30 第一条）。 */
+    if (!m.started) {
+      m.started = true;
+      try { m.el.currentTime = 0; } catch (e) { /* 元数据还没到：跳过 */ }
+    }
     var p = m.el.play();
     if (p && p.catch) p.catch(function () { /* 没有文件 / 被拒：安静跳过 */ });
   }
@@ -1473,12 +1504,14 @@
   function toggleMute() { return setMuted(!state.muted); }
 
   /* ------------------------------------------------------------------ *
-   * 音乐音量：跟着环境走（封面 0.3×，长廊 0.18×），并给拟音让路
+   * 音乐音量：开屏 LEVEL.music → 长廊 musicGallery，并给拟音让路
    * ------------------------------------------------------------------ */
+  /* 2026-10-30 之前这条跟着 ambTarget 走（封面 0.3× / 长廊 0.18×）。现在开屏期
+     海浪是 0，再乘一个接近 0 的系数就等于没有音乐 —— 改成按「进没进长廊」取档，
+     由 ambEnter 在两个档之间过一遍，不再由海浪的音量决定。 */
   function musicLevel() {
     if (!state.music.available) return 0;
-    if (state.ambTarget > 0.7) return LEVEL.musicGallery;
-    return LEVEL.music * clamp(state.ambTarget / 0.35, 0, 1);
+    return lerp(LEVEL.music, LEVEL.musicGallery, smoothstep(0, 1, clamp(state.ambEnter, 0, 1)));
   }
 
   /* ------------------------------------------------------------------ *
@@ -1595,8 +1628,9 @@
     state.G = G;
     G.master.gain.setValueAtTime(0, ctx.currentTime);
     G.master.gain.setTargetAtTime(state.muted || !state.visible ? 0 : 1, ctx.currentTime, 0.25);
-    /* 环境声从「几乎没有」开始：封面是一个安静的屋子 */
-    state.ambTarget = 0.22;
+    /* 环境声从「一条都没有」开始：开屏动画期整段静音（用户 2026-10-30 第二条），
+       切开之后由 ambEnter 那条包络把海放进来。 */
+    state.ambTarget = 0;
     G.amb.gain.setTargetAtTime(0, ctx.currentTime, 0.2);
     if (state.assets) installBuffers(ctx, G, state.assets);
     /* 真实海鸥样本：解在后台，同步返回。解码完之前 playGull 用合成的那几段。 */
@@ -1681,9 +1715,21 @@
 
     /* 环境总音量由「长廊打开到什么程度」决定，而不是靠某个 cue 记状态：
        app.js 的 state.gate 是唯一真相（0 = 封面合着，1 = 已在长廊里）。
-       只认 cue 的话，用户滚回封面、或者用 ?cutat 调试直接跳进去，音量都会错。 */
+       只认 cue 的话，用户滚回封面、或者用 ?cutat 调试直接跳进去，音量都会错。
+
+       2026-10-30（用户三条要求里的第二条）：开屏动画期**一条浪都不能有**。
+       原来这里带一个 0.22 的常数量（「封面也是一间靠海的屋子」），于是飞刀 +
+       裂布那 4.6 秒里浪一直在响。幕布锁着时 gate 恒为 0，所以 0.22 一去掉，
+       开屏就是干净的。而切开那一刻 gate 是一步跳到 1 的（openArchive 瞬移，
+       app.js:1694），形状本身给不出「渐强」—— 渐强交给一条自己的进入包络
+       ambEnter：进长廊 ENTER_IN=0.42（≈2.4s 时间常数，叠上 mix.amb 的 0.9
+       之后 4–6 秒爬满），退出去 ENTER_OUT=1.1（滚回封面时退得干脆）。 */
     if (app && app.gate != null) {
-      state.ambTarget = 0.22 + 0.78 * smoothstep(0.02, 0.92, clamp(app.gate, 0, 1));
+      var openGate = clamp(app.gate, 0, 1);
+      var wantOpen = openGate > 0.5 ? 1 : 0;
+      state.ambEnter = damp(state.ambEnter, wantOpen,
+        wantOpen > state.ambEnter ? ENTER_IN : ENTER_OUT, dt);
+      state.ambTarget = LEVEL.ambHall * state.ambEnter;
     }
 
     var mix = state.mix;
@@ -1755,9 +1801,9 @@
     var guard = 0;
     while (state.nextSwell < ahead && guard++ < 8) {
       var t = state.nextSwell;
-      if (mix.amb > 0.02) {
+      if (state.ambEnter > 0.03) {
         var step = planSwell(state.swellPlan, sea, Math.random);
-        applySwellStep(G, t, step, mix.amb, Math.random);
+        applySwellStep(G, t, step, state.ambEnter, Math.random);
         /* 这道浪有多大，接下来几秒的海面就有多大 —— 起伏跟着真实事件走 */
         state.activity = Math.max(state.activity, Math.min(1.2, step.gain * 0.85));
         if (step.near && step.gain > 0.28) {
@@ -1777,7 +1823,7 @@
     if (state.nextGull < ahead) {
       var gt = state.nextGull;
       var dayOk = elev > -3 && !night;
-      if (mix.amb > 0.35 && dayOk && Math.random() < 0.55) {
+      if (state.ambEnter > 0.62 && dayOk && Math.random() < 0.55) {
         playGull(G, gt, 0.16 + Math.random() * 0.16, (Math.random() * 2 - 1) * 0.75);
         /* 海鸥很少单声：隔 0.4–0.9s 再应一声 */
         if (Math.random() < 0.5) playGull(G, gt + 0.45 + Math.random() * 0.5, 0.1 + Math.random() * 0.1, (Math.random() * 2 - 1) * 0.8);
@@ -1789,7 +1835,12 @@
     /* --- 音乐：元素音量单独阻尼 --- */
     var m = state.music;
     if (m.el) {
-      var mTarget = state.muted || !state.visible ? 0 : musicLevel() * (1 - 0.45 * state.duck);
+      /* 渐入：从第一次真正出声那一刻起，用 smoothstep 爬 MUSIC_FADE_IN 秒 ——
+         用户 2026-10-30 的第一条要求就是「开屏动画的时候渐入背景音乐」，
+         不是「一刀切下去音乐突然就在那儿」。 */
+      var mIn = m.fadeOn ? clamp((state.t - m.fadeAt) / MUSIC_FADE_IN, 0, 1) : 0;
+      var mFade = smoothstep(0, 1, mIn);
+      var mTarget = state.muted || !state.visible ? 0 : musicLevel() * (1 - 0.45 * state.duck) * mFade;
       m.target = mTarget;
       m.el.volume = clamp(damp(m.el.volume, mTarget, 1.1, dt), 0, 1);
       if (mTarget > 0.001 && m.el.paused && m.available && !m.blocked) {
@@ -1879,6 +1930,9 @@
     var G = buildGraph(ctx);
     installBuffers(ctx, G, A);
     G.master.gain.setValueAtTime(spec.master == null ? 1 : spec.master, 0);
+    /* 关掉拟音只留环境：验证「开屏动画期到底有没有海浪」时，刀/布/蜡烛那些
+       一次性声音会把这个判断搅浑（它们的量级比浪大得多）。 */
+    if (spec.noFoley) G.foley.gain.setValueAtTime(0, 0);
     G.amb.gain.setValueAtTime(0, 0);
     G.bedGain.gain.setValueAtTime(0, 0);
     G.windGain.gain.setValueAtTime(0, 0);
@@ -1952,7 +2006,12 @@
         }
       }
       var pr = mulberry32(playSeed == null ? 0x51ce : playSeed);
-      for (var j = 0; j < swells.length; j++) applySwellStep(G, swells[j].t, swells[j].step, amb, pr);
+      /* amb 可以是常数（长廊稳态 = 1 的开门度），也可以是函数（进长廊那 6 秒的
+         渐强：每一道浪按它自己出现的时刻取当时的开门度）。线上就是这么算的 ——
+         update() 里每道浪乘的是那一刻的 state.ambEnter。 */      for (var j = 0; j < swells.length; j++) {
+        var ambAt = typeof amb === "function" ? amb(swells[j].t) : amb;
+        applySwellStep(G, swells[j].t, swells[j].step, ambAt, pr);
+      }
       meta.swells = swells.length;
       meta.kicks = curve.kicks;
       meta.surge = +curve[curve.length - 1].toFixed(3);
@@ -1973,35 +2032,59 @@
     }
 
     if (script === "ambient") {
-      ramps(0, 0.9, 0.22, 1.0, env.seaState);
+      /* 长廊稳态：总线 = ambHall，开门度 = 1（浪按 1 缩放，等于线上进长廊之后） */
+      ramps(0, 0.6, LEVEL.ambHall, LEVEL.ambHall, env.seaState);
       scheduleSwells(0, seconds, 1.0, env.seaState, seedFor(0xabc1));
       var grnd = mulberry32(seedFor(0x5e11));
       for (var gt = 4 + grnd() * 6; gt < seconds - 1.2; gt += 12 + grnd() * 14) {
         playGull(G, gt, 0.2 + grnd() * 0.12, (grnd() * 2 - 1) * 0.7);
         meta.cues.push({ at: gt, name: "gull" });
       }
+    } else if (script === "enter") {
+      /* 进长廊：0 → ambHall 的渐强（用户 2026-10-30 第三条）。形状用 6 秒 smoothstep
+         逼近线上「两条阻尼串联」的结果；用来量渐强有多长、稳态与峰值到哪。 */
+      var ENTER_SEC = 6.0;
+      var openAtFn = function (t) { return smoothstep(0, 1, clamp(t / ENTER_SEC, 0, 1)); };
+      for (var e = 0; e < seconds; e += 0.05) {
+        G.amb.gain.setValueAtTime(LEVEL.ambHall * openAtFn(e), e);
+      }
+      G.bedGain.gain.setValueAtTime(0.25 * (0.50 + 0.75 * env.seaState), 0);
+      G.windGain.gain.setValueAtTime(0.02 + 0.32 * env.wind * (0.55 + 0.45 * env.gust), 0);
+      G.bedFilter.frequency.setValueAtTime(1150 + 1300 * env.seaState, 0);
+      G.windFilter.frequency.setValueAtTime(300 + 900 * env.wind, 0);
+      bakeAmbientTimeline(0, seconds, openAtFn, env.seaState, seedFor(0xabc1), seedFor(0x51ce));
+      var ge = mulberry32(seedFor(0x5e11));
+      for (var gte = ENTER_SEC + 4 + ge() * 6; gte < seconds - 1.2; gte += 12 + ge() * 14) {
+        playGull(G, gte, 0.2 + ge() * 0.12, (ge() * 2 - 1) * 0.7);
+        meta.cues.push({ at: gte, name: "gull" });
+      }
     } else if (script === "opening") {
       /* 与 cakegate.js 的常量对齐：APPROACH 1.05s、FLY 1.0s（0.525 起）、
          CUT 2.6s（HOLD 0.28 之后才开始裂）、SLICE 占 CUT 的 16% */
       var click = 0.15;
       var cutAt = 1.95;
-      ramps(0, 0.2, 0, 0.22, env.seaState);
-      ramps(click, click + 0.8, 0.22, 0.3, env.seaState);
-      scheduleSwells(0, seconds, 0.3, env.seaState, seedFor(0xabc1));
+      /* 开屏动画整段：总线 0、一道浪都不排（用户 2026-10-30 第二条要求）。
+         布全裂开（cue "open"）之后才按和线上同形状的 6 秒包络把海放进来。 */
+      var openAtMs = cutAt + 0.28 + 2.6;
+      var openAtMsFn = function (t) { return smoothstep(0, 1, clamp((t - openAtMs) / 6.0, 0, 1)); };
+      G.amb.gain.setValueAtTime(0, 0);
+      G.amb.gain.setValueAtTime(0, openAtMs);
+      G.amb.gain.linearRampToValueAtTime(LEVEL.ambHall, openAtMs + 6.0);
+      G.bedGain.gain.setValueAtTime(0, 0);
+      G.bedGain.gain.setValueAtTime(0.25 * (0.50 + 0.75 * env.seaState), openAtMs);
+      G.windGain.gain.setValueAtTime(0, 0);
+      G.windGain.gain.setValueAtTime(0.02 + 0.32 * env.wind * (0.55 + 0.45 * env.gust), openAtMs);
+      bakeAmbientTimeline(0, seconds, openAtMsFn, env.seaState, seedFor(0xabc1), seedFor(0x51ce));
       CUES.approach(G, click + 0.02);
       CUES.fly(G, click + 0.525);
       meta.cues.push({ at: click + 0.525, name: "fly" });
       CUES.cut(G, cutAt);
       meta.cues.push({ at: cutAt, name: "cut" });
-      scheduleSwellAt(G, cutAt + 0.1, 0.5, 0.1, env.seaState);
       CUES.slice(G, cutAt + 0.28);
       meta.cues.push({ at: cutAt + 0.28, name: "slice" });
       CUES.crumb(G, cutAt + 0.28 + 0.16 * 2.6 * 0.5);
       CUES.open(G, cutAt + 0.28 + 2.6);
       meta.cues.push({ at: cutAt + 0.28 + 2.6, name: "open" });
-      ramps(cutAt + 0.2, cutAt + 0.6, 0.3, 0.62, env.seaState);
-      ramps(cutAt + 0.28 + 2.6, cutAt + 0.28 + 3.2, 0.62, 1.0, env.seaState);
-      scheduleSwells(0, seconds, 1.0, env.seaState, seedFor(0xabc1));
       var g2 = mulberry32(0x77aa);
       for (var gt2 = 7 + g2() * 5; gt2 < seconds - 1.2; gt2 += 14 + g2() * 16) {
         playGull(G, gt2, 0.18 + g2() * 0.1, (g2() * 2 - 1) * 0.7);
@@ -2144,6 +2227,8 @@
       muted: state.muted,
       visible: state.visible,
       ambTarget: +state.ambTarget.toFixed(3),
+      ambEnter: +state.ambEnter.toFixed(3),
+      ambHall: LEVEL.ambHall,
       t: +state.t.toFixed(2),
       amb: +state.mix.amb.toFixed(3),
       sea: +state.mix.sea.toFixed(3),
@@ -2185,6 +2270,10 @@
         volume: m.el ? +m.el.volume.toFixed(3) : 0,
         target: +m.target.toFixed(3),
         level: +musicLevel().toFixed(3),
+        /* 渐入进度 0→1（1 = 已经爬满）：开屏期应当看着它从 0 长上去 */
+        fadeIn: m.fadeOn ? +smoothstep(0, 1, clamp((state.t - m.fadeAt) / MUSIC_FADE_IN, 0, 1)).toFixed(3) : 0,
+        fadeOn: !!m.fadeOn,
+        fadeAt: +m.fadeAt.toFixed(2),
         src: m.el ? (m.el.getAttribute("src") || "").split("/").pop() : "",
         tried: m.tried,
         blocked: !!m.blocked,

@@ -21,7 +21,7 @@
 | 海风 | **程序化合成**，9.7s 无缝循环 | 一直有；`wind` 与 `gust` 越大越亮、越响 |
 | 海鸥 | **真实录音样本**（4 段，xeno-canto，base64 内嵌） | 随机，约 12–50 秒一次（海况越大越频繁），一次 1–3 声，HRTF 从一侧飞到另一侧 |
 | 开屏拟音 | **程序化合成**，7 段 | 点蛋糕 → 刀出鞘 / 划过 / 切开 / 布撕裂 / 蜡烛吹灭，逐帧对准 `cakegate.js` 的相位 |
-| 背景音乐 | **使用者自己的文件**（不放仓库；mp3 / ogg 都行） | 从页面第一次交互起循环播放；开屏时让路，进画廊后降低 |
+| 背景音乐 | **使用者自己的文件**（不放仓库；mp3 / ogg 都行） | 从页面第一次交互起**从头渐入**循环播放（4.2 s 爬满）；进画廊后换成画廊档 |
 
 合计 **24 段**：20 段程序化烘焙（bed、wind、混响 IR、6 段拍岸、2 段退水、7 段拟音、
 2 段合成海鸥兜底）+ 4 段海鸥录音。
@@ -254,18 +254,38 @@ music (<audio>) ─────────────────────�
 
 ## 4. 行为约定
 
-### 4.1 开门才响
+### 4.1 开门才响，而且要「渐强着开」
 
-环境总音量由**长廊打开程度**决定，不是由某个 cue 记状态：
+环境总音量由**长廊打开程度**决定，不是由某个 cue 记状态。两层：
 
 ```js
-state.ambTarget = 0.22 + 0.78 * smoothstep(0.02, 0.92, gate);   // gate = app.state.gate
+var wantOpen = clamp(app.gate, 0, 1) > 0.5 ? 1 : 0;              // gate = app.state.gate
+state.ambEnter = damp(state.ambEnter, wantOpen,
+  wantOpen > state.ambEnter ? ENTER_IN : ENTER_OUT, dt);         // 0.42 进 / 1.1 退
+state.ambTarget = LEVEL.ambHall * state.ambEnter;                // 0.57
 ```
 
 `app.js` 的 `state.gate` 是唯一真相（0 = 封面合着，1 = 已在长廊里）。
 只认 cue 的话，用户滚回封面、或用 `?cutat` 调试直接跳进去，音量都会错。
 
-封面期仍然有 0.22 的底声（远处的海），不是全静音 —— 全静音会让开屏那一刀显得突兀。
+**为什么还要一条 `ambEnter`**：开屏动画期幕布锁着，`gate` 恒为 0；切开那一刻
+`openArchive()` 把滚动位置瞬移到长廊，`gate` 是**一步跳到 1** 的 —— 形状本身
+给不出渐强。所以渐强由这条自己的包络负责：进长廊 `ENTER_IN = 0.42`（≈2.4 s 时间
+常数，叠上 `mix.amb` 的 0.9 之后约 4–6 s 爬满，实测 `ambEnter ≥ 0.9` 用了 5.6 s），
+回封面 `ENTER_OUT = 1.1`（实测 2.1 s 退干净，回去时不该还拖一片海）。
+
+**开屏动画期是静音的**：旧版 `ambTarget` 带一个 0.22 的常数量（「封面也是一间靠海
+的屋子」），于是飞刀 + 裂布那 4.6 秒里一直有浪在响。现在开屏整段 `ambEnter = 0`，
+环境声一条都没有（`_wip/verify/audio_balance.mjs` 量 `opening` 片段：布全裂开前
+0.25 s 窗的最大 RMS 是 **0.00023**，等于静音）；只有开屏拟音（走 `G.foley`，直连
+master，不受这道闸门影响）在响。海鸥的闸门也跟着改成 `ambEnter > 0.62`。
+
+**长廊里的电平关系**（用户要求「大部分时间低于音乐、峰值可以高于」）：
+`ambHall = 0.57` 是这么反推出来的 —— 实测（`audio_balance.mjs --tag bal-post`，
+40 s 长廊 + 音乐原样 RMS 0.03914）海浪 1 s 窗 **p50 0.0163 / p90 0.0287 / max 0.0480**，
+音乐按 0.62 播放有效 RMS 0.0243 → **p50 0.67×（大部分时间低于音乐）、p90 1.18×、
+峰 1.98×（峰值可以高于）**。取 1.0 时 p50 是 1.04×、p90 1.84× —— 那就是用户说的
+「浪声压过音乐」。
 
 ### 4.2 首次交互才建图
 
@@ -285,12 +305,20 @@ state.ambTarget = 0.22 + 0.78 * smoothstep(0.02, 0.92, gate);   // gate = app.st
 
 音乐**只能**改 `audio.volume`（§2 的原因）：
 
-- 从**页面第一次交互**起播放（`<audio loop>`，`playsinline`），不是从加载完就播。
-- 音量：`LEVEL.music = 0.70`，封面期再乘 `ambTarget/0.35`（开屏那一刻 ≈ 0.44）；
-  进画廊（`ambTarget > 0.7`）改用 `musicGallery = 0.58`；有拟音时再让路
-  （`state.duck`，最多压 45%：`level × (1 − 0.45·duck)`）。
+- 从**页面第一次交互**起播放（`<audio loop>`，`playsinline`），不是从加载完就播；
+  第一次开播时把 `currentTime` 拨回 0 —— 音乐是给开屏准备的，不该在用户还在犹豫
+  的时候偷偷放过一段（用户 2026-10-30 的原话：「开幕动画的时候就应该渐入背景音乐，
+  从头播放」）。
+- **渐入**：从真正出声（`playing` 事件）那一刻起，用 smoothstep 爬 `MUSIC_FADE_IN = 4.2 s`
+  —— 和开屏动画（1.05 + 1.0 + 2.6 ≈ 4.6 s）同长，布裂开、长廊满屏时音乐刚好爬满。
+  不能拿 `fadeAt != 0` 当「已启动」的判据：第一声 `playing` 可能发生在 `state.t` 还是 0
+  的时候，那样渐入会永远停在 0（踩过），所以另有一个 `fadeOn` 标志。
+- 音量按「进没进长廊」取档，**不再跟着海浪走**（开屏期海浪是 0，跟着走就等于没音乐）：
+  `musicLevel() = lerp(LEVEL.music, LEVEL.musicGallery, smoothstep(0, 1, ambEnter))`，
+  即开屏 `LEVEL.music = 0.70`、画廊 `musicGallery = 0.62`；有拟音时再让路
+  （`state.duck`，最多压 45%：`level × (1 − 0.45·duck)`），最后再乘渐入系数。
   早前是 0.30 / 0.24 —— 实测元素音量只有 0.078，垫在 0.17 RMS 的浪底下等于不存在，
-  用户的原话就是「没音乐啊」。音乐要「清楚听见、但不盖过浪」，所以起点是 0.44 而不是 0.3。
+  用户的原话就是「没音乐啊」。
 - **文件名不用改**：`MUSIC_SRC` 先认 `assets/audio/music/1-05. Minecraft.mp3` → `.ogg`
   （用户放下的成品，两个格式各一份），其后才是 `music.m4a / music.ogg / music.mp3` 的通用退路。
   能解哪个用哪个，`canplaythrough` 成功后才 `play()`；被自动播放策略挡住就等下一次手势。
@@ -341,6 +369,7 @@ node _wip/verify/audio_bake_test.mjs
 
 ```bash
 node _wip/verify/audio_random_test.mjs
+node _wip/verify/audio_balance.mjs --tag <tag>        # 音乐 vs 海浪的电平对照（要起 Chrome）
 ```
 
 5000 步 `planSwell` 的统计：间隔 std、p10/p90 比、增益离散度、声像分布、
@@ -364,8 +393,9 @@ node _wip/verify/audio_smoke.mjs --tag <tag> --long   # 加 60s ambient，测循
 
 - 首次手势后 `AudioContext` 进入 `running`；
 - 烘焙耗时 `bakeMs`（要求 ≤ 2.5 s）；
-- 开屏全程 `gate` 曲线与 `amb` 跟随（实测 gate 0→1 时 amb **0.329→0.816**，
-  目标曲线 0.22→1.0 —— 环境声是阻尼跟随的，到 1.0 要再等一会儿）；
+- 开门包络（实测，2026-10-30）：开屏期 `ambTarget` 恒为 0、幕布锁着时**不排浪**
+  （2 s 与 8 s 两个时刻的 `counters.swells` 相等）；进长廊 `ambEnter` 从 0 爬到 0.9
+  用 **5.6 s**、稳态 `ambTarget = 0.569`；回封面 2.1 s 退到 0.1 以下；
 - 海鸥是否用上样本（`gullSource === "sample"`）；
 - M 键静音 / 恢复、`localStorage` 落地；
 - 两个音乐文件都能解码（页面里各自 `new Audio()` 试解）；
@@ -414,7 +444,7 @@ node _wip/verify/audio_smoke.mjs --tag <tag> --long   # 加 60s ambient，测循
 
 | 想改 | 位置（`js/audio.js`） |
 | --- | --- |
-| 各层基准音量 | `LEVEL = { sea, wind, gull, foley, music, musicGallery, rev* }` |
+| 各层基准音量 | `LEVEL = { sea, wind, gull, foley, music, musicGallery, ambHall, rev* }`（`ambHall` 是长廊环境声总音量，实测依据见 §4.1） |
 | 混响送出量（哪层更「远」） | `LEVEL.revBed / revWind / revSwell / revSwellFar / revGull` |
 | 音乐文件名 | `MUSIC_SRC` |
 | 循环长度（bed / wind） | `bakeBed` 的 `LEN`、`bakeWind` 的 `LEN`（**改完跑 `--long` 看周期性**） |
@@ -426,7 +456,9 @@ node _wip/verify/audio_smoke.mjs --tag <tag> --long   # 加 60s ambient，测循
 | 底板跟着浪退 | `update()` 里 `state.activity`（衰减 `~3.3 s`）与 `bedBreath` / `windBreath` 的系数 |
 | 浪对档位的临时顶高 | `update()` 里 `S.bump = 0.45 + 1.2*gain`、`S.bumpUntil = t + 1.8 + rnd*2.4`（到期落回慢游走值） |
 | 限幅器 | `init()` 里 `limiter.threshold / knee / ratio`（**越温和越有起伏**） |
-| 开门音量曲线 | `state.ambTarget = 0.22 + 0.78*smoothstep(0.02, 0.92, gate)` |
+| 开门音量曲线 | `state.ambTarget = LEVEL.ambHall * state.ambEnter`（`ambEnter` 的速率见下一行） |
+| 进 / 出长廊的快慢 | `ENTER_IN = 0.42`（进，越大越快）/ `ENTER_OUT = 1.1`（退） |
+| 音乐渐入时长 | `MUSIC_FADE_IN = 4.2`（秒，和开屏动画同长） |
 | 开屏拟音时间轴 | 对应 `cakegate.js` 的 `APPROACH` / `FLY` / `CUT` / `HOLD` / `SLICE` 常量 |
 
 改完**跑 §6 的四道验证**，并把新数字补进 `_wip/NOTES-audio.md`。
