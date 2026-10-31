@@ -678,7 +678,9 @@ void main() {
       const seaDeep = (sky && sky.seaDeep) || [0.1, 0.44, 0.48];
       const seaFar = (sky && sky.seaFar) || [0.45, 0.76, 0.75];
       const sunPal = (sky && sky.sun) || [1, 0.97, 0.86];
-      const night = weather && weather.isNight ? 1 : 0;
+      /* 连续夜色：从前的布尔切换让海面光照 gain 在太阳过地平线时从 1.5 掉到
+         0.34（4.4 倍），一帧之内，就是「一瞬间黑掉」的主因。 */
+      const night = clamp(weather && weather.nightness != null ? weather.nightness : (weather && weather.isNight ? 1 : 0), 0, 1);
       const ambient = clamp(weather && weather.ambient != null ? weather.ambient : 1, 0, 1.4);
       const overcast = clamp((weather && weather.overcast) || 0, 0, 1);
       const stormy = clamp((weather && weather.storminess) || 0, 0, 1);
@@ -692,7 +694,9 @@ void main() {
       // lower half of that range reads as glass, so stretch it.
       const sea = 0.55 + clamp((weather && weather.seaState) || 0, 0, 1) * 1.3;
 
-      const gain = (night ? 0.34 : 1.5) * (1 - overcast * 0.45) * (0.55 + ambient * 0.45);
+      /* night 是 0..1 的连续量，这里必须插值：写成 `night ? 0.34 : 1.5` 就成了
+         布尔判断 —— night 一旦 > 0（太阳刚碰到 3°）整片海的光照就掉到夜档。 */
+      const gain = (1.5 + (0.34 - 1.5) * night) * (1 - overcast * 0.45) * (0.55 + ambient * 0.45);
       linear3(top, scratch.skyTop);
       linear3(horizon, scratch.skyHorizon);
       // The palette was mixed for a flat, painted sea over a pale sky. A lit 3D
@@ -713,7 +717,7 @@ void main() {
       // the surface does. The horizon end stays the palette's, so the water
       // still meets the CSS sky exactly.
       const sunUp = clamp((weather && weather.sunElevation != null ? weather.sunElevation : 20) / 25, 0, 1);
-      const nightMix = weather && weather.isNight ? 1 : 0;
+      const nightMix = night;
       scratch.skyTop[0] = lerpNum(0.055, 0.09, sunUp) * (1 - nightMix * 0.7);
       scratch.skyTop[1] = lerpNum(0.10, 0.22, sunUp) * (1 - nightMix * 0.7);
       scratch.skyTop[2] = lerpNum(0.20, 0.45, sunUp) * (1 - nightMix * 0.6);

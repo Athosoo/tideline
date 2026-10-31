@@ -917,7 +917,9 @@ class WaterPainter {
     const w = weather || {};
     const sea = clamp(w.seaState == null ? 0.45 : w.seaState, 0, 1);
     const wind = clamp(w.wind == null ? 0.2 : w.wind, 0, 1);
-    const night = Boolean(w.isNight);
+    /* 夜色是个连续量（0 = 白天、1 = 黑夜）：从前这里是 Boolean(isNight)，
+       太阳一过 −0.5° 波光、浪脊、闪光同时减半，视觉上等于「啪」地关灯。 */
+    const night = clamp(w.nightness == null ? (w.isNight ? 1 : 0) : w.nightness, 0, 1);
     const sunX = clamp(w.sunX == null ? 0.735 : w.sunX, 0.06, 0.94);
     const ambient = clamp(w.ambient == null ? 1 : w.ambient, 0.06, 1);
     const windRad = ((w.windDirection == null ? 240 : w.windDirection) * Math.PI) / 180;
@@ -953,7 +955,7 @@ class WaterPainter {
     ctx.restore();
 
     // Sun / moon specular path.
-    const glint = sparkle * (night ? 0.5 : 1);
+    const glint = sparkle * (1 - 0.5 * night);
     if (glint > 0.05) {
       const cx = sunX * width;
       const topW = width * 0.012;
@@ -1019,14 +1021,14 @@ class WaterPainter {
       ctx.beginPath();
       ctx.moveTo(pts[0], pts[1]);
       for (let p = 2; p < pts.length; p += 2) ctx.lineTo(pts[p], pts[p + 1]);
-      ctx.strokeStyle = rgba(sunCol, alpha * (night ? 0.62 : 1));
+      ctx.strokeStyle = rgba(sunCol, alpha * (1 - 0.38 * night));
       ctx.lineWidth = lw;
       ctx.stroke();
       if (highlight) {
         ctx.beginPath();
         ctx.moveTo(pts[0], pts[1] - 1.4 - depth * 2.2);
         for (let p = 2; p < pts.length; p += 2) ctx.lineTo(pts[p], pts[p + 1] - 1.4 - depth * 2.2);
-        ctx.strokeStyle = rgba(sunCol, alpha * 0.9 * (night ? 0.5 : 1));
+        ctx.strokeStyle = rgba(sunCol, alpha * 0.9 * (1 - 0.5 * night));
         ctx.lineWidth = lw * 0.55;
         ctx.stroke();
       }
@@ -1075,7 +1077,7 @@ class WaterPainter {
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.quadraticCurveTo(x + l * 0.5, y - 1.6 + tilt, x + l, y + tilt * 0.35);
-      ctx.strokeStyle = rgba(sunCol, (0.05 + pulse * 0.3) * shimmer.weight * sparkle * (night ? 0.6 : 1));
+      ctx.strokeStyle = rgba(sunCol, (0.05 + pulse * 0.3) * shimmer.weight * sparkle * (1 - 0.4 * night));
       ctx.lineWidth = 0.6 + shimmer.weight * 0.8;
       ctx.stroke();
     });
@@ -1236,7 +1238,18 @@ function seaPaletteFor(weather) {
     sun: mix3(SEA_PALETTE.dusk.sun, SEA_PALETTE.day.sun, elevation),
     sunI: 2.6 + (1.6 - 2.6) * elevation,
   };
-  if (weather.isNight) p = SEA_PALETTE.night;
+  /* 夜色按 nightness 连续掺进去。从前这里是一句 `if (isNight) p = SEA_PALETTE.night`：
+     太阳一过 −0.5°，整片海从黄昏色（zenith 0.14）跳到夜色的 0.012，一步到位。
+     那一下就是用户看到的「一瞬间黑掉」，所以改成按 nightness 线性掺。 */
+  const nightness = clamp(weather.nightness == null ? (weather.isNight ? 1 : 0) : weather.nightness, 0, 1);
+  if (nightness > 0) {
+    p.zenith = mix3(p.zenith, SEA_PALETTE.night.zenith, nightness);
+    p.horizon = mix3(p.horizon, SEA_PALETTE.night.horizon, nightness);
+    p.deep = mix3(p.deep, SEA_PALETTE.night.deep, nightness);
+    p.shallow = mix3(p.shallow, SEA_PALETTE.night.shallow, nightness);
+    p.sun = mix3(p.sun, SEA_PALETTE.night.sun, nightness);
+    p.sunI = p.sunI + (SEA_PALETTE.night.sunI - p.sunI) * nightness;
+  }
   return p;
 }
 

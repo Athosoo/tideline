@@ -116,6 +116,10 @@
     latitude: 26.05,
     dayOfYear: 1,
     isNight: false,
+    /* 0 = 纯白天、1 = 纯夜晚。**连续量**。从前凡是「夜里要暗一点」的地方都读
+       isNight 这个布尔，太阳一过 −0.5° 就整片跨过去 —— 2026-10-30 用户说的
+       「从白天黄昏一瞬间黑掉」就是这几处布尔切换叠出来的。 */
+    nightness: 0,
     ambient: 1,
     manualTime: false,
     autoTime: true,
@@ -170,9 +174,20 @@
     return Math.floor((date.getTime() - start) / 86400000);
   }
 
+  /* 昼→夜过渡窗（太阳高度角，度）：3° 以上算纯白天，−12° 以下算纯夜晚。
+     为什么是这两个数：
+       · 上沿 3°：太阳还高时天色不该动，落日要等它贴地才开始换色；
+       · 下沿 −12°：现实里「民用暮光」在 −6° 结束，但天空真正黑透要到
+         −12°~−18°（天文暮光）。从前窗是 −6..20，且下面几层（canvas 海色、
+         3D 海面的光、月华）在 isNight 上做布尔切换，于是 太阳一过 −0.5°
+         就整片黑掉，看着是「一瞬间」。窗放宽到 3..−12、并让所有消费者改读
+         连续的 nightness 之后，黄昏有 15° ≈ 7 秒（2 分钟一天）的过渡。 */
+  const DUSK_HI = 3;
+  const DUSK_LO = -12;
   function resolvePalette() {
     const elev = state.sunElevation;
-    const dayness = smooth(clamp((elev + 6) / 26));
+    const dayness = smooth(clamp((elev - DUSK_LO) / (DUSK_HI - DUSK_LO)));
+    state.nightness = 1 - dayness;
     const duskness = clamp(1 - Math.abs(elev - 3) / 13);
     const keys = ["top", "mid", "horizon", "seaFar", "seaNear", "seaDeep", "sun", "glow"];
     for (let i = 0; i < keys.length; i += 1) {

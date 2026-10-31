@@ -57,6 +57,17 @@
   `state.sunX/sunY × viewport` 写成 px 的 `el.style.translate`（合成器浮点，亚像素连续，不会被吸
   到整像素）。**不要给位移加任何过渡** —— 拖动要 1:1 跟手、快进要 1 秒走完半天，过渡只会把两者
   都拖成「一顿一顿」；夜里那条波光也不许再补 CSS 假光层。
+- **昼→夜必须是连续的，不许有布尔开关**（2026-10-30 用户：「现在的昼夜变化太突兀，从白天黄昏
+  一瞬间黑掉」）：旧代码在太阳落到 −0.5° 那一刻同时翻四处 —— canvas 海色换成整套
+  `SEA_PALETTE.night`、3D 海面光照 `gain` 1.5→0.34（4.4 倍）、天空顶部 ×0.3、波光/浪脊/高光/闪光
+  同时减半，于是一帧之内整片天海黑掉。现在只有一个连续量 `state.nightness`（`js/weather.js` 的
+  `resolvePalette()` 里 `dayness = smooth(clamp((elev - DUSK_LO) / (DUSK_HI - DUSK_LO)))`，
+  `DUSK_HI = 3°` … `DUSK_LO = −12°`，≈15° ≈ 7 秒过渡），海色、海面光照、月光、波光全按它插值。
+  **以后任何「夜里要暗一点」的量都读 `nightness`，不许读 `isNight`**；`isNight` 只剩两个合法用途：
+  日月换位（被 `sunDisc`/`moonIn` 淡出遮住）与音频的海鸥白日闸门。
+  量法：`_wip/verify/dusk_flow.mjs`（沙箱把高度角从 +45° 扫到 −25°，任一步不得超过跨度的 5%，
+  且源码里不许再出现 `night ?` / `!night`）、`_wip/verify/dusk_curve.mjs`（真浏览器逐帧量平均亮度）。
+  改动前日落那一步掉了全跨度的 53%（100.8 → 57.0），现在最大一步 11%。
 - **顶部 WEATHER 控件（药丸 + AUTO / RESET 面板）已整块删除**（2026-10-23）：`initPanel()` /
   `syncPanel()` / `timeLabel()` / `conditionLabel()` 连同 `#weatherBar` 的 HTML 与 CSS 一并没了
   （静态断言 `_wip/verify/ui_static.mjs`）。想把表冻在某一刻只剩开发者后门 `?t=<hour>`
