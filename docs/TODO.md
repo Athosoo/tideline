@@ -1364,5 +1364,5 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 - 维护流程：改中文文案 → `python _wip/verify/cjk_font.py build` → `check` →
   `node _wip/verify/postcards_smoke.mjs`。**漏了 build，新字会回落到系统字体。**
 
-**待确认**：05—07（仍是英文占位 SVG）要不要也配中文？
+- 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐；06—07 仍是英文占位 SVG，等图到再换。
 
