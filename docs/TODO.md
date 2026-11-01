@@ -1366,6 +1366,9 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 - **卡片尺寸只由视口决定（2026-11-01）**：`cardFaceWidth()` 是唯一来源，`rebuildLayout()` 里所有卡共用
   `metrics.projected`，不再按素材网格取整数倍；聚焦视图横版沿用竖版宽度整体转 90°（`--focus-card-w`）。
   修掉了「各明信片视觉大小不同」（同屏曾差 33%，横版聚焦曾大 24%）。体检 `_wip/verify/card_size.mjs`。
+- **加一张卡 = 一条命令**：`python _wip/verify/new_postcard.py --number NN --front 原图 --title … --quote …`
+  （缩图 / 生成背面 / 写 `POSTCARDS` 字段 / 重建字体子集 / 跑 `postcards_smoke` + `card_size`）。
+  规范、字数上限、坑都在 `GIFT/docs/POSTCARD-SOP.md`。
 
 - 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐；06—07 仍是英文占位 SVG，等图到再换。
 

@@ -291,6 +291,9 @@ dispose()
   `metrics.projected`（唯一来源是 `cardFaceWidth(width, height)`）；聚焦视图里横版沿用竖版的宽度
   整体转 90°（`--focus-card-w` 由 `measureFocusSizes()` 量出），不再比竖版大 24%（面积 1.53 倍）。
   体检脚本 `_wip/verify/card_size.mjs`（8 个视口 × 全部卡必须同宽，容差 0.05px）。
+- **加卡一条命令（2026-11-01）**：流程见 `docs/POSTCARD-SOP.md`，执行者是 `_wip/verify/new_postcard.py`
+  —— 缩图到 120×180 / 180×120、生成背面、改 `POSTCARDS`、重建字体子集、跑两个体检，一条命令走完；
+  只剩四件事要人做：目验、文案超限、散落文档里的旧说法、提交与 WORKLOG。
 
 ---
 
