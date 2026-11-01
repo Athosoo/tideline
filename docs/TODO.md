@@ -1363,6 +1363,9 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
   保证「荣耀向你俯首」这类六个字的短语在一行里，不用改 CSS 就能加更长的标题。
 - 维护流程：改中文文案 → `python _wip/verify/cjk_font.py build` → `check` →
   `node _wip/verify/postcards_smoke.mjs`。**漏了 build，新字会回落到系统字体。**
+- **卡片尺寸只由视口决定（2026-11-01）**：`cardFaceWidth()` 是唯一来源，`rebuildLayout()` 里所有卡共用
+  `metrics.projected`，不再按素材网格取整数倍；聚焦视图横版沿用竖版宽度整体转 90°（`--focus-card-w`）。
+  修掉了「各明信片视觉大小不同」（同屏曾差 33%，横版聚焦曾大 24%）。体检 `_wip/verify/card_size.mjs`。
 
 - 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐；06—07 仍是英文占位 SVG，等图到再换。
 

@@ -1785,14 +1785,21 @@ body.is-lite .quality-toggle { color: rgba(247, 242, 230, 0.95); }
    from the sideways rack pose to its natural horizontal pose. */
 .focus.is-landscape .focus-card {
   /* The physical card stays 2:3. The whole card (frame + artwork) is
-     rotated by .focus-spin, so nothing stretches or counter-rotates. */
-  width: min(60vw, 56vh);
+     rotated by .focus-spin, so nothing stretches or counter-rotates.
+     横版卡 = 同一张物理卡整体转 90°，所以宽度必须和竖版一模一样。
+     `--focus-card-w` 由 measureFocusSizes() 量竖版盒子后写到 .focus 上：
+     一张卡多大只由视口与断点决定，与素材像素尺寸、横竖朝向都无关。
+     旧的 min(60vw, 56vh) 让横版比竖版大 24%（面积 1.53 倍），
+     用户 2026-11-01 判为「各明信片视觉大小不同」。66vw 是唯一的让步：
+     转 90° 后卡占 1.5 倍宽度，窄屏上要收一点才不出画。 */
+  width: min(var(--focus-card-w, 466px), 66vw);
   aspect-ratio: 2 / 3;
 }
 
 .focus.is-landscape .focus-undertitle {
-  top: calc(50% + min(30vw, 28vh) + 20px);
-  width: min(90vw, 84vh);
+  /* 转 90° 后半高 = 半宽；落款贴着卡底，不再跟着旧宽度公式走 */
+  top: calc(50% + var(--focus-card-w, 466px) * 0.5 + 24px);
+  width: min(calc(var(--focus-card-w, 466px) * 1.5), 92vw);
 }
 
 .focus.is-landscape .focus-face img {

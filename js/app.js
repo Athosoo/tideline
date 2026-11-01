@@ -729,6 +729,25 @@ function buildCards() {
 
 }
 
+// 一张明信片在屏幕上的宽度。**只由视口决定**：所有卡同宽，素材的像素尺寸不参与排版。
+// 2026-11-01 之前这里是 lerp(近/远) 再按每张卡自己的素材网格取整数倍，于是
+// 100 网格的卡会跳到 300 或 400、120 网格的卡永远 360 —— 同屏最大差 33%，而且换一次
+// 随机种子就换一套大小。用户判定「各明信片视觉大小不同，此乃大忌」，故此函数只认视口。
+function cardFaceWidth(width, height) {
+  const mobile = width <= 680;
+  const tablet = width <= 1100;
+  let w = mobile
+    ? Math.min(292, width * 0.7)
+    : tablet
+      ? Math.min(315, width * 0.34)
+      : Math.min(366, width * 0.254);
+  if (height < 760) {
+    const fitFactor = height < 560 ? 0.6 : 0.7;
+    w *= Math.min(1, (height * fitFactor) / (w * 1.5));
+  }
+  return w;
+}
+
 function getMetrics() {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -740,24 +759,8 @@ function getMetrics() {
   else if (tablet) gap = Math.max(980, Math.min(width * 1.12, 1180));
   else gap = Math.max(1140, Math.min(width * 0.88, 1370));
 
-  let projectedEven = mobile
-    ? Math.min(292, width * 0.7)
-    : tablet
-      ? Math.min(315, width * 0.34)
-      : Math.min(366, width * 0.254);
-
-  let projectedOdd = mobile
-    ? Math.min(250, width * 0.62)
-    : tablet
-      ? Math.min(276, width * 0.29)
-      : Math.min(320, width * 0.222);
-
+  const projected = cardFaceWidth(width, height);
   const short = height < 760;
-  if (short) {
-    const fitFactor = height < 560 ? 0.6 : 0.7;
-    projectedEven *= Math.min(1, (height * fitFactor) / (projectedEven * 1.5));
-    projectedOdd *= Math.min(1, (height * fitFactor) / (projectedOdd * 1.5));
-  }
 
   const nearZ = mobile ? -340 : -418;
   const farZ = mobile ? -720 : -800;
@@ -769,8 +772,7 @@ function getMetrics() {
     tablet,
     short,
     gap,
-    projectedEven,
-    projectedOdd,
+    projected,
     nearZ,
     farZ,
   };
@@ -788,12 +790,9 @@ function rebuildLayout(snap = false) {
     // seam between the last and first card invisible.
     const wave = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 + card.random.z * 0.9);
     const z = lerp(metrics.nearZ, metrics.farZ, wave) + card.random.z * 24;
-    let projected = lerp(metrics.projectedEven, metrics.projectedOdd, wave);
-    if (card.data.pixel && card.data.pixelWidth) {
-      const unit = card.data.landscape ? card.data.pixelHeight : card.data.pixelWidth;
-      projected = Math.max(unit, Math.round(projected / unit) * unit);
-    }
-    const worldWidth = projected * (PERSPECTIVE - z) / PERSPECTIVE;
+    // 所有卡共用 metrics.projected：深度只体现在 z、纵向位置与 --haze 上，
+    // 不再有任何一张卡因为素材网格不同而比邻卡大或小。
+    const worldWidth = metrics.projected * (PERSPECTIVE - z) / PERSPECTIVE;
     const worldHeight = worldWidth * 1.5;
     const jitterRange = index === 0 ? (metrics.mobile ? 24 : 54) : (metrics.mobile ? 46 : 76);
     const jitterX = card.random.x * jitterRange;
@@ -1809,24 +1808,18 @@ function syncCardAnglesToFocus(card, tilt) {
 
 // Measure the portrait and focus-target boxes for a card. A landscape card
 // keeps a 3:2 frame in focus; the rack card is always the 2:3 portrait box.
+//
+// 一张卡在屏幕上的宽度只由视口和 CSS 断点决定：先按竖版量一次（这才是「物理卡宽」），
+// 写进 `--focus-card-w`，横版卡再拿同一个值整体转 90°。以前横版另有 min(60vw,56vh)，
+// 比竖版大 24%、面积大 53%；像素尺寸也不再参与（旧版按素材网格取整数倍）。
 function measureFocusSizes(card) {
   const landscape = Boolean(card.data.landscape);
-  dom.focus.classList.toggle("is-landscape", landscape);
+  dom.focus.classList.remove("is-landscape");
   dom.focusCard.style.width = "";
   dom.focusCard.style.height = "";
-  const cached = imageCache.get(card.data.front);
-  const iw = card.data.pixelWidth || (cached && cached.naturalWidth) || dom.focusFront.naturalWidth || 0;
-  const ih = card.data.pixelHeight || (cached && cached.naturalHeight) || dom.focusFront.naturalHeight || 0;
-  if (card.data.pixel && iw && ih) {
-    // Pixel art must land on an integer multiple of its source grid, or the
-    // rack rotation and the focus turn resample the pixels unevenly.
-    const baseW = dom.focusCard.offsetWidth;
-    const unitW = landscape ? ih : iw;
-    const unitH = landscape ? iw : ih;
-    const k = Math.max(1, Math.round(baseW / unitW));
-    dom.focusCard.style.width = `${k * unitW}px`;
-    dom.focusCard.style.height = `${k * unitH}px`;
-  }
+  const cardW = dom.focusCard.offsetWidth;
+  if (cardW > 0) dom.focus.style.setProperty("--focus-card-w", `${cardW}px`);
+  dom.focus.classList.toggle("is-landscape", landscape);
   return { w: dom.focusCard.offsetWidth, h: dom.focusCard.offsetHeight };
 }
 
