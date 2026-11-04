@@ -1370,5 +1370,8 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
   （缩图 / 生成背面 / 写 `POSTCARDS` 字段 / 重建字体子集 / 跑 `postcards_smoke` + `card_size`）。
   规范、字数上限、坑都在 `GIFT/docs/POSTCARD-SOP.md`。
 
-- 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐；06—07 仍是英文占位 SVG，等图到再换。
+- 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐。
+- 06「静夜」/ 07「不朽」已接入（2026-11-04）：`06-front.png` / `06-back.png`（150×100，横版）与
+  `07-front.png` / `07-back.png`（100×150，竖版），`pixel:true`、**保留原生像素尺寸未重采样**；
+  06/07 的英文占位 SVG 已删。07 背面原图文字在右/底被画布裁掉，等用户定夺是否重排。
 

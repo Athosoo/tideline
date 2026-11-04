@@ -73,8 +73,12 @@ python _wip/verify/new_postcard.py --number 06 --front "D:/pics/a.png" \
 ## 6. 坑（都是踩过的）
 
 - **不用改 `index.html`**：卡相关的静态引用只有 4 处（01 的 preload 与聚焦兜底 `img`），加卡不需要动。
-- **06/07 现在是英文占位**（`06-front.svg` / `07-*.svg`）。用脚本填号时会替换 JSON 条目，
-  旧 svg 顺手删掉即可。
+- **01–07 全是真图了**（2026-11-04 删掉 06/07 的英文占位 SVG）。脚本填号时会替换 JSON 条目，
+  旧的占位图顺手删掉即可。
+- **像素画素材原生尺寸已合规就别再缩**：脚本的规范网格是竖 120×180 / 横 180×120，
+  但原生就是 100×150 / 150×100 的像素画再缩会被非整数倍重采样糊掉。此时
+  `pixelWidth` / `pixelHeight` 填原生尺寸（`postcards_smoke.mjs` 要求两者与 PNG 实际尺寸一致），
+  `pixel:true` 让 CSS 用 `image-rendering: pixelated` 交给浏览器整数最近邻。
 - **字体子集忘重建不会报错**，只会让新字回落到系统宋体，字形在别人机器上跑偏。
   脚本已内置 build，手动改文案时别忘了。
 - `_wip/cards.json` 是旧副本，不是真相，别照抄。
