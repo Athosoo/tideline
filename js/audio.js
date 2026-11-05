@@ -385,7 +385,7 @@
     }, cfg.q || 0.85, 192);
     var foam = raw.slice();
     sweepFilter(foam, rate, "highpass", function (t) {
-      return lerp(2400, 4600, smoothstep(0, peakAt, t / dur));
+      return lerp(1500, 2700, smoothstep(0, peakAt, t / dur));
     }, 0.7, 192);
     var sub = brownNoise(n, mulberry32(seed ^ 0x1111));
     runFilter(sub, coeffs("lowpass", 115, 0.8, rate));
@@ -398,7 +398,7 @@
     /* 浪的尾巴里高频先没：泡沫过去之后只剩低频的「呼」 */
     var foamEnv = envTable(n, 96, function (u) {
       if (u < peakAt) return Math.pow(smoothstep(0, peakAt * 0.85, u), 2);
-      return Math.pow(1 - Math.min(1, ((u - peakAt) / (1 - peakAt)) * 1.7), 1.6);
+      return Math.pow(1 - Math.min(1, ((u - peakAt) / (1 - peakAt)) * 1.35), 1.6);
     });
     var subEnv = envTable(n, 96, function (u) {
       if (u < peakAt) return Math.pow(smoothstep(0, peakAt, u), 2.2);
@@ -722,23 +722,23 @@
       function () { return bakeReverbIR(rate); },
       /* 近岸：亮、短、脆（礁石边上碎开的那一道） */
       function () {
-        return bakeSurf(rate, 0x11a1, { dur: 3.9, peakAt: 0.30, bright: 1150, dark: 320, q: 0.9, foam: 0.26, sub: 1.35, tailPow: 2.3, tag: "near" });
+        return bakeSurf(rate, 0x11a1, { dur: 4.2, peakAt: 0.38, bright: 1020, dark: 320, q: 0.45, foam: 0.20, sub: 1.35, tailPow: 1.95, tag: "near" });
       },
       function () {
-        return bakeSurf(rate, 0x33c3, { dur: 3.6, peakAt: 0.34, bright: 1350, dark: 360, q: 1.0, foam: 0.30, sub: 1.15, tailPow: 2.5, tag: "near" });
+        return bakeSurf(rate, 0x33c3, { dur: 4.0, peakAt: 0.42, bright: 1180, dark: 360, q: 0.50, foam: 0.22, sub: 1.15, tailPow: 2.1, tag: "near" });
       },
       function () {
-        return bakeSurf(rate, 0x55e5, { dur: 3.2, peakAt: 0.38, bright: 1500, dark: 400, q: 1.1, foam: 0.34, sub: 1.0, tailPow: 2.7, tag: "near" });
+        return bakeSurf(rate, 0x55e5, { dur: 3.8, peakAt: 0.45, bright: 1300, dark: 400, q: 0.55, foam: 0.24, sub: 1.0, tailPow: 2.25, tag: "near" });
       },
       /* 远处：暗、长、厚（隔着一段水面的那一排） */
       function () {
-        return bakeSurf(rate, 0x22b2, { dur: 4.5, peakAt: 0.26, bright: 900, dark: 290, q: 0.8, foam: 0.20, sub: 1.5, tailPow: 2.0, tag: "far" });
+        return bakeSurf(rate, 0x22b2, { dur: 5.0, peakAt: 0.34, bright: 800, dark: 290, q: 0.40, foam: 0.16, sub: 1.5, tailPow: 1.75, tag: "far" });
       },
       function () {
-        return bakeSurf(rate, 0x44d4, { dur: 4.8, peakAt: 0.24, bright: 830, dark: 270, q: 0.75, foam: 0.18, sub: 1.6, tailPow: 2.1, tag: "far" });
+        return bakeSurf(rate, 0x44d4, { dur: 5.4, peakAt: 0.32, bright: 740, dark: 270, q: 0.38, foam: 0.15, sub: 1.6, tailPow: 1.8, tag: "far" });
       },
       function () {
-        return bakeSurf(rate, 0x66f6, { dur: 5.4, peakAt: 0.22, bright: 760, dark: 250, q: 0.7, foam: 0.16, sub: 1.7, tailPow: 1.9, tag: "far" });
+        return bakeSurf(rate, 0x66f6, { dur: 6.2, peakAt: 0.30, bright: 680, dark: 250, q: 0.35, foam: 0.13, sub: 1.7, tailPow: 1.65, tag: "far" });
       },
       function () { return bakeWash(rate, 0x71a1, { dur: 2.6, hi: 900, lo: 260, q: 0.85, sub: 0.55, peak: 0.42 }); },
       function () { return bakeWash(rate, 0x72a2, { dur: 3.2, hi: 1100, lo: 220, q: 0.75, sub: 0.65, peak: 0.38 }); },
@@ -1279,13 +1279,13 @@
       plan.build = 0.6 + rnd() * 0.22;
       plan.pan = (rnd() * 2 - 1) * 0.6;
       /* 45%：起一组 2–4 道（浪是一组一组来的，单发更像「随机点声」） */
-      if (rnd() < 0.45) plan.left = 1 + ((rnd() * 3) | 0);
+      if (rnd() < 0.30) plan.left = 1 + ((rnd() * 2) | 0);
       near = rnd() < 0.48;
     }
     /* 增益的跨度就是「大小起伏」：上一版 0.74–1.16 起伏只有 1.57 倍，
        听感上每道浪都差不多大。放宽到 0.55–1.40，再叠上海况档位，
        最大的浪能比最小的浪响一倍多。 */
-    var gain = (near ? 1.0 : 0.6) * (0.5 + 0.5 * sea) * plan.build * (0.55 + rnd() * 1.15);
+    var gain = (near ? 1.0 : 0.6) * (0.5 + 0.5 * sea) * plan.build * (0.72 + rnd() * 0.68);
     var pan0 = inSet ? plan.pan * 0.9 : plan.pan;
     var pan1 = -pan0 * (0.3 + rnd() * 0.6);
     var step = {
@@ -1298,15 +1298,15 @@
       delay: 0,
     };
     /* 同一组的余波：跟一道更小的，慢半拍、挪到另一边 */
-    if (rnd() < (near ? 0.5 : 0.32)) {
-      step.follow = { at: 0.9 + rnd() * 1.7, gain: gain * (0.3 + rnd() * 0.24), pan: -pan1 * (0.5 + rnd() * 0.6), near: rnd() < 0.3 };
+    if (rnd() < (near ? 0.26 : 0.15)) {
+      step.follow = { at: 2.8 + rnd() * 1.8, gain: gain * (0.24 + rnd() * 0.2), pan: -pan1 * (0.5 + rnd() * 0.6), near: rnd() < 0.3 };
     }
-    if (rnd() < (near ? 0.62 : 0.42)) {
-      step.wash = { at: 1.5 + rnd() * 2.2, gain: gain * (0.16 + rnd() * 0.14), pan: pan1 * 0.8 };
+    if (rnd() < (near ? 0.32 : 0.20)) {
+      step.wash = { at: 0.8 + rnd() * 0.8, gain: gain * (0.11 + rnd() * 0.09), pan: pan1 * 0.8 };
     }
     /* 间隔略放宽（上一版 10.6s 起步）：浪之间要留出「安静」的空档，
        否则一道接一道糊成连续白噪 —— 用户说的「吵」有一半是这个。 */
-    var base = clamp(13.6 - 7.2 * sea, 5.0, 13.6);
+    var base = clamp(13.2 - 7.0 * sea, 6.2, 13.2);
     var delay;
     if (inSet || plan.left > 0) {
       /* 组内间隔：0.35–0.75 × base（base 在 sea=0.38 时约 10.9s → 3.8–8.2s）。
@@ -1314,11 +1314,11 @@
          结果短的那半把 3–5s 长的浪尾叠成一片：60s 渲染的响度时间线从 30s 起
          就钉在 −27dB 一动不动（实测），比节拍器更像「一堵墙」。间隔要让每道
          浪的尾巴落干净，才有「一道过去、下一道再来」的起伏。 */
-      delay = base * (0.32 + rnd() * 0.28);
+      delay = base * (0.50 + rnd() * 0.30);
     } else {
       /* 两组之间真的歇一会儿：1.3–2.5 × base（14–27s），偶尔再拉长。
          没有这个空档，整片海就是连续白噪，用户说的「平」有一半是它。 */
-      delay = base * (0.75 + rnd() * 0.75);
+      delay = base * (0.80 + rnd() * 0.70);
       if (rnd() < 0.15) delay *= 1.4 + rnd() * 0.6;
     }
     step.delay = delay;
@@ -1749,7 +1749,7 @@
        60s 里 p10 只比中位数低 1.8dB，等于一直「中等偏响」，正是用户说的「平」。
        现在 bump 到期就消失，落回 base，安静的空档才是真的空。 */
     S.target = state.t < S.bumpUntil ? Math.max(S.base, S.bump) : S.base;
-    S.v = damp(S.v, S.target, 0.42, dt);
+    S.v = damp(S.v, S.target, 0.85, dt);
     mix.surge = S.v;
 
     /* 底噪：海越涌越厚，低频越压得住；滤波器跟着海况开一点。
@@ -1780,8 +1780,8 @@
        底噪恒定的话，安静的空档会被它顶住（实测 60s 里 p10 只比中位数低 3dB，
        用户要的「大小起伏」听着仍然不够）。activity 在每道浪起时被打到 0.85×增益，
        之后约 3 秒衰减回来。 */
-    state.activity = damp(state.activity, 0, 0.30, dt);
-    var bedBreath = clamp(0.40 + 0.95 * state.activity + 0.20 * (S.v - 0.7), 0.30, 1.30);
+    state.activity = damp(state.activity, 0, 0.50, dt);
+    var bedBreath = clamp(0.45 + 0.75 * state.activity + 0.16 * (S.v - 0.7), 0.36, 1.28);
     G.bedGain.gain.setTargetAtTime(
       mix.amb > 0.001 ? 0.25 * mix.sea * bedBreath : 0, now, 0.2);
     G.bedFilter.frequency.setTargetAtTime(mix.bedFreq, now, 0.3);
@@ -1789,7 +1789,7 @@
     G.windFilter.frequency.setTargetAtTime(mix.windFreq, now, 0.4);
     /* 起伏总闸：0.20–1.69（约 14.7dB 的摆动）。跟得慢（0.5s 时间常数），
        因为海是「涌」上来的，不是抽上去的。 */
-    if (G.ambSurge) G.ambSurge.gain.setTargetAtTime(0.35 + 0.85 * mix.surge, now, 0.5);
+    if (G.ambSurge) G.ambSurge.gain.setTargetAtTime(0.45 + 0.62 * mix.surge, now, 0.85);
 
     /* --- 浪：提前 0.35s 排程，别在帧边界上卡 --- */
     var ahead = now + 0.35;
@@ -1807,8 +1807,8 @@
         /* 这道浪有多大，接下来几秒的海面就有多大 —— 起伏跟着真实事件走 */
         state.activity = Math.max(state.activity, Math.min(1.2, step.gain * 0.85));
         if (step.near && step.gain > 0.28) {
-          S.bump = Math.max(state.t < S.bumpUntil ? S.bump : 0, clamp(0.45 + 1.2 * step.gain, 0, 1.28));
-          S.bumpUntil = Math.max(S.bumpUntil, state.t + 1.8 + Math.random() * 2.4);
+          S.bump = Math.max(state.t < S.bumpUntil ? S.bump : 0, clamp(0.42 + 1.00 * step.gain, 0, 1.24));
+          S.bumpUntil = Math.max(S.bumpUntil, state.t + 2.4 + Math.random() * 3.0);
         }
       } else {
         /* 封面闭着的时候也要推进时间轴，否则一打开会补播一串 */
@@ -1967,8 +1967,8 @@
         while (si < swells.length && swells[si].t <= ts) {
           var w = swells[si].step;
           if (w.near && w.gain > 0.28) {
-            bump = Math.max(ts < bumpUntil ? bump : 0, clamp(0.45 + 1.2 * w.gain, 0, 1.28));
-            bumpUntil = Math.max(bumpUntil, swells[si].t + 1.8 + rnd() * 2.4);
+            bump = Math.max(ts < bumpUntil ? bump : 0, clamp(0.42 + 1.00 * w.gain, 0, 1.24));
+            bumpUntil = Math.max(bumpUntil, swells[si].t + 2.4 + rnd() * 3.0);
             kicks++;
           }
           si++;
@@ -1978,8 +1978,8 @@
           hold = ts + 5 + rnd() * 9;
         }
         var target = ts < bumpUntil ? Math.max(base, bump) : base;
-        v = damp(v, target, 0.42, 0.25);
-        act = act * Math.exp(-0.25 / 3.33);
+        v = damp(v, target, 0.85, 0.25);
+        act = act * Math.exp(-0.25 / 5.0);
         while (ai < swells.length && swells[ai].t <= ts) {
           act = Math.max(act, Math.min(1.2, swells[ai].step.gain * 0.85));
           ai++;
