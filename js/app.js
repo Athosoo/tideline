@@ -456,10 +456,13 @@ const QUALITY_PRESETS = {
 // object instead of hard-coding its own counts, so one switch downgrades the
 // whole scene.
 const quality = {
-  mode: "auto",
-  level: "full",
+  // 默认给 LITE（2026-11-05 用户改定）：这张站是送人的礼物，对方第一次打开
+  // 多半在手机、弱网、没有独显的机器上 —— 先给能稳稳跑起来的那一档，别让第一
+  // 眼卡在掉帧里。FULL 是右上角开关点出来的，长按开关回 AUTO。
+  mode: "lite",
+  level: "lite",
   probedLite: false,
-  ...QUALITY_PRESETS.full,
+  ...QUALITY_PRESETS.lite,
 };
 
 function readQualityPreference() {
@@ -511,12 +514,15 @@ function applyQuality(mode = quality.mode) {
   if (glOcean) glOcean.setQuality(quality);
   if (seaEngine) seaEngine.setQuality({ scale: quality.level === "lite" ? 0.75 : 1 });
   createParticles();
-  writeQualityPreference();
+  // 只有「用户自己挑过」才落盘（见 toggleQuality / resetQualityToAuto）。
+  // 默认档位与 AUTO 探测结果每次都重新算，这样以后改默认值不会被旧访客的
+  // localStorage 顶住 —— 这份礼物只有一位收礼人，不值得为她留一个看不见的锁。
 }
 
 function toggleQuality() {
   const next = quality.level === "lite" ? "full" : "lite";
   applyQuality(next);
+  writeQualityPreference();
   if (!REDUCED_MOTION.matches && dom.qualityToggle) {
     dom.qualityToggle.animate(
       [{ transform: "scale(1)" }, { transform: "scale(0.9)" }, { transform: "scale(1)" }],
@@ -528,6 +534,7 @@ function toggleQuality() {
 function resetQualityToAuto() {
   quality.probedLite = guessWeakDevice();
   applyQuality("auto");
+  writeQualityPreference();
 }
 
 function initQuality() {

@@ -21,6 +21,9 @@
 - **LITE 自 2026-10-31 起重新定义为「FULL 的省性能档」**（用户原话：「LITE 模式改为性能节省，
   即 FULL 模式的性能节省版本即可」）：画面与 FULL 同一套，只降 DPR / 水线数 / 帧率等参数。
   不再单独设计画风，也不做云。
+- **默认档位 = LITE**（2026-11-05 用户要求）：无 localStorage 记录时按 LITE 打开；
+  点右上角开关切 FULL，长按回 AUTO。只有用户自己挑过才落盘（`js/app.js` 的
+  `applyQuality()` 不再写 localStorage，见 HANDOFF §3.3）。
 
 ---
 

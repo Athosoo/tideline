@@ -201,13 +201,19 @@ dispose()
 > 已彻底消失、引擎接线还在，再把 `applySun` 搬进沙箱扫一整夜，并用 60fps 位移流验证夜里每帧都在动
 > （单帧最大 0.32px、无重复台阶）。
 
-### 3.3 质量档：`QUALITY_PRESETS`（js/app.js:265）
+### 3.3 质量档：`QUALITY_PRESETS`（js/app.js:404）
 
 `full` / `lite` 两套，含 `dprCap`、`waterFps`、`cloudFps`、`fbmOctaves`，
 以及引擎旋钮 `oceanRings / oceanSegments / oceanOctaves / oceanDetailRadius / oceanFoam / oceanGlitter / oceanChop`。
 `oceanChop`：full 3.6 / lite 1.8；`oceanDetailRadius`：140 / 70。
-`applyQuality()`（js/app.js:359）里对引擎下发 `setQuality({scale: lite ? 0.75 : 1})`。
-另有 AUTO 探测（js/app.js:426，低于 45 fps 自动落 lite）。
+`applyQuality()`（js/app.js:501）里对引擎下发 `setQuality({scale: lite ? 0.75 : 1})`。
+另有 AUTO 探测（js/app.js:571，低于 45 fps 自动落 lite），**只在 `mode === "auto"` 时跑**。
+
+**默认档位是 LITE**（2026-11-05 用户改定）：没有 localStorage 记录时一律按 LITE 起，
+右上角开关点一下切 FULL，长按开关回 AUTO（AUTO 会按设备打分与实测帧率再决定）。
+只有「用户自己挑过」才写 `tideline.quality.v1`（`toggleQuality()` / `resetQualityToAuto()` 里调
+`writeQualityPreference()`）；默认值与 AUTO 探测结果不落盘 —— 收礼人只有一个，不该被一次
+旧偏好锁死，改默认值也不该被旧访客的 localStorage 顶住。
 
 ### 3.4 环廊几何 / 地平线
 
