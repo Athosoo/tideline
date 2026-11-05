@@ -457,6 +457,25 @@ rm -rf ./js/vendor
   `git stash push <file>` 本来就没东西可存（老版本 git 退出码仍是 0），
   pop 自然找不到。先 `git status` 确认，别急着修。
 
+### 6.4 单文件交付（发给收礼人一个 .html）
+
+`GIFT/` 是「一个文件夹」。要当礼物直接发出去时，用根仓库的
+`python _wip/verify/build_single.py` 打成自包含 HTML：明信片正反面、月亮贴图、字体子集、
+7 个 js、两张 css、曲子全部 base64 内联，产物 `_wip/out/tideline-single.html`
+（带音乐 ~10 MB；`--no-music` ~2.2 MB）。双击打开即用，不依赖托管、不需要联网。
+体检：`python _wip/verify/single_smoke.py [产物]` —— 把产物复制到空目录、按 `file://`
+打开，查 JS 报错 / 默认 LITE / 7 张卡正反面是否都是 data URI 并解码 / 字体与引文排版，
+再单独验证内联 mp3 能解出时长。
+
+- 产物落在 `_wip/out/`（`_wip/*` 已被 .gitignore 排除）：曲子有版权，**不能入库，也不能
+  传到任何公开托管**，只能私发。
+- 音乐靠 `<audio>.src`（`js/audio.js:1411`）加载，不是 fetch/XHR，所以 `data:` 能播。
+  `MUSIC_SRC` 有 5 条（两个真文件 + `music.m4a/mp3/ogg` 三个留给换曲的占位），构建脚本
+  必须**整条替换**这个数组；别让通用素材扫描把 mp3/ogg 一起内联，否则体积翻倍、
+  `--no-music` 反而比带音乐还大（踩过）。
+- 线上 Pages 是「文件夹版」：`assets/audio/music/*.mp3` 被 .gitignore 排除，线上没有钢琴曲；
+  要带音乐的完整版只能走这个单文件。
+
 ---
 
 ## 7. 这一路的经验（前一个对话踩出来的）
