@@ -45,6 +45,14 @@ const uCloudDetail = uniform(1.0);
    （那是关掉 bundle 自绘云板的开关），所以遮光必须走独立通道 ——
    否则"天上有云、海面照样亮蓝、太阳照样刺眼"，就是用户说的光影响不自然。 */
 const uCloudShade = uniform(1.0);
+/* 夜里那盏灯是月亮还是太阳：0 = 白天，1 = 深夜。月光的反射和日光不是一回事 ——
+   同样的太阳高光公式，夜里会得到一排又小又硬的闪点，用户看到的「月光路」
+   应该是中间一条亮带、两侧散开的纱（2026-11-05 反馈：月出时缺朦胧）。
+   所以这个通道只做一件事：夜里把高光的指数调宽、给一条宽而柔的光晕。 */
+const uMoon = uniform(0.0);
+/* 月亮离地平线有多近（0 = 高于 12°，1 = 刚露头）。雾化的那一档只属于「月出」：
+   月亮挂在天顶时空气已经很薄，海面不该比原来亮一截。 */
+const uMoonLow = uniform(0.0);
 /* 天空球自己那套 2D 云板要不要算。
    体素云层活着时 app.js 会把 weather.cloud 设成 0 —— 但现在 skyColor 的
    cloudMask 参数在材质里被写死成 1，于是「cloud=0」只是把阈值推到 0.78，
@@ -170,6 +178,10 @@ const skyColor = Fn(([dir, cloudMask]) => {
 
   const s = max(dot(d, uSunDir), 0);
   col.addAssign(uSunColor.mul(pow(s, 10)).mul(0.18).mul(uCloudShade));
+  /* 月亮的第二层光：比上面那层宽得多、也淡得多。低空的月亮外面本来就裹着一层
+     散射出来的银白纱，天是浑的、月面是柔的 —— 那层纱同时被水面反射进去，
+     就是用户说的「水下部分」的朦胧。白天（uMoon→0）这一项自动消失。 */
+  col.addAssign(uSunColor.mul(pow(s, 3.2)).mul(0.11).mul(uCloudShade).mul(uMoon).mul(uMoonLow));
   /* 这里原本还有一行硬日盘：uSunColor * smoothstep(0.9994, 0.9998, s) * 30。
      但页面上另有一个 DOM 的日/月盘（#celestial，可拖动改时刻），两套渲染器
      各画一个、位置还不一致 → 天空里能看到两个太阳（夜间是一个太阳 + 一个月亮）。
@@ -242,7 +254,14 @@ const oceanColor = Fn(() => {
     const H = normalize(uSunDir.add(V));
     const ndh = max(dot(N, H), 0);
     const sparkleNoise = clamp(fbm(xz.mul(0.3).add(vec2(time.mul(-0.07), time.mul(0.05)))).mul(0.5).add(0.5), 0, 1);
-    spec.assign(uSunColor.mul(uCloudShade).mul(pow(ndh, 500).mul(mix(0.4, 3.4, sparkleNoise)).add(pow(ndh, 48).mul(0.12))));
+    /* 日光的高光是一排很硬的碎钻（指数 500）；月光不是 —— 夜里把指数收到 240，
+       闪点的对比度也压掉一截，亮斑于是变得又大又软。再加上一层指数 9 的宽光晕：
+       月光路的两侧不该是黑的，海面接住的是整片被照亮的天。这就是「水下部分」的
+       那层纱（2026-11-05 用户反馈：月出缺朦胧）。白天 uMoon=0，两项都还原。 */
+    const tight = mix(float(500), float(240), uMoon);
+    const sparkleAmt = mix(mix(float(0.4), float(3.4), sparkleNoise), mix(float(0.2), float(1.5), sparkleNoise), uMoon);
+    spec.assign(uSunColor.mul(uCloudShade).mul(pow(ndh, tight).mul(sparkleAmt).add(pow(ndh, 48).mul(0.12))));
+    spec.addAssign(uSunColor.mul(uCloudShade).mul(pow(ndh, 9)).mul(0.075).mul(uMoonLow));
 
     const foamNoise = clamp(fbm(xz.mul(1.1).add(vec2(time.mul(0.22), time.mul(0.14)))).mul(0.5).add(0.5), 0, 1);
     foam.assign(smoothstep(0.5, 0.95, foamNoise).mul(smoothstep(1.0, 2.0, crest)).mul(0.85));
@@ -377,6 +396,8 @@ export async function createSea(options) {
       if (weather.flash != null) uFlash.value = weather.flash;
       if (weather.cloudDetail != null) uCloudDetail.value = weather.cloudDetail;
       if (weather.shade != null) uCloudShade.value = weather.shade;
+      if (weather.moon != null) uMoon.value = weather.moon;
+      if (weather.moonLow != null) uMoonLow.value = weather.moonLow;
     },
     resize(width, height) {
       camera.aspect = width / Math.max(1, height);

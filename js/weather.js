@@ -423,6 +423,10 @@
       const skyVis = day
         ? smooth(clamp((rawElev + 0.5) / 6.0, 0, 1))
         : smooth(clamp((-rawElev - 0.5) / 6.0, 0, 1));
+      /* 月亮贴地平线的那一段（0 = 刚露头，1 = 12° 以上）：视线穿过的空气最厚，
+         月面该发暗、发暖、轮廓散开。用户 2026-11-05 说「月出的时候缺少一点朦胧」，
+         指的就是这一段 —— 贴图原样贴上去是一张高清证件照，没有大气。 */
+      const moonLow = day ? 0 : clamp(1 - visualElev / 12, 0, 1);
       const discCore = day ? hot : mix([1.00, 0.74, 0.54], hot, moonIn);
       const discMid = day ? mix(core, bloom, 0.45) : mix([1.00, 0.70, 0.50], mix(core, bloom, 0.45), moonIn);
       /* 月面不吃 dim：普通混合下 alpha < 1 等于把月面往夜空里掺，满月会显得
@@ -443,9 +447,10 @@
       setAtmo("--sun-core-1", rgba(discMid, discA1));
       setAtmo("--sun-core-2", rgba(bloom, 0));
       /* 远处大范围眩光：逆光时整片天被洗亮一层，是「耀眼」最直接的证据。 */
-      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.05) * dim * skyVis));
-      /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。 */
-      const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon);
+      setAtmo("--sun-veil", rgba(mix(bloom, [1, 1, 1], 0.50), (day ? 0.09 + 0.07 * clamp(state.sunElevation / 40, 0, 1) : 0.05 + 0.09 * moonLow * moonIn) * dim * skyVis));
+      /* 入夜后近处紧光也收敛到月亮档，避免一过地平线就跳。
+         低空的月亮再加一档：散射把光晕撑开，月亮外面那圈才不是一条硬边。 */
+      const baUse = day ? look.ba : lerp(0.20, look.ba, belowHorizon) * (1 + 1.9 * moonLow * moonIn);
       setAtmo("--sun-bloom-0", rgba(bloom, baUse * dim * skyVis));
       setAtmo("--sun-bloom-1", rgba(bloom, baUse * dim * 0.52 * skyVis));
       setAtmo("--sun-bloom-3", rgba(bloom, baUse * dim * 0.20 * skyVis));
@@ -455,6 +460,10 @@
       /* 月面是真实贴图（本身不透明），淡入淡出只能靠元素级 opacity，
          不能指望 --sun-core-* 的 alpha（那只管得住兜底渐变）。 */
       setAtmo("--sun-disc-opacity", (day ? 1 : moonIn).toFixed(3));
+      /* 月面大气纱：叠在月盘「前面」的一层暖白径向渐变（.celestial-haze）。
+         它同时做两件事 —— 把贴图细节压掉一档（月面不再像贴上去的照片），
+         并在盘外留一圈银白的晕。白天 alpha = 0，element 完全不可见。 */
+      setAtmo("--sun-moon-haze", rgba(mix(mix(bloom, [1, 1, 1], 0.55), [1.0, 0.92, 0.84], 0.30), (0.05 + 0.30 * moonLow) * moonIn * skyVis));
       /* 大气泛白（.atmosphere 第一层）负责整片天光；.celestial-bloom 只负责
          太阳近处那一圈紧光，由 spread 控制张开。白天低角度收到 0.62，
          与入夜那一刻接上，地平线两侧不跳。 */

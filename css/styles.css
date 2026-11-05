@@ -724,6 +724,24 @@ img {
   opacity: var(--sun-disc-opacity, 1);
 }
 
+/* 月盘的大气纱（2026-11-05，用户反馈「月出的时候缺少一点朦胧」）。
+   月亮贴地平线的那一段，视线穿过最厚的一层大气：月面本该发暗发暖、轮廓散开，
+   但贴图原样贴上去就是一张高清证件照。这一层叠在月盘**前面**：中心 34% 以内
+   是同一抹暖白的低透明度，把贴图细节压掉一档，往外收到 74% 全透明 ——
+   盘外因此多出一圈银白的晕，盘内又不会糊成一块白饼。
+   alpha 完全由 weather.js 写（白天 0、夜里贴近地平线最浓），这里不管时刻。
+   不做 filter: blur()：那要跟着月亮每帧重算整块，代价和收益不成比例。 */
+.celestial-haze {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    var(--sun-moon-haze, rgba(226, 234, 240, 0)) 0%,
+    var(--sun-moon-haze, rgba(226, 234, 240, 0)) 34%,
+    transparent 74%);
+}
+
 /* 提示文字必须待在 .celestial 外面：那一层整体在做 screen 加光，暗色文字会被
    当成「没有光」直接抹掉。所以改成 .celestial 的兄弟节点，用同一组太阳坐标定位，
    再借 :has() 把太阳的 hover / 键盘焦点转过来。 */

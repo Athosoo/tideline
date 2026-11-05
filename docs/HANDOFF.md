@@ -233,6 +233,32 @@ dispose()
 - 缩放/尺寸：`handleResize()`（1947）负责把引擎一起 `resize()`。
 - 沉浸模式：`setImmersive()`（2218）。
 
+### 3.5 月出时的「朦胧」（2026-11-05）
+
+用户原话：「月出的时候缺少一点朦胧，特别是水下部分」。月升到 12° 以下那一段，
+月盘、月光路、整片海都要糊一层；升上去以后必须完全恢复，否则整个夜里的海都比原来亮一截。
+三处一起做的：
+
+| 位置 | 改了什么 |
+|---|---|
+| `js/weather.js` `applySun()` | 新增 `moonLow = day ? 0 : clamp(1 - visualElev / 12, 0, 1)`；`--sun-veil` 夜值 `0.05 → 0.05 + 0.09*moonLow*moonIn`；夜间 `baUse` 再乘 `(1 + 1.9*moonLow*moonIn)`；新增 `--sun-moon-haze` = 暖白，alpha `(0.05 + 0.30*moonLow) * moonIn * skyVis` |
+| `css/styles.css` | 新增 `.celestial-haze`（`index.html` 里 `.celestial-disc` 后面那个 span）：`inset: 6%` 的圆，`radial-gradient(circle, var(--sun-moon-haze) 0%, 同色 34%, transparent 74%)` —— 盖在月面贴图上压掉一档清晰度，盘外留一圈银白纱。**不用 `filter: blur()`**，那玩意在每帧重绘上太贵 |
+| `js/sea-entry.js` | 新增 uniform `uMoon`（夜里=1，白天=0）与 `uMoonLow`（同 `moonLow`）：天空多一项 `pow(s, 3.2) * 0.11 * uCloudShade * uMoon * uMoonLow`；水面闪光指数 `mix(500, 240, uMoon)`、碎钻对比 `mix(mix(0.4,3.4,n), mix(0.2,1.5,n), uMoon)`、另加宽光晕 `pow(ndh, 9) * 0.075 * uMoonLow` |
+
+- 接线在 `js/app.js` 的 `applySeaFrame()`：用 `weather.sunElevationRaw` 算 `visualElev`，
+  再算与 `weather.js` **同一套数**的 `moonLow`，塞进 `setWeather({ moon, moonLow })`。
+  两个库别各算一套，改公式时两边一起改。
+- **第一版把雾化挂在 `uMoon` 上（= 夜间恒 1），结果 23:00 的天空 +14.9、水面 +9.3** ——
+  整夜的月亮都糊了。拆出 `uMoonLow` 才修对。
+- 改完的实测（`_wip/tmp/cmp_moon.py` 对比改动前后同帧，1280×800）：
+  t=18.1 月出 天空均值 96.3 → 103.9、水面 59.8 → 64.4（整帧平均差 6.12/255）；
+  t=23.0 月亮升高 天空 79.5 → 79.6、水面 48.9 → 48.8（差 4.74，基本静止）。
+- **`js/sea.bundle.js` 是 `js/sea-entry.js` 的 esbuild 产物**，改完 shader 要重建
+  （vendor 从 `~/.dsh/profiles/desktop/node_modules/open-sea-skin/native-dist/vendor` 拷到
+  `js/vendor/`，`esbuild --bundle --format=iife --global-name=OpenSea --minify`，构建完删掉 vendor；
+  本机 esbuild 装在 `_wip/tmp/npm-esbuild`）。改 `sea-entry.js` 却不重建 = 线上没变化，
+  这个坑 2026-11 踩过一次。
+
 ---
 
 ## 4. 已经做完的（别重做）

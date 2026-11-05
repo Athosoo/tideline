@@ -1270,6 +1270,15 @@ function applySeaFrame() {
   const weather = Weather.state;
   const p = seaPaletteFor(weather);
   const ambient = clamp(weather.ambient == null ? 1 : weather.ambient, 0, 1.4);
+  /* 0 = 白天、1 = 深夜。海面靠它决定那颗灯是太阳还是月亮：月光的高光要比日光
+     宽、软、低对比，见 js/sea-entry.js 的 uMoon。 */
+  const nightness = clamp(weather.nightness == null ? (weather.isNight ? 1 : 0) : weather.nightness, 0, 1);
+  /* 月亮离地平线有多近（与 js/weather.js 的 moonLow 同一套数）：月出那一段最厚的
+     空气会把月光揉成一团纱，海面也要跟着浑一层；月亮升到 12° 以上就不再雾化，
+     否则整个夜里的海都比原来亮一截。 */
+  const rawElevNow = weather.sunElevationRaw == null ? weather.sunElevation : weather.sunElevationRaw;
+  const visualElev = weather.isNight ? clamp(-rawElevNow - 0.5, 0, 74) : clamp(weather.sunElevation || 0, 0, 90);
+  const moonLow = weather.isNight ? clamp(1 - visualElev / 12, 0, 1) : 0;
 
   seaEngine.setTime(state.waterTime);
   seaEngine.setSea(0.25 + clamp(weather.seaState || 0, 0, 1) * 1.5);
@@ -1311,6 +1320,8 @@ function applySeaFrame() {
     /* 站点暂时没有云（FULL 无云设计）：不压暗海面直射。将来接上云板时，
        这里改成由云的覆盖率算遮光即可。 */
     shade: 1,
+    moon: nightness,
+    moonLow: moonLow,
   });
 }
 
