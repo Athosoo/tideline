@@ -81,10 +81,13 @@
   /* 音乐：站点自带的曲子是用户本地放的（不入库）。先按 README 约定的
      music.* 找，找不到再认用户实际放下的文件名 —— 两种都不必改名。 */
   /* 用户放下的成品曲：两个格式各一份，谁先能解用谁。
+     **ogg 排前面**：它是进仓库的那份（2.5 MB），线上站点能直接取到；mp3 只在
+     本地存在（6.3 MB，有版权不入库）。放反了线上就要先等一次 404 才回落，
+     慢网下这条 404 会排在一堆 js/图片后面，音乐要分钟级才响。
      后面几个通用名是留给「以后想换曲子直接改名覆盖」的退路。 */
   var MUSIC_SRC = [
-    "assets/audio/music/1-05. Minecraft.mp3",
     "assets/audio/music/1-05. Minecraft.ogg",
+    "assets/audio/music/1-05. Minecraft.mp3",
     "assets/audio/music/music.m4a",
     "assets/audio/music/music.ogg",
     "assets/audio/music/music.mp3",

@@ -313,7 +313,7 @@ dispose()
   **退水层**；开屏拟音按 `cakegate.js` 的时间轴常量逐拍对齐；海鸥是 4 段 xeno-canto
   真实录音（base64 内嵌，CC BY 4.0），用 **HRTF 3D 声源「飞过」**；背景音乐由使用者
   自己放 `assets/audio/music/`（C418 的曲子有版权；线上 Pages 托管 `.ogg` 那份，mp3 只在本地、
-  单文件构建时打进去；`1-05. Minecraft.mp3/.ogg` 两个名都认）。
+  单文件构建时打进去；`1-05. Minecraft.mp3/.ogg` 两个名都认，**`MUSIC_SRC` 里 ogg 排第一**）。
   **大小起伏**由两层慢变量给：「海况档位」`surge`（离散 OU 游走 + 浪起时的临时 bump，
   5–14 s 换档，0.20–1.40）与「底板跟着刚有没有浪退」`bedBreath/windBreath`；
   离线渲染 `bakeAmbientTimeline()` 与线上 `update()` **同构**（否则量着绿、耳朵还是平）。
@@ -508,9 +508,11 @@ rm -rf ./js/vendor
   替换成 `data:` 会留下 `url("../data:image/webp;base64,…")` —— 浏览器把它当**磁盘相对路径**去取，
   月亮就只剩兜底渐变（一个死灰圆盘，用户一眼看出「月亮不对」）。替换时要把 `../` 前缀一起吞掉。
 - 线上 Pages 是「文件夹版」：`assets/audio/music/*.mp3` 被 .gitignore 排除，但
-  `1-05. Minecraft.ogg` 有一条例外（2.5 MB）在仓库里 —— 线上先试 mp3（404），再自动换到
-  `.ogg` 响起来，所以**线上也有音乐**。mp3 只在本地，单文件构建时打进去。
-  换曲子时记得同步改 `.gitignore` 那条 `!` 例外。
+  `1-05. Minecraft.ogg` 有一条例外（2.5 MB）在仓库里，所以**线上也有音乐**。
+  **顺序很重要**：`MUSIC_SRC` 里 ogg 必须排第一。放反了（先 mp3）线上要等一次 404 才回落，
+  而慢网下这条 404 会排在 js/图片后面，实测音乐要 25 s 以上才可能响、甚至听不到；
+  ogg 排第一则只有一次请求。mp3 那份留在本地当兜底，`build_single.py` 也默认打 ogg
+  （单文件因此从 10.2 MB 降到 5.4 MB）。换曲子时记得同步改 `.gitignore` 那条 `!` 例外。
 
 ---
 
