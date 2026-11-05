@@ -1357,7 +1357,7 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
 
 - 前四张卡的文案全换成中文（标题 / meta / short / quote / date / backAlt 六个字段）：
   01「晨读」、02「海岸边」（用户指定：副行「浪里白猫」、引文「礁石边长了一朵花，消磨了白昼」、
-  日期二〇二五）、03「荣耀向你俯首」（用户指定主文案）、04「赤日」。
+  日期二〇二五）、03「荣耀向你俯首」（用户指定主文案）、04「红日」。
 - **副句（`quoteCn`）全部删掉**：聚焦面板的 `.focus-note` 只剩一行引文，`#focusQuoteCn`
   与 `dom.focusQuoteCn` 一并移除；加卡不用再写这个字段。
 - 汉字改由内嵌宋体子集渲染（`TIDELINE Song` = Noto Serif SC 子集，OFL 1.1），不再依赖系统字体；
@@ -1374,7 +1374,11 @@ node _wip/verify/_probe_boot.mjs --tag noboot --ms 9000 --query "boot=0"
   规范、字数上限、坑都在 `GIFT/docs/POSTCARD-SOP.md`。
 
 - 05「相拥」已接入：真图 `05-front.png` / `05-back.png`（100×150）+ 中文文案，像素比例与卡面 2:3 对齐。
-- 06「静夜」/ 07「不朽」已接入（2026-11-04）：`06-front.png` / `06-back.png`（150×100，横版）与
+- 06「静夜」/ 07「死亡」已接入（2026-11-04）：`06-front.png` / `06-back.png`（150×100，横版）与
   `07-front.png` / `07-back.png`（100×150，竖版），`pixel:true`、**保留原生像素尺寸未重采样**；
   06/07 的英文占位 SVG 已删。07 背面原图文字在右/底被画布裁掉，等用户定夺是否重排。
+- **七张卡换成用户终稿文案（2026-11-05）**：标题 / 副行（`meta`）/ 引文三件套由用户口述；
+  04 改名「红日」、07 改名「死亡」（原「不朽」）；07 的两句回文（「去往下一个春天，直至离开此岸」/
+  「直至离开此岸，去往下一个春天」）分别放进 `quote` 与 `short`。长引文用 \n 手动断行
+  （`.focus-note > p:first-child` 设了 `white-space: pre-line`），免得中文自动换行把词拆开。
 

@@ -20,7 +20,7 @@
 
 ```
 python _wip/verify/new_postcard.py --number 06 --front "D:/pics/a.png" \
-    --title 相拥 --meta "黑白影像 · 竖版" --short "爱和拥抱，都拼好了" \
+    --title 相拥 --meta "深夜，房间" --short "拥抱给我生命" \
     --quote "「你抱着我，我才活着。」" --date 二〇二六
 ```
 
@@ -53,9 +53,9 @@ python _wip/verify/new_postcard.py --number 06 --front "D:/pics/a.png" \
 | 字段 | 上限 | 说明 |
 | --- | --- | --- |
 | `title` | 6 字 | 卡名，长廊当前卡与聚焦大标题都用它；六个字有专门的字号档 |
-| `meta` | 12 字 | 「校园 · 清晨六点五十五」这种 |
+| `meta` | 12 字 | 「校园，六点五十五」这种（时间 + 地点）|
 | `short` | 9 字 | 长廊底栏那一句 |
-| `quote` | 19 字 | **含「」**，聚焦面板只排一行 |
+| `quote` | 19 字 | **含「」**；太长会把词拆开，用 \n 手动断行（`pre-line`）|
 | `date` | 6 字 | 「二〇二六」 |
 
 `backAlt` 由脚本按 `明信片背面：{title}` 填。
