@@ -139,5 +139,21 @@ Version，重命名以示与上游区分；Noto 的 OFL 文本没有 Reserved Fo
 `js/audio.js` 用噪声与滤波合成**，不含任何采样素材，因此没有第三方权利。
 
 - 合成参数、频谱目标与验证方法见 `docs/AUDIO.md`。
-- 背景音乐由使用者自行提供（C418 等第三方曲目**有版权，不随仓库分发**），
-  放 `assets/audio/music/` 目录，该目录下的音频文件已被 `.gitignore` 排除。
+- 背景音乐由使用者自行提供，放 `assets/audio/music/` 目录，默认整目录被 `.gitignore` 排除。
+
+---
+
+## 7. 背景音乐（C418《Minecraft》，非开源、未获分发许可）
+
+- **曲目**：C418 —《Minecraft》（专辑 *Minecraft – Volume Alpha*，2011，第 5 首，
+  `1-05. Minecraft`），作曲 / 版权：Daniel Rosenfeld（C418）。
+- **版权状态**：**保留所有权利，不是 CC / MIT / OFL 等任何开放许可**。本项目没有拿到
+  分发或公开表演的许可。
+- **为什么仓库里有它**：这是**私人生日礼物**站点（非商业、无广告、无收益），
+  收礼人需要通过线上地址听到这首曲子，所以 `1-05. Minecraft.ogg`（2.5 MB）被
+  `.gitignore` 单独放行进了公开仓库，由 GitHub Pages 托管；页面里不加任何下载入口。
+- **风险与移除**：公开仓库等于公开托管该录音，理论上可能收到权利人的下架要求
+  （DMCA）。收到就删：`git rm assets/audio/music/1-05. Minecraft.ogg`、
+  去掉 `.gitignore` 里那条 `!` 例外、推 main（站点会自动回到静音，其它照常）。
+- **可用位置**：线上 `https://athosoo.github.io/tideline/assets/audio/music/1-05.%20Minecraft.ogg`；
+  单文件版 `_wip/out/tideline-single.html` 内嵌的是本地 mp3（不入库）。

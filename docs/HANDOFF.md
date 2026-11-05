@@ -73,7 +73,7 @@ GIFT/
 │   ├── app.js                 主逻辑
 │   └── sea-entry.js           bundle 构建源，页面不加载
 ├── assets/                    明信片图 + 内嵌字体 + 月球贴图（进仓库）
-│   └── audio/music/           背景音乐投放目录（音频 gitignore，只留 README）
+│   └── audio/music/           背景音乐投放目录（只有 1-05. Minecraft.ogg 进仓库，见 §6.4）
 ├── docs/                      站点文档：HANDOFF / SITE-RULES / AUDIO / TODO
 └── 1/ 2/ 3/                   原始素材（已 gitignore，不发布；本地保留）
 ```
@@ -91,7 +91,7 @@ GIFT/
 | `js/sea.bundle.js` | 790 KB | esbuild 产物，页面真正加载的是它（IIFE，全局 `OpenSea`） |
 | `js/ocean.js` | 33 KB | **手写 WebGL2 后备海面**（`?nogl=1` 可强制跳过） |
 | `1/ 2/ 3/` | — | 用户的原始素材，**不要动**；已加入 `.gitignore` 并从 git 取消跟踪（本地保留，不随仓库发布） |
-| `assets/` | 369 KB | 明信片图、字体、月球贴图（不含 gitignore 掉的本机音乐） |
+| `assets/` | 2.9 MB | 明信片图、字体、月球贴图，以及线上要用的那份 `.ogg` 背景音乐（mp3 仍 gitignore） |
 | `assets/fonts/fonts.css` | 256 KB | 内嵌字体：Cormorant ×2 + Manrope（拉丁，woff2）+ Noto Serif SC 子集两档（中文，woff）。**`CJK-SUBSET` 区由 `_wip/verify/cjk_font.py` 生成，勿手改** |
 | `README.md` | 15 KB | 项目文档：渲染器来源、云盖、调色、三级回落、LITE 对照表 |
 
@@ -312,7 +312,8 @@ dispose()
   45% 概率起一组 2–4 道、组内逐道变高、15% 概率「歇一口气」），跟在后面的还有
   **退水层**；开屏拟音按 `cakegate.js` 的时间轴常量逐拍对齐；海鸥是 4 段 xeno-canto
   真实录音（base64 内嵌，CC BY 4.0），用 **HRTF 3D 声源「飞过」**；背景音乐由使用者
-  自己放 `assets/audio/music/`（有版权，不进仓库；`1-05. Minecraft.mp3/.ogg` 都认）。
+  自己放 `assets/audio/music/`（C418 的曲子有版权；线上 Pages 托管 `.ogg` 那份，mp3 只在本地、
+  单文件构建时打进去；`1-05. Minecraft.mp3/.ogg` 两个名都认）。
   **大小起伏**由两层慢变量给：「海况档位」`surge`（离散 OU 游走 + 浪起时的临时 bump，
   5–14 s 换档，0.20–1.40）与「底板跟着刚有没有浪退」`bedBreath/windBreath`；
   离线渲染 `bakeAmbientTimeline()` 与线上 `update()` **同构**（否则量着绿、耳朵还是平）。
@@ -506,8 +507,10 @@ rm -rf ./js/vendor
   `url("../assets/moon/full-moon.webp")`（相对 `css/` 目录）。只把 `assets/moon/full-moon.webp`
   替换成 `data:` 会留下 `url("../data:image/webp;base64,…")` —— 浏览器把它当**磁盘相对路径**去取，
   月亮就只剩兜底渐变（一个死灰圆盘，用户一眼看出「月亮不对」）。替换时要把 `../` 前缀一起吞掉。
-- 线上 Pages 是「文件夹版」：`assets/audio/music/*.mp3` 被 .gitignore 排除，线上没有钢琴曲；
-  要带音乐的完整版只能走这个单文件。
+- 线上 Pages 是「文件夹版」：`assets/audio/music/*.mp3` 被 .gitignore 排除，但
+  `1-05. Minecraft.ogg` 有一条例外（2.5 MB）在仓库里 —— 线上先试 mp3（404），再自动换到
+  `.ogg` 响起来，所以**线上也有音乐**。mp3 只在本地，单文件构建时打进去。
+  换曲子时记得同步改 `.gitignore` 那条 `!` 例外。
 
 ---
 

@@ -1,18 +1,23 @@
 # 背景音乐放这里
 
-站点会按顺序尝试这四个文件名（见 `js/audio.js` 的 `MUSIC_SRC`）：
+站点按顺序尝试这五个文件名（见 `js/audio.js` 的 `MUSIC_SRC`；前一个解不开就自动换下一个）：
 
 ```
-assets/audio/music/music.mp3
+assets/audio/music/1-05. Minecraft.mp3
+assets/audio/music/1-05. Minecraft.ogg
 assets/audio/music/music.m4a
 assets/audio/music/music.ogg
-assets/audio/music/music.wav
+assets/audio/music/music.mp3
 ```
 
-任选一个格式、命名为 `music.*` 即可，**只放一首**。
+**只放一首**（各格式留一份也行，播放器会挑第一个能解的）。
 
 - 没有文件时站点完全正常，只是静音（不报错、不等待）。
-- 曲子**不随仓库发布**：本目录的音频文件已被 `.gitignore` 排除，只留本 README。
-- 版权原因：C418 的曲子不能提交进仓库，只能本地放。
+- **哪些进仓库**：默认整目录被 `.gitignore` 排除，只有一个例外 ——
+  `1-05. Minecraft.ogg`（2.5 MB）在仓库里，因为线上 Pages 要能听见音乐；
+  `1-05. Minecraft.mp3`（6.3 MB）仍只在本地，单文件构建时打进那个 html。
+- **版权**：C418 的曲子有版权，这里只是私人礼物、非商业使用，未取得分发许可；
+  线上 Pages 是公开地址，等于把这一首公开托管了 —— 换曲子时优先换成无版权曲目
+  （见 `THIRD-PARTY-NOTICES.md` §7）。
 - 播放方式：`<audio loop>`，音量由站点做 ducking（开屏时降低、进入画廊更低）。
 - 想临时关掉全部声音：按键盘 **M**，或网址后面加 `?audio=0`。

@@ -16,9 +16,13 @@ _qa*/
 /2/
 /3/
 
-# 背景音乐（用户自己放的 C418 曲子，有版权，不随仓库发布）
+# 背景音乐（用户自己放的 C418 曲子，有版权）
+# 默认整目录不入库；只放行一条：线上 Pages 也要能听见音乐，所以让体积小的
+# .ogg 那份进仓库（2.5 MB）。mp3 仍留本地（单文件构建用它，4.6 MB 不值得进 git）。
+# 换曲子时：改这条例外，或把文件换成无版权曲目。
 /assets/audio/music/*.mp3
 /assets/audio/music/*.m4a
 /assets/audio/music/*.ogg
 /assets/audio/music/*.wav
 /assets/audio/music/*.flac
+!/assets/audio/music/1-05. Minecraft.ogg
