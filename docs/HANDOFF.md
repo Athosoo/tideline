@@ -473,6 +473,10 @@ rm -rf ./js/vendor
   `MUSIC_SRC` 有 5 条（两个真文件 + `music.m4a/mp3/ogg` 三个留给换曲的占位），构建脚本
   必须**整条替换**这个数组；别让通用素材扫描把 mp3/ogg 一起内联，否则体积翻倍、
   `--no-music` 反而比带音乐还大（踩过）。
+- **`url("../assets/…")` 不能只换文件名**：`css/styles.css:712` 的月亮贴图写的是
+  `url("../assets/moon/full-moon.webp")`（相对 `css/` 目录）。只把 `assets/moon/full-moon.webp`
+  替换成 `data:` 会留下 `url("../data:image/webp;base64,…")` —— 浏览器把它当**磁盘相对路径**去取，
+  月亮就只剩兜底渐变（一个死灰圆盘，用户一眼看出「月亮不对」）。替换时要把 `../` 前缀一起吞掉。
 - 线上 Pages 是「文件夹版」：`assets/audio/music/*.mp3` 被 .gitignore 排除，线上没有钢琴曲；
   要带音乐的完整版只能走这个单文件。
 
